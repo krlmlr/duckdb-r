@@ -1,0 +1,16 @@
+^duckdb$
+.*\.sh
+.*\.tar.gz
+.*\.tgz
+.*\.zip
+dependencies.R
+src/Makevars.in
+^.*\.Rproj$
+^\.Rproj\.user$
+^_pkgdown\.yml$
+NEWS.md
+tests/regression
+RELEASE.md
+\.github
+^\.gitattributes$
+^vendor\.sh$
