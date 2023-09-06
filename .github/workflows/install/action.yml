@@ -39,6 +39,7 @@ runs:
         echo "_R_CHECK_FUTURE_FILE_TIMESTAMPS_=false" | tee -a $GITHUB_ENV
         # prevent rgl issues because no X11 display is available
         echo "RGL_USE_NULL=true" | tee -a $GITHUB_ENV
+        env | sort
       shell: bash
 
     - name: Update apt
@@ -98,4 +99,9 @@ runs:
         echo 'CXX14   :=  ccache $(CXX14)' >> ~/.R/Makevars
         echo 'CXX17   :=  ccache $(CXX17)' >> ~/.R/Makevars
         echo 'MAKEFLAGS = -j2' >> ~/.R/Makevars
+
+        echo 'CCACHE_DEBUG=true' | tee -a $GITHUB_ENV
+        echo "CCACHE_DEBUGDIR=${HOME}/.ccache-debug" | tee -a $GITHUB_ENV
+        echo 'CCACHE_SLOPPINESS=locale,time_macros' | tee -a $GITHUB_ENV
+        mkdir -p ${HOME}/.ccache-debug
       shell: bash
