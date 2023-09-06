@@ -39,7 +39,6 @@ runs:
         echo "_R_CHECK_FUTURE_FILE_TIMESTAMPS_=false" | tee -a $GITHUB_ENV
         # prevent rgl issues because no X11 display is available
         echo "RGL_USE_NULL=true" | tee -a $GITHUB_ENV
-        env | sort
       shell: bash
 
     - name: Update apt
@@ -85,9 +84,16 @@ runs:
         sudo ln -s $(which true) /usr/local/bin/checkbashisms
       shell: bash
 
+    - name: Compute ccache key
+      run: |
+        echo "GHA_CCACHE_KEY=${{ runner.os }}-$(uname -mr | tr ' ' '-' || true)" | tee -a $GITHUB_ENV
+      shell: bash
+
     - name: Install ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
+        key: ${{ env.GHA_CCACHE_KEY }}
+        max-size: 1G
         verbose: 1
 
     - name: Use ccache for compiling R code, and parallelize
