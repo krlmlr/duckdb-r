@@ -106,3 +106,4 @@ src/*.so
 /scripts/__pycache__
 /duckdb
 /src/Makevars.duckdb
+/.ccache
