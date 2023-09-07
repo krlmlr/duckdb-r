@@ -86,7 +86,7 @@ runs:
 
     - name: Compute ccache key
       run: |
-        echo "GHA_CCACHE_KEY=${{ runner.os }}-$($(R CMD config CXX) --version | head -n 1 | tr ' ' -)-R-$(Rscript --vanilla -e 'cat(format(getRversion()))')" | tee -a $GITHUB_ENV
+        echo "GHA_CCACHE_KEY=${{ runner.os }}-$($(R CMD config CXX) --version | head -n 1 | sed -r 's/[, ]/-/g')-R-$(Rscript --vanilla -e 'cat(format(getRversion()))')" | tee -a $GITHUB_ENV
       shell: bash
 
     - name: Install ccache

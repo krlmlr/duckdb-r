@@ -10,7 +10,7 @@ runs:
 
     - name: Compute cache key
       run: |
-        echo "DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY=duckdb-${{ runner.os }}-$($(R CMD config CXX) --version | head -n 1 | tr ' ' -)-${{ hashFiles('src/duckdb/**') }}-2" | tee -a $GITHUB_ENV
+        echo "DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY=duckdb-${{ runner.os }}-$($(R CMD config CXX) --version | head -n 1 | sed -r 's/[, ]/-/g')-${{ hashFiles('src/duckdb/**') }}-2" | tee -a $GITHUB_ENV
         echo "DUCKDB_R_PREBUILT_ARCHIVE=${HOME}/duckdb.a" | tee -a $GITHUB_ENV
       shell: bash
 
