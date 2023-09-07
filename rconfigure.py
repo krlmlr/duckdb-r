@@ -137,7 +137,10 @@ with open_utf8(os.path.join('src', 'Makevars.win'), 'w+') as f:
     f.write(text)
 
 # write sources.mk
-text = "SOURCES=" + object_list + '\n'
+with open_utf8(os.path.join('src', 'include', 'sources.mk'), 'r') as f:
+    text = f.read()
+
+text = text.replace('{{ OBJECTS }}', object_list)
 
 with open_utf8(os.path.join('src', 'include', 'sources.mk'), 'w') as f:
     f.write(text)

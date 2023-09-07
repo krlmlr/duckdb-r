@@ -1,5 +1,13 @@
-include include/sources.mk
+all: $(SHLIB)
+
 CXX_STD = CXX17
 PKG_CPPFLAGS = -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD {{ INCLUDES }}
-OBJECTS=database.o connection.o statement.o register.o relational.o scan.o transform.o utils.o reltoaltrep.o types.o cpp11.o $(SOURCES)
+OBJECTS=database.o connection.o statement.o register.o relational.o scan.o transform.o utils.o reltoaltrep.o types.o cpp11.o duckdb.a
 PKG_LIBS={{ LINK_FLAGS }}
+
+$(SHLIB): duckdb.a
+
+Makevars.duckdb:
+	if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then cp include/copy.mk $@; else cp include/sources.mk $@; fi
+
+include Makevars.duckdb
