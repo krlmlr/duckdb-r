@@ -218,6 +218,7 @@ protected:
     // Is never called, but is provided for symmetry with specific_stream
     void set_stream(...)
     {
+        abort();
     }
 
 public:
@@ -257,6 +258,7 @@ protected:
     // Is never called, but is provided for symmetry with specific_stream
     void set_stream(...)
     {
+        abort();
     }
 
 public:
@@ -290,6 +292,7 @@ protected:
     // Is never called, but is provided for symmetry with specific_stream
     void set_stream(...)
     {
+        abort();
     }
 
 public:

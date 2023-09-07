@@ -529,6 +529,7 @@ bitcount_t flog2(const uint_x4<U,V>& v)
              continue;
         return flog2(v.wa[i]) + uint_x4<U,V>::UINT_BITS*i;
     }
+    abort();
 }
 
 template<typename U, typename V>

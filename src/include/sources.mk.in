@@ -1,4 +1,4 @@
 duckdb.a: {{ OBJECTS }}
-	ar -r $@ $^
+	ar -rs $@ $^
 	if [ -n "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then cp $@ $(DUCKDB_R_PREBUILT_ARCHIVE); fi
 	rm -f Makevars.duckdb
