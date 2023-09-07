@@ -107,3 +107,4 @@ src/*.so
 /duckdb
 /src/duckdb.a
 /src/Makevars.duckdb
+/.ccache
