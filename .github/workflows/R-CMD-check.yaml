@@ -79,7 +79,7 @@ jobs:
       - name: Cleanup
         if: ${{ env.CCACHE_DEBUG }}
         run: |
-          find $CCACHE_DEBUGDIR -name "*.o" | tee /dev/stderr | xargs rm -f
+          find $CCACHE_DEBUGDIR \( -name '*.ccache-input-[cdp]' -o -name '*.ccache-log' \) | tee /dev/stderr | xargs rm -f
         shell: bash
 
       - uses: actions/upload-artifact@v3
@@ -135,7 +135,7 @@ jobs:
       - name: Cleanup
         if: ${{ env.CCACHE_DEBUG }}
         run: |
-          find $CCACHE_DEBUGDIR -name "*.o" | tee /dev/stderr | xargs rm -f
+          find $CCACHE_DEBUGDIR \( -name '*.ccache-input-[cdp]' -o -name '*.ccache-log' \) | tee /dev/stderr | xargs rm -f
         shell: bash
 
       - uses: actions/upload-artifact@v3
@@ -194,7 +194,7 @@ jobs:
       - name: Cleanup
         if: ${{ env.CCACHE_DEBUG }}
         run: |
-          find $CCACHE_DEBUGDIR -name "*.o" | xargs rm -f
+          find $CCACHE_DEBUGDIR \( -name '*.ccache-input-[cdp]' -o -name '*.ccache-log' \) | tee /dev/stderr | xargs rm -f
         shell: bash
 
       - uses: actions/upload-artifact@v3
@@ -268,7 +268,7 @@ jobs:
       - name: Cleanup
         if: ${{ env.CCACHE_DEBUG }}
         run: |
-          find $CCACHE_DEBUGDIR -name "*.o" | tee /dev/stderr | xargs rm -f
+          find $CCACHE_DEBUGDIR \( -name '*.ccache-input-[cdp]' -o -name '*.ccache-log' \) | tee /dev/stderr | xargs rm -f
         shell: bash
 
       - uses: actions/upload-artifact@v3

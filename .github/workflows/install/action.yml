@@ -105,6 +105,7 @@ runs:
         echo 'CXX14   :=  ccache $(CXX14)' >> ~/.R/Makevars
         echo 'CXX17   :=  ccache $(CXX17)' >> ~/.R/Makevars
         echo 'MAKEFLAGS = -j2' >> ~/.R/Makevars
+        cat ~/.R/Makevars
 
         echo 'CCACHE_DEBUG=true' | tee -a $GITHUB_ENV
         echo "CCACHE_DEBUGDIR=${HOME}/.ccache-debug" | tee -a $GITHUB_ENV
