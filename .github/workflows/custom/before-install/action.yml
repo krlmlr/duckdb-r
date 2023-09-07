@@ -17,5 +17,6 @@ runs:
     - name: Cache duckdb archive
       uses: actions/cache@v3
       with:
+        lookup-only: true
         path: ${{ env.DUCKDB_R_PREBUILT_ARCHIVE }}
         key: ${{ env.DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY }}
