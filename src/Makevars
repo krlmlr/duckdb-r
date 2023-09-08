@@ -1,21 +1,7 @@
+all: $(SHLIB)
 include include/sources.mk
+include Makevars.duckdb
+
 CXX_STD = CXX17
 PKG_CPPFLAGS = -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -Iduckdb/src/include -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/re2 -Iduckdb/third_party/miniz -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/utf8proc -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/tdigest -Iduckdb/third_party/libpg_query/include -Iduckdb/third_party/libpg_query -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/pcg -Iduckdb/third_party/httplib -Iduckdb/third_party/fast_float -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/snappy -Iduckdb/third_party/thrift -Iduckdb/third_party/zstd/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY
 OBJECTS=database.o connection.o statement.o register.o relational.o scan.o transform.o utils.o reltoaltrep.o types.o cpp11.o $(SOURCES)
-
-# duckdb.tar is a phony target, will never be built
-all: duckdb.tar $(SHLIB)
-
-# Makevars.duckdb will exist temporarily
-# - If DUCKDB_R_PREBUILT_ARCHIVE is an existing file, object files
-#   are extracted from there before make has a chance to try building them.
-#   We ensure that they are newer than any source files.
-#   See from-zip.mk
-# - Otherwise, object files are built regularly, via to-zip.mk .
-#     - If DUCKDB_R_PREBUILT_ARCHIVE is empty, nothing happens beyond that.
-#     - Otherwise, the object files are tar-ed into the file defined by
-#       DUCKDB_R_PREBUILT_ARCHIVE
-Makevars.duckdb:
-	if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then tar -xmf $(DUCKDB_R_PREBUILT_ARCHIVE) && cp include/from-zip.mk $@; else cp include/to-zip.mk $@; fi
-
-include Makevars.duckdb

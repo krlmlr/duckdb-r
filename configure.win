@@ -1,0 +1,10 @@
+#!/bin/sh
+
+cd src
+
+if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then
+  tar -xmf $(DUCKDB_R_PREBUILT_ARCHIVE)
+  cp include/from-zip.mk Makevars.duckdb
+else
+  cp include/to-zip.mk Makevars.duckdb
+fi
