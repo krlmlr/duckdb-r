@@ -16,6 +16,6 @@ all: duckdb.tar $(SHLIB)
 #     - Otherwise, the object files are tar-ed into the file defined by
 #       DUCKDB_R_PREBUILT_ARCHIVE
 Makevars.duckdb:
-	if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then tar -xvmf $(DUCKDB_R_PREBUILT_ARCHIVE); cp include/from-zip.mk $@; else cp include/to-zip.mk $@; fi
+	if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then tar -xmf $(DUCKDB_R_PREBUILT_ARCHIVE); cp include/from-zip.mk $@; else cp include/to-zip.mk $@; fi
 
 include Makevars.duckdb
