@@ -1,4 +1,4 @@
-all: $(SHLIB)
+all: duckdb.tar $(SHLIB)
 include include/sources.mk
 include Makevars.duckdb
 
