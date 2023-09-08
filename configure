@@ -4,8 +4,7 @@ set -ex
 
 cd $(dirname $0)/src
 
-if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ]; then
-  tar -xf ${DUCKDB_R_PREBUILT_ARCHIVE}
+if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xf ${DUCKDB_R_PREBUILT_ARCHIVE}; then
   find . -name "*.o" | xargs touch
   find . -name "*.o" | xargs ls -l
   ls -lR
