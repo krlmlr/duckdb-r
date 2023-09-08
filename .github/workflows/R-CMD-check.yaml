@@ -68,6 +68,18 @@ jobs:
       - uses: ./.github/workflows/roxygenize
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
+      - name: Reinstall, just for kicks
+        run: |
+          git clean -fdx src
+          R CMD INSTALL . --no-byte-compile
+        shell: bash
+
+      - name: Reinstall again, just for kicks
+        run: |
+          git clean -fdx src
+          R CMD INSTALL . --no-byte-compile
+        shell: bash
+
       - id: commit
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: ./.github/workflows/commit
