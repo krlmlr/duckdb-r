@@ -1,11 +1,14 @@
 #!/bin/sh
 
+set -ex
+
 cd src
 
 if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ]; then
   tar -xf ${DUCKDB_R_PREBUILT_ARCHIVE}
   find . -name "*.o" | xargs touch
   find . -name "*.o" | xargs ls -l
+  ls -lR
   cp include/from-zip.mk Makevars.duckdb
 else
   cp include/to-zip.mk Makevars.duckdb
