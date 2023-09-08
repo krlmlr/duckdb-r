@@ -2,7 +2,7 @@
 
 set -ex
 
-cd src
+cd $(dirname $0)/src
 
 if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ]; then
   tar -xf ${DUCKDB_R_PREBUILT_ARCHIVE}
