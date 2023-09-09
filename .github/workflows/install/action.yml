@@ -104,7 +104,7 @@ runs:
         echo 'CXX11   :=  ccache $(CXX11)' >> ~/.R/Makevars
         echo 'CXX14   :=  ccache $(CXX14)' >> ~/.R/Makevars
         echo 'CXX17   :=  ccache $(CXX17)' >> ~/.R/Makevars
-        echo 'MAKEFLAGS = -j2 -d' >> ~/.R/Makevars
+        echo 'MAKEFLAGS = -j2' >> ~/.R/Makevars
         cat ~/.R/Makevars
 
         echo 'CCACHE_SLOPPINESS=locale,time_macros' | tee -a $GITHUB_ENV
