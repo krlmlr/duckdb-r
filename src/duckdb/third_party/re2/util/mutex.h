@@ -61,7 +61,7 @@ class Mutex {
 
 #define SAFE_PTHREAD(fncall)    \
   do {                          \
-    if ((fncall) != 0) abort(); \
+    if ((fncall) != 0) ; \
   } while (0)
 
 Mutex::Mutex()             { SAFE_PTHREAD(pthread_rwlock_init(&mutex_, NULL)); }

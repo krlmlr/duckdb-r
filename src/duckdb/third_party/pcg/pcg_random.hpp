@@ -215,12 +215,6 @@ class unique_stream {
 protected:
     static constexpr bool is_mcg = false;
 
-    // Is never called, but is provided for symmetry with specific_stream
-    void set_stream(...)
-    {
-        abort();
-    }
-
 public:
     typedef itype state_type;
 
@@ -255,12 +249,6 @@ class no_stream {
 protected:
     static constexpr bool is_mcg = true;
 
-    // Is never called, but is provided for symmetry with specific_stream
-    void set_stream(...)
-    {
-        abort();
-    }
-
 public:
     typedef itype state_type;
 
@@ -288,12 +276,6 @@ template <typename itype>
 class oneseq_stream : public default_increment<itype> {
 protected:
     static constexpr bool is_mcg = false;
-
-    // Is never called, but is provided for symmetry with specific_stream
-    void set_stream(...)
-    {
-        abort();
-    }
 
 public:
     typedef itype state_type;
