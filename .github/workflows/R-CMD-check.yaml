@@ -39,12 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-          detached: true
-
       - uses: ./.github/workflows/rate-limit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -12,7 +12,6 @@ runs:
         # Fails on R 3.6 on Windows, remove when this job is removed?
         args: 'c("--no-manual", "--as-cran", "--no-multiarch")'
         error-on: ${{ env.RCMDCHECK_ERROR_ON || '"note"' }}
-        upload-results: true
 
     - name: Run coverage check
       if: ${{ matrix.config.covr }}
