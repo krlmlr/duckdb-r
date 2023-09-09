@@ -3,12 +3,6 @@ name: 'Custom steps to run after R packages are installed'
 runs:
   using: "composite"
   steps:
-    - name: Install to avoid R CMD INSTALL --pre-clean run otherwise
-      run: |
-        mkdir ~/lib
-        R CMD INSTALL --library=${HOME}/lib -d --no-byte-compile .
-      shell: bash
-
     - name: Compute ccache key
       run: |
         echo "GHA_CCACHE_KEY=${{ runner.os }}-$($(R CMD config CXX) --version | head -n 1 | sed -r 's/[, ]/-/g')-R-$(Rscript --vanilla -e 'cat(format(getRversion()))')" | tee -a $GITHUB_ENV
@@ -20,3 +14,9 @@ runs:
         key: ${{ env.GHA_CCACHE_KEY }}
         max-size: 200M
         verbose: 1
+
+    - name: Install to avoid R CMD INSTALL --pre-clean run otherwise
+      run: |
+        mkdir ~/lib
+        R CMD INSTALL --library=${HOME}/lib -d --no-byte-compile .
+      shell: bash
