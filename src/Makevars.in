@@ -1,4 +1,7 @@
+all: duckdb.tar symbols.rds $(SHLIB)
 include include/sources.mk
+include Makevars.duckdb
+
 CXX_STD = CXX17
 PKG_CPPFLAGS = -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD {{ INCLUDES }}
 OBJECTS=database.o connection.o statement.o register.o relational.o scan.o transform.o utils.o reltoaltrep.o types.o cpp11.o $(SOURCES)
