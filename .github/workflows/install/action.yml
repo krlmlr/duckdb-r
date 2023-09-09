@@ -112,4 +112,6 @@ runs:
         # echo 'CCACHE_DEBUG=true' | tee -a $GITHUB_ENV
         # echo "CCACHE_DEBUGDIR=${HOME}/.ccache-debug" | tee -a $GITHUB_ENV
         # mkdir -p ${HOME}/.ccache-debug
+
+        echo 'PKG_BUILD_EXTRA_FLAGS=false' | tee -a $GITHUB_ENV
       shell: bash
