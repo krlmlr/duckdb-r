@@ -100,6 +100,7 @@ class LogMessageFatal : public LogMessage {
       : LogMessage(file, line) {}
   ATTRIBUTE_NORETURN ~LogMessageFatal() {
     Flush();
+    abort();
   }
  private:
   LogMessageFatal(const LogMessageFatal&) = delete;
