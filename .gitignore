@@ -107,3 +107,4 @@ src/*.so
 /duckdb
 /src/Makevars.duckdb
 /.ccache
+/src/symbols.rds

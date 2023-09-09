@@ -1,4 +1,4 @@
-all: duckdb.tar $(SHLIB)
+all: duckdb.tar symbols.rds $(SHLIB)
 include include/sources.mk
 include Makevars.duckdb
 
