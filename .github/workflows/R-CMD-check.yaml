@@ -59,12 +59,6 @@ jobs:
       - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Install to avoid R CMD INSTALL --pre-clean run otherwise
-        run: |
-          mkdir ~/lib
-          R CMD INSTALL --library=${HOME}/lib -d --no-byte-compile .
-        shell: bash
-
       - uses: ./.github/workflows/update-snapshots
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
