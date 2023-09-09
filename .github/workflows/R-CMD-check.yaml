@@ -39,6 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          detached: true
+
       - uses: ./.github/workflows/rate-limit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -58,12 +64,6 @@ jobs:
 
       - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-          detached: true
 
       - name: Install to avoid R CMD INSTALL --pre-clean run otherwise
         run: |
