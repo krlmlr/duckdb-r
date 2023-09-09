@@ -17,6 +17,6 @@ runs:
 
     - name: Install to avoid R CMD INSTALL --pre-clean run otherwise
       run: |
-        mkdir ~/lib
+        mkdir ../lib
         R CMD INSTALL --library=$(realpath $(pwd)/../lib) -d --no-byte-compile .
       shell: bash
