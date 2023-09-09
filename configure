@@ -6,7 +6,7 @@ cd $(dirname $0)/src
 
 # This does not work with `R CMD INSTALL --preclean`, which is why we install manually
 # in the CI/CD run
-if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xmf ${DUCKDB_R_PREBUILT_ARCHIVE}; then
+if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xm --force-local -f ${DUCKDB_R_PREBUILT_ARCHIVE}; then
   cp include/from-zip.mk Makevars.duckdb
 else
   cp include/to-zip.mk Makevars.duckdb
