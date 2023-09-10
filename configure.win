@@ -9,8 +9,8 @@ cd $(dirname $0)/src
 # and hash of the duckdb/src subtree.
 #
 # Depending on the availability of the file, we either use the object files
-# (via the rules in include/from-zip.mk), or create them as usual
-# (via include/to-zip.mk). In the latter case, if the DUCKDB_R_PREBUILT_ARCHIVE
+# (via the rules in include/from-tar.mk), or create them as usual
+# (via include/to-tar.mk). In the latter case, if the DUCKDB_R_PREBUILT_ARCHIVE
 # environment variable is set, the .tar file is created.
 #
 # For local installations, this is typically not needed
@@ -21,7 +21,7 @@ cd $(dirname $0)/src
 
 if [ -f "$(DUCKDB_R_PREBUILT_ARCHIVE)" ]; then
   tar -xm --force-local -f $(DUCKDB_R_PREBUILT_ARCHIVE)
-  cp include/from-zip.mk Makevars.duckdb
+  cp include/from-tar.mk Makevars.duckdb
 else
-  cp include/to-zip.mk Makevars.duckdb
+  cp include/to-tar.mk Makevars.duckdb
 fi
