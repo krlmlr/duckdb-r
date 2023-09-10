@@ -4,8 +4,23 @@ set -ex
 
 cd $(dirname $0)/src
 
-# This does not work with `R CMD INSTALL --preclean`, which is why we install manually
-# in the CI/CD run
+# The purpose of this is to avoid rebuilding duckdb in every CI/CD run.
+# We set the DUCKDB_R_PREBUILT_ARCHIVE environment variable to a file path
+# that contains a .tar of all object files.
+# This .tar file is cached and restored in CI/CD, keyed by compiler, OS,
+# and hash of the duckdb/src subtree.
+#
+# Depending on the availability of the file, we either use the object files
+# (via the rules in include/from-zip.mk), or create them as usual
+# (via include/to-zip.mk). In the latter case, if the DUCKDB_R_PREBUILT_ARCHIVE
+# environment variable is set, the .tar file is created.
+#
+# For local installations, this is typically not needed
+# because ccache achieves the same purpose but better.
+# In CI/CD, this approach gives better results than ccache.
+#
+# This logic is identical for Windows or non-Windows builds.
+
 if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xm --force-local -f ${DUCKDB_R_PREBUILT_ARCHIVE}; then
   cp include/from-zip.mk Makevars.duckdb
 else
