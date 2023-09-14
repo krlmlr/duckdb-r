@@ -130,7 +130,7 @@ runs:
         packages <- intersect(packages, rownames(available.packages()))
         packages <- c("arrow", "nanoarrow")
 
-        dev_dep <- vapply(packages, find_dev_dep, character(1))
+        dev_dep <- vapply(stats::setNames(nm = packages), find_dev_dep, character(1))
         deps <- dev_dep[!is.na(dev_dep)]
 
         if (length(deps) == 0) {
@@ -145,7 +145,7 @@ runs:
         } else {
           json <- paste0(
             '{"package":[',
-            paste0('"', deps, '"', collapse = ","),
+            paste0('{"name": "', names(deps), '", "source": "', deps, '"}', collapse = ","),
             ']}'
           )
         }

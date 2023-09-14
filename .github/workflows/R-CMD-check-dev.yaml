@@ -101,7 +101,7 @@ jobs:
 
     runs-on: ubuntu-22.04
 
-    name: ${{ matrix.package }}
+    name: ${{ matrix.package.name }} (from ${{ matrix.package.source }})
 
     # Begin custom: services
     # End custom: services
@@ -119,9 +119,9 @@ jobs:
       - uses: ./.github/workflows/install
         with:
           install-r: false
-          cache-version: rcc-dev-${{ matrix.package }}-1
+          cache-version: rcc-dev-${{ matrix.package.name }}-1
           needs: check
-          extra-packages: "any::rcmdcheck any::remotes ${{ matrix.package }} ."
+          extra-packages: "any::rcmdcheck any::remotes ${{ matrix.package.source }} ."
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: ./.github/workflows/custom/after-install
