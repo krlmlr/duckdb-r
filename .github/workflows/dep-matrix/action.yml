@@ -62,7 +62,8 @@ runs:
           # FIXME: Improve detection, avoid hardcode
           # Upstream WONTFIX: https://github.com/r-lib/remotes/issues/576
           switch(package,
-            arrow = return("apache/arrow-nanoarrow/r"),
+            adbcdrivermanager = return("apache/arrow-adbc/r"),
+            arrow = return("apache/arrow/r"),
             # FIXME: Remove for duckdb >= 0.9.0
             duckdb = return("duckdb/duckdb-r"),
             nanoarrow = return("apache/arrow-nanoarrow/r"),
