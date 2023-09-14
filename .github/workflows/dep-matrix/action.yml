@@ -128,7 +128,7 @@ runs:
 
         packages <- sort(deps_df$package)
         packages <- intersect(packages, rownames(available.packages()))
-        packages <- "nanoarrow"
+        packages <- c("arrow", "nanoarrow")
 
         dev_dep <- vapply(packages, find_dev_dep, character(1))
         deps <- dev_dep[!is.na(dev_dep)]
