@@ -26,4 +26,5 @@ runs:
         echo 'LIBARROW_BUILD=false' | tee -a $GITHUB_ENV
         echo 'LIBARROW_BINARY=true' | tee -a $GITHUB_ENV
         echo 'LIBARROW_MINIMAL=false' | tee -a $GITHUB_ENV
+        echo 'ARROW_R_DEV=true' | tee -a $GITHUB_ENV
       shell: bash
