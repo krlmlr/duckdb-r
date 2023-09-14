@@ -19,3 +19,11 @@ runs:
       with:
         path: ${{ env.DUCKDB_R_PREBUILT_ARCHIVE }}
         key: ${{ env.DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY }}
+
+    - name: Avoid building Arrow from source
+      if: ${{ matrix.package.name }} == "arrow"
+      run: |
+        echo 'LIBARROW_BUILD=false' | tee -a $GITHUB_ENV
+        echo 'LIBARROW_BINARY=true' | tee -a $GITHUB_ENV
+        echo 'LIBARROW_MINIMAL=false' | tee -a $GITHUB_ENV
+      shell: bash
