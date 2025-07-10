@@ -1,5 +1,56 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.3.1.9007
+
+- Vendor: Update vendored sources to duckdb/duckdb@ce537bfc7b2be51ab64e04f2299a911fac5fc1ac (@krlmlr, #1320).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8a648b4701bcb39ffcd60d140e017a8c7a1b3d64 (@krlmlr, #1319).
+
+- Vendor: Update vendored sources to duckdb/duckdb@6267d4e31b033aaf3125c12bd3514d02dec53720 (@krlmlr, #1317).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8cab422a70dc74ed2943dcf75e9e91721a07e48e (@krlmlr, #1315).
+
+- Vendor: Update vendored sources to duckdb/duckdb@4eccabdcd8a14ab07f7247b6266dc491ed4b807e (@krlmlr, #1314).
+
+- Vendor: Update vendored sources to duckdb/duckdb@2b17cee2dd1d1cc9a4afcff2423090d2c49d1aba (@krlmlr, #1313).
+
+- Vendor: Update vendored sources to duckdb/duckdb@66dd71724a33dd2d263142138e613f2467c66999 (@krlmlr, #1312).
+
+- Vendor: Update vendored sources to duckdb/duckdb@15ef853303e9d77d7950b1830ff6022d8b0115d3 (@krlmlr, #1311).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8147b4391571d7d50609a9666e5d461ae42d513b (@krlmlr, #1310).
+
+- Vendor: Update vendored sources to duckdb/duckdb@24bb8debdf99bbae48829f8b6b31eae15bbe7709 (@krlmlr, #1308).
+
+- Vendor: Update vendored sources to duckdb/duckdb@3cb90b8994d4e4ba3d586d2c4732e0d5d10451b5 (@krlmlr, #1307).
+
+- Vendor: Update vendored sources to duckdb/duckdb@a9c07bab9af3fcea2e75416170d83bb64ebce99d (@krlmlr, #1306).
+
+- Vendor: Update vendored sources to duckdb/duckdb@232fffb672ce02eeece7c8479a7a4af5b7d1a491 (@krlmlr, #1305).
+
+- Vendor: Update vendored sources to duckdb/duckdb@2dd0dc9c888013edff5e1e021bae7856d1246ebe (@krlmlr, #1304).
+
+- Vendor: Update vendored sources to duckdb/duckdb@78092e2226b3b0264873a52e1f8ef7cd01be1d77 (@krlmlr, #1303).
+
+- Vendor: Update vendored sources to duckdb/duckdb@138b7fe2f69cff57738e718ba5481400ebd4431f (@krlmlr, #1302).
+
+- Vendor: Update vendored sources to duckdb/duckdb@78d3ad31a51a7785b2f8f1e1f0d48b47ba708cf8 (@krlmlr, #1301).
+
+- Merge tag 'v1.3.1'.
+
+- Update to duckdb v1.3.1, see <https://github.com/duckdb/duckdb/releases/tag/v1.3.1> for details.
+
+- Correct dbplyr translations for `str_starts()` and `str_ends()` (#1182, #1247).
+
+- Fix multiarch build on R 4.1 for Windows.
+
+- Vendor: Update vendored sources to duckdb/duckdb@f11b826ebeb32c1bc3d6f0d8c7e9a2eaeddc6ffb (@krlmlr, #1255).
+
+- Vendor: Update vendored sources to duckdb/duckdb@e4f6023b219c33382c5be14caa31a08c8ddb7809 (@krlmlr, #1253).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8c40a99d4d1628d2ac8a689554209ddb44a72550 (@krlmlr, #1252).
+
+
 # duckdb 1.3.1.9006
 
 ## vendor
