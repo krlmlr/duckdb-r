@@ -107,7 +107,7 @@
       300 Levels: enum_0 enum_1 enum_2 enum_3 enum_4 enum_5 enum_6 enum_7 ... enum_299
       
       $large_enum
-      [1] enum_0 enum_0 <NA>  
+      [1] enum_0     enum_69999 <NA>      
       70000 Levels: enum_0 enum_1 enum_2 enum_3 enum_4 enum_5 enum_6 enum_7 ... enum_69999
       
       $int_array
