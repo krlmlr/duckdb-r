@@ -1,5 +1,14 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.3.1.9008
+
+## Chore
+
+- Auto-update from GitHub Actions.
+
+  Run: https://github.com/krlmlr/duckdb-r/actions/runs/17450799244
+
+
 # duckdb 1.3.1.9007
 
 - Vendor: Update vendored sources to duckdb/duckdb@ce537bfc7b2be51ab64e04f2299a911fac5fc1ac (@krlmlr, #1320).
