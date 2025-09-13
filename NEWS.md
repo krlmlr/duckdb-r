@@ -1,5 +1,18 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.3.3.9001
+
+## Continuous integration
+
+- Adapt branch name for vendoring.
+
+## Uncategorized
+
+- Merge commit 'fdff72d0fcf7739d5cb8f1a66a5263a02388a048'.
+
+- Merge pull request #1491 from duckdb/cran-1.3.3.
+
+
 # duckdb 1.3.3.9000
 
 ## fledge
