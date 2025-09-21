@@ -21,6 +21,10 @@ cd "$(dirname "$0")/src"
 echo DUCKDB_RSTRTMGR=1 > Makevars.rstrtmgr
 echo DUCKDB_RSTRTMGR_LIB= >> Makevars.rstrtmgr
 
+if [ "$(uname)" = "Emscripten" ]; then
+  DUCKDB_WASM_CPPFLAGS="-DDUCKDB_NO_THREADS -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DWASM_LOADABLE_EXTENSIONS"
+fi
+
 
 # The purpose of this is to avoid rebuilding duckdb in every CI/CD run.
 # We set the DUCKDB_R_PREBUILT_ARCHIVE environment variable to a file path
