@@ -22,7 +22,7 @@ echo DUCKDB_RSTRTMGR=1 > Makevars.rstrtmgr
 echo DUCKDB_RSTRTMGR_LIB= >> Makevars.rstrtmgr
 
 if [ "$(uname)" = "Emscripten" ]; then
-  DUCKDB_WASM_CPPFLAGS="-DDUCKDB_NO_THREADS -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DWASM_LOADABLE_EXTENSIONS"
+  echo 'DUCKDB_WASM_CPPFLAGS="-DDUCKDB_NO_THREADS -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DWASM_LOADABLE_EXTENSIONS"' >> Makevars.rstrtmgr
 fi
 
 
