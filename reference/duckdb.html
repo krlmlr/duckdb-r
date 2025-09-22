@@ -21,7 +21,7 @@ it is no longer necessary to set shutdown = TRUE or to call duckdb_shutdown().">
 
     <a class="navbar-brand me-2" href="../index.html">duckdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0.9007</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0.9008</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -49,7 +49,7 @@ it is no longer necessary to set shutdown = TRUE or to call duckdb_shutdown().">
     <div class="ref-description section level2">
     <p><code>duckdb()</code> creates or reuses a database instance.</p>
 <p><code>duckdb_shutdown()</code> shuts down a database instance.</p>
-<p>Return an <code><a href="https://rdrr.io/pkg/adbcdrivermanager/man/adbc_driver_void.html" class="external-link">adbcdrivermanager::adbc_driver()</a></code> for use with Arrow Database
+<p>Return an <code><a href="https://arrow.apache.org/adbc/current/r/adbcdrivermanager/reference/adbc_driver_void.html" class="external-link">adbcdrivermanager::adbc_driver()</a></code> for use with Arrow Database
 Connectivity via the adbcdrivermanager package.</p>
 <p><code><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect()</a></code> connects to a database instance.</p>
 <p><code><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect()</a></code> closes a DuckDB database connection.
@@ -187,8 +187,8 @@ or an adjusted time.</p>
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://arrow.apache.org/adbc/current/r/adbcdrivermanager/" class="external-link">adbcdrivermanager</a></span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/pkg/adbcdrivermanager/man/with_adbc.html" class="external-link">with_adbc</a></span><span class="op">(</span><span class="va">db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/adbcdrivermanager/man/adbc_database_init.html" class="external-link">adbc_database_init</a></span><span class="op">(</span><span class="fu">duckdb_adbc</span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="op">{</span></span></span>
-<span class="r-in"><span>  <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/adbcdrivermanager/man/read_adbc.html" class="external-link">read_adbc</a></span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT 1 as one;"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://arrow.apache.org/adbc/current/r/adbcdrivermanager/reference/with_adbc.html" class="external-link">with_adbc</a></span><span class="op">(</span><span class="va">db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://arrow.apache.org/adbc/current/r/adbcdrivermanager/reference/adbc_database_init.html" class="external-link">adbc_database_init</a></span><span class="op">(</span><span class="fu">duckdb_adbc</span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="op">{</span></span></span>
+<span class="r-in"><span>  <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="fu"><a href="https://arrow.apache.org/adbc/current/r/adbcdrivermanager/reference/read_adbc.html" class="external-link">read_adbc</a></span><span class="op">(</span><span class="va">db</span>, <span class="st">"SELECT 1 as one;"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   one</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1   1</span>
