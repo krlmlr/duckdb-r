@@ -327,8 +327,27 @@ bool ExtensionHelper::TryInitialLoad(DatabaseInstance &db, FileSystem &fs, const
 		direct_load = false;
 		string extension_name = ApplyExtensionAlias(extension);
 #ifdef WASM_LOADABLE_EXTENSIONS
-		throw NotImplementedException(
-		    "Loading extensions through name is not supported in this version of duckdb-wasm");
+		string url_template = ExtensionUrlTemplate(&config, "");
+		string url = ExtensionFinalizeUrlTemplate(url_template, extension_name);
+
+		char *str = (char *)EM_ASM_PTR(
+		    {
+			    var jsString = ((typeof runtime == 'object') && runtime && (typeof runtime.whereToLoad == 'function') &&
+			                    runtime.whereToLoad)
+			                       ? runtime.whereToLoad(UTF8ToString($0))
+			                       : (UTF8ToString($1));
+			    var lengthBytes = lengthBytesUTF8(jsString) + 1;
+			    // 'jsString.length' would return the length of the string as UTF-16
+			    // units, but Emscripten C strings operate as UTF-8.
+			    var stringOnWasmHeap = _malloc(lengthBytes);
+			    stringToUTF8(jsString, stringOnWasmHeap, lengthBytes);
+			    return stringOnWasmHeap;
+		    },
+		    filename.c_str(), url.c_str());
+		string address(str);
+		free(str);
+
+		filename = address;
 #else
 
 		string local_path = !db.config.options.extension_directory.empty()
