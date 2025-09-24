@@ -327,7 +327,21 @@ bool ExtensionHelper::TryInitialLoad(DatabaseInstance &db, FileSystem &fs, const
 		direct_load = false;
 		string extension_name = ApplyExtensionAlias(extension);
 #ifdef WASM_LOADABLE_EXTENSIONS
-		string url_template = ExtensionUrlTemplate(&config, "");
+		ExtensionRepository repository;
+
+		string custom_endpoint = db.config.options.custom_extension_repo;
+		if (!custom_endpoint.empty()) {
+			repository = ExtensionRepository("custom", custom_endpoint);
+		}
+               {
+                       auto preferredRepo = DatabaseInstance::GetPreferredRepository(extension);
+                       if (!preferredRepo.empty()) {
+                               repository = ExtensionRepository("x", preferredRepo);
+                       }
+               }
+		install_mode = ExtensionInstallMode::REPOSITORY;
+
+		string url_template = ExtensionUrlTemplate(db, repository, "");
 		string url = ExtensionFinalizeUrlTemplate(url_template, extension_name);
 
 		char *str = (char *)EM_ASM_PTR(
