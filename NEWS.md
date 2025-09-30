@@ -1,5 +1,10 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.4.0.9001
+
+- Merge pull request #1570 from duckdb/cran-1.4.0.
+
+
 # duckdb 1.4.0.9000
 
 ## fledge
