@@ -27,8 +27,6 @@
     Code
       dbWriteTable(con, "tbl", df)
     Condition
-      Error in `.local()`:
-      ! rapi_execute: Can't convert R type to logical type
-      Error in `.local()`:
-      ! rapi_register_df: Failed to register data frame: std::exception
+      Error in `dbIsValid()`:
+      ! object 'rapi_connection_valid' not found
 
