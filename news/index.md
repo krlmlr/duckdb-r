@@ -2,6 +2,8 @@
 
 ## duckdb 1.4.4
 
+CRAN release: 2026-01-28
+
 ### Features
 
 - Update to DuckDB v1.4.4, see
@@ -21,6 +23,8 @@
   [\#1819](https://github.com/duckdb/duckdb-r/issues/1819)).
 
 ## duckdb 1.4.3
+
+CRAN release: 2025-12-10
 
 ### Features
 
@@ -54,6 +58,8 @@
 
 ## duckdb 1.4.2
 
+CRAN release: 2025-11-17
+
 ### vendor
 
 - Update vendored sources to
@@ -74,6 +80,8 @@
   eddelbuettel/patch-1.
 
 ## duckdb 1.4.1
+
+CRAN release: 2025-10-16
 
 - Update to DuckDB v1.4.1, see
   <https://github.com/duckdb/duckdb/releases/tag/v1.4.1> for details.
@@ -100,6 +108,8 @@
   [\#1586](https://github.com/duckdb/duckdb-r/issues/1586)).
 
 ## duckdb 1.4.0
+
+CRAN release: 2025-09-18
 
 - Update to DuckDB v1.4.0, see
   <https://github.com/duckdb/duckdb/releases/tag/v1.4.0> for details.
@@ -129,6 +139,8 @@
 - Extensions can be installed again.
 
 ## duckdb 1.3.3
+
+CRAN release: 2025-09-10
 
 - Update to the current v1.3-ossivalis branch, see
   <https://github.com/duckdb/duckdb/tree/v1.3-ossivalis> for details.
@@ -180,12 +192,16 @@
 
 ## duckdb 1.3.2
 
+CRAN release: 2025-07-09
+
 ### Features
 
 - Update to duckdb v1.3.2, see
   <https://github.com/duckdb/duckdb/releases/tag/v1.3.2> for details.
 
 ## duckdb 1.3.1
+
+CRAN release: 2025-06-23
 
 ### Features
 
@@ -201,6 +217,8 @@
 - Fix multiarch build on R 4.1 for Windows.
 
 ## duckdb 1.3.0
+
+CRAN release: 2025-06-02
 
 ### Features
 
@@ -223,6 +241,8 @@
 - Skip timing tests on CRAN.
 
 ## duckdb 1.2.2
+
+CRAN release: 2025-04-29
 
 ### Features
 
@@ -287,6 +307,8 @@
 
 ## duckdb 1.2.1
 
+CRAN release: 2025-03-14
+
 ### Features
 
 - Update to duckdb v1.2.1, see
@@ -324,6 +346,8 @@
 - Avoid calls to non-API R functions.
 
 ## duckdb 1.2.0
+
+CRAN release: 2025-02-20
 
 ### Breaking changes
 
@@ -375,6 +399,8 @@
 
 ## duckdb 1.1.3-2
 
+CRAN release: 2025-01-24
+
 ### Bug fixes
 
 - Make `cleanup` truly idempotent
@@ -402,6 +428,8 @@
 - Sync tests.
 
 ## duckdb 1.1.3-1
+
+CRAN release: 2024-12-08
 
 ### Features
 
@@ -435,6 +463,8 @@
 
 ## duckdb 1.1.3
 
+CRAN release: 2024-11-21
+
 ### Features
 
 - Update to duckdb v1.1.3, see
@@ -466,6 +496,8 @@
   ([\#536](https://github.com/duckdb/duckdb-r/issues/536)).
 
 ## duckdb 1.1.2
+
+CRAN release: 2024-10-30
 
 ### Features
 
@@ -513,6 +545,8 @@
 
 ## duckdb 1.1.1
 
+CRAN release: 2024-10-16
+
 ### Features
 
 - Update to duckdb v1.1.1, see
@@ -540,6 +574,8 @@
 
 ## duckdb 1.1.0
 
+CRAN release: 2024-09-24
+
 ### Features
 
 - Update to duckdb v1.1.0, see
@@ -549,12 +585,16 @@
 
 ## duckdb 1.0.0-2
 
+CRAN release: 2024-07-19
+
 ### Features
 
 - Reduce the package installation size on macOS
   ([\#185](https://github.com/duckdb/duckdb-r/issues/185)).
 
 ## duckdb 1.0.0-1
+
+CRAN release: 2024-07-09
 
 ### Bug fixes
 
@@ -563,6 +603,8 @@
 - Support `dplyr::tbl(conn, I(...))`.
 
 ## duckdb 1.0.0
+
+CRAN release: 2024-06-13
 
 ### Bug fixes
 
@@ -611,6 +653,8 @@
 
 ## duckdb 0.10.2
 
+CRAN release: 2024-05-01
+
 ### Features
 
 - Update to duckdb v0.10.2, see
@@ -640,6 +684,8 @@
   ([\#145](https://github.com/duckdb/duckdb-r/issues/145)).
 
 ## duckdb 0.10.1
+
+CRAN release: 2024-04-02
 
 ### Features
 
@@ -680,6 +726,8 @@
 - Add rhub2 workflow.
 
 ## duckdb 0.10.0
+
+CRAN release: 2024-03-13
 
 ### Bug fixes
 
@@ -759,10 +807,14 @@
 
 ## duckdb 0.9.2-1
 
+CRAN release: 2023-11-28
+
 - Fix compiler warning on R-devel
   ([\#45](https://github.com/duckdb/duckdb-r/issues/45)).
 
 ## duckdb 0.9.2
+
+CRAN release: 2023-11-17
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.9.2>.
@@ -774,9 +826,13 @@
 
 ## duckdb 0.9.1-1
 
+CRAN release: 2023-10-30
+
 - Fix LTO checks on CRAN.
 
 ## duckdb 0.9.1
+
+CRAN release: 2023-10-13
 
 - See blog post at
   <https://duckdb.org/2023/09/26/announcing-duckdb-090.html>.
@@ -795,9 +851,13 @@
 
 ## duckdb 0.8.1-3
 
+CRAN release: 2023-09-01
+
 - Internal changes to support the duckplyr package.
 
 ## duckdb 0.8.1-2
+
+CRAN release: 2023-08-25
 
 - Compatibility with dbplyr.
 
@@ -805,62 +865,88 @@
 
 ## duckdb 0.8.1-1
 
+CRAN release: 2023-07-17
+
 - Fix CRAN checks.
 
 ## duckdb 0.8.1
+
+CRAN release: 2023-06-16
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.8.1>.
 
 ## duckdb 0.8.0
 
+CRAN release: 2023-05-23
+
 - See blog post at
   <https://duckdb.org/2023/05/17/announcing-duckdb-080.html>.
 
 ## duckdb 0.7.1-1
+
+CRAN release: 2023-03-01
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.7.1>.
 
 ## duckdb 0.7.0
 
+CRAN release: 2023-02-14
+
 - See blog post at
   <https://duckdb.org/2023/02/13/announcing-duckdb-070.html>.
 
 ## duckdb 0.6.2
 
+CRAN release: 2023-01-16
+
 - New `duckdb_prepare_substrait_json()`.
 
 ## duckdb 0.6.1
+
+CRAN release: 2022-12-08
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.6.1>.
 
 ## duckdb 0.6.0
 
+CRAN release: 2022-11-25
+
 - See blog post at
   <https://duckdb.org/2022/11/14/announcing-duckdb-060.html>.
 
 ## duckdb 0.5.1
+
+CRAN release: 2022-09-20
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.5.1>.
 
 ## duckdb 0.5.0
 
+CRAN release: 2022-09-05
+
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.5.0>.
 
 ## duckdb 0.4.0
+
+CRAN release: 2022-06-21
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.4.0>.
 
 ## duckdb 0.3.4-1
 
+CRAN release: 2022-06-13
+
 - Minor changes for CRAN compatibility.
 
 ## duckdb 0.3.4
+
+CRAN release: 2022-06-05
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.3.4>.
@@ -872,15 +958,21 @@
 
 ## duckdb 0.3.2
 
+CRAN release: 2022-02-07
+
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.3.2>.
 
 ## duckdb 0.3.1
 
+CRAN release: 2021-11-16
+
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.3.1>.
 
 ## duckdb 0.3.0
+
+CRAN release: 2021-10-08
 
 - See release notes at
   <https://github.com/duckdb/duckdb/releases/tag/v0.3.0>.
@@ -889,6 +981,8 @@
   <https://github.com/duckdb/duckdb/releases/tag/v0.2.9>.
 
 ## duckdb 0.2.8
+
+CRAN release: 2021-08-02
 
 This preview release of DuckDB is named “Ceruttii” after a [long-extinct
 relative of the present-day Harleqin
@@ -932,6 +1026,8 @@ details.
 - \#1957: Add pipe/stream file system
 
 ## duckdb 0.2.7
+
+CRAN release: 2021-06-14
 
 This preview release of DuckDB is named “Mollissima” after the Common
 Eider (Somateria mollissima). Binary builds are listed below. Feedback
@@ -989,6 +1085,8 @@ Use Allocator class in buffer manager and add a test for a custom
 allocator usage
 
 ## duckdb 0.2.6
+
+CRAN release: 2021-05-09
 
 This preview release of DuckDB is named “Jamaicensis” after the
 [blue-billed Ruddy Duck (Oxyura
@@ -1068,6 +1166,8 @@ implementation of Rstudio connection-contract tab
 
 ## duckdb 0.2.5
 
+CRAN release: 2021-03-16
+
 This preview release of DuckDB is named “Falcata” after the Falcated
 Duck (Mareca falcata). Binary builds are listed below. Feedback is very
 welcome.
@@ -1119,6 +1219,8 @@ support to C API -
 profiler.
 
 ## duckdb 0.2.4
+
+CRAN release: 2021-02-02
 
 This preview release of DuckDB is named “Jubata” after the [Australian
 Wood Duck](https://en.wikipedia.org/wiki/Australian_wood_duck)
@@ -1174,6 +1276,8 @@ Parquet - [\#1314](https://github.com/duckdb/duckdb-r/issues/1314):
 Refactor and nested types support for Parquet Reader
 
 ## duckdb 0.2.3
+
+CRAN release: 2020-12-12
 
 This preview release of DuckDB is named “Serrator” after the
 Red-breasted merganser (Mergus serrator). Binary builds are listed
@@ -1231,6 +1335,8 @@ Compression Code and add ZSTD codec as option for Parquet export -
 cache and Parquet metadata cache
 
 ## duckdb 0.2.2
+
+CRAN release: 2020-11-03
 
 This is a preview release of DuckDB. Starting from this release,
 releases get named as well. Names are chosen from species of ducks (of
@@ -1293,6 +1399,8 @@ and times output into arrow -
 Arrow NULL columns
 
 ## duckdb 0.2.1
+
+CRAN release: 2020-09-10
 
 This is a preview release of DuckDB. Binary builds are listed below.
 Feedback is very welcome. Major changes:
