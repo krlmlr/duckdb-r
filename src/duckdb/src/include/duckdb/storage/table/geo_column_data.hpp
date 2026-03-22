@@ -23,7 +23,8 @@ public:
 	shared_ptr<ColumnData> base_column;
 
 	//! Shredding state of the column
-	GeometryStorageType storage_type = GeometryStorageType::WKB;
+	GeometryType geom_type = GeometryType::INVALID;
+	VertexType vert_type = VertexType::XY;
 
 public:
 	idx_t GetMaxEntry() override;
@@ -72,8 +73,9 @@ public:
 	void VisitBlockIds(BlockIdVisitor &visitor) const override;
 
 private:
-	static void Specialize(Vector &source, Vector &target, idx_t count, GeometryStorageType storage_type);
-	static void Reassemble(Vector &source, Vector &target, idx_t count, GeometryStorageType storage_type, idx_t offset);
+	static void Specialize(Vector &source, Vector &target, idx_t count, GeometryType geom_type, VertexType vert_type);
+	static void Reassemble(Vector &source, Vector &target, idx_t count, GeometryType geom_type, VertexType vert_type,
+	                       idx_t offset);
 	static void InterpretStats(BaseStatistics &source, BaseStatistics &target, GeometryType geom_type,
 	                           VertexType vert_type);
 };

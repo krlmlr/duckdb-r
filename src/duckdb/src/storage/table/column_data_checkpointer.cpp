@@ -1,19 +1,20 @@
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/database.hpp"
 #include "duckdb/main/settings.hpp"
+#include "duckdb/logging/log_manager.hpp"
+#include "duckdb/parser/column_definition.hpp"
+#include "duckdb/storage/table/data_table_info.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/data_table.hpp"
-#include "duckdb/parser/column_definition.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
-#include "duckdb/logging/log_manager.hpp"
-#include "duckdb/main/database.hpp"
 
 namespace duckdb {
 
 //! ColumnDataCheckpointData
 
-const CompressionFunction &ColumnDataCheckpointData::GetCompressionFunction(CompressionType compression_type) {
+CompressionFunction &ColumnDataCheckpointData::GetCompressionFunction(CompressionType compression_type) {
 	auto &db = col_data->GetDatabase();
 	auto &column_type = col_data->type;
 	auto &config = DBConfig::GetConfig(db);
@@ -104,7 +105,7 @@ void ColumnDataCheckpointer::ScanSegments(const std::function<void(Vector &, idx
 }
 
 CompressionType ForceCompression(StorageManager &storage_manager,
-                                 vector<optional_ptr<const CompressionFunction>> &compression_functions,
+                                 vector<optional_ptr<CompressionFunction>> &compression_functions,
                                  CompressionType compression_type) {
 	// One of the force_compression flags has been set
 	// check if this compression method is available

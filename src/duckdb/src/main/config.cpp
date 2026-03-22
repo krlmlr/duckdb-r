@@ -158,6 +158,7 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(LoggingLevel),
     DUCKDB_GLOBAL(LoggingMode),
     DUCKDB_GLOBAL(LoggingStorage),
+    DUCKDB_SETTING(MaxExecutionTimeSetting),
     DUCKDB_SETTING(MaxExpressionDepthSetting),
     DUCKDB_GLOBAL(MaxMemorySetting),
     DUCKDB_GLOBAL(MaxTempDirectorySizeSetting),
@@ -165,6 +166,7 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_SETTING(MergeJoinThresholdSetting),
     DUCKDB_SETTING(NestedLoopJoinThresholdSetting),
     DUCKDB_SETTING(OldImplicitCastingSetting),
+    DUCKDB_LOCAL(OperatorMemoryLimitSetting),
     DUCKDB_SETTING(OrderByNonIntegerLiteralSetting),
     DUCKDB_SETTING_CALLBACK(OrderedAggregateThresholdSetting),
     DUCKDB_SETTING(PartitionedWriteFlushThresholdSetting),
@@ -202,12 +204,12 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_SETTING(ZstdMinStringLengthSetting),
     FINAL_SETTING};
 
-static const ConfigurationAlias setting_aliases[] = {DUCKDB_SETTING_ALIAS("memory_limit", 96),
+static const ConfigurationAlias setting_aliases[] = {DUCKDB_SETTING_ALIAS("memory_limit", 97),
                                                      DUCKDB_SETTING_ALIAS("null_order", 40),
-                                                     DUCKDB_SETTING_ALIAS("profiling_output", 115),
-                                                     DUCKDB_SETTING_ALIAS("user", 130),
+                                                     DUCKDB_SETTING_ALIAS("profiling_output", 117),
+                                                     DUCKDB_SETTING_ALIAS("user", 132),
                                                      DUCKDB_SETTING_ALIAS("wal_autocheckpoint", 23),
-                                                     DUCKDB_SETTING_ALIAS("worker_threads", 129),
+                                                     DUCKDB_SETTING_ALIAS("worker_threads", 131),
                                                      FINAL_ALIAS};
 
 vector<ConfigurationOption> DBConfig::GetOptions() {
@@ -629,7 +631,7 @@ idx_t DBConfig::ParseMemoryLimit(const string &arg) {
 
 	if (!error.empty()) {
 		if (error == "Memory cannot be negative") {
-			result = DConstants::INVALID_INDEX;
+			return NumericLimits<idx_t>::Maximum();
 		} else {
 			throw ParserException(error);
 		}

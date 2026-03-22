@@ -262,6 +262,7 @@ void CommonTableExpressionInfo::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<unique_ptr<SelectStatement>>(101, "query", query);
 	serializer.WriteProperty<CTEMaterialize>(102, "materialized", GetMaterializedForSerialization(serializer));
 	serializer.WritePropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(103, "key_targets", key_targets);
+	serializer.WritePropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(104, "payload_aggregates", payload_aggregates);
 }
 
 unique_ptr<CommonTableExpressionInfo> CommonTableExpressionInfo::Deserialize(Deserializer &deserializer) {
@@ -270,6 +271,7 @@ unique_ptr<CommonTableExpressionInfo> CommonTableExpressionInfo::Deserialize(Des
 	deserializer.ReadPropertyWithDefault<unique_ptr<SelectStatement>>(101, "query", result->query);
 	deserializer.ReadProperty<CTEMaterialize>(102, "materialized", result->materialized);
 	deserializer.ReadPropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(103, "key_targets", result->key_targets);
+	deserializer.ReadPropertyWithDefault<vector<unique_ptr<ParsedExpression>>>(104, "payload_aggregates", result->payload_aggregates);
 	return result;
 }
 
@@ -346,10 +348,10 @@ void JoinCondition::Serialize(Serializer &serializer) const {
 }
 
 JoinCondition JoinCondition::Deserialize(Deserializer &deserializer) {
-	JoinCondition result;
-	deserializer.ReadPropertyWithDefault<unique_ptr<Expression>>(100, "left", result.left);
-	deserializer.ReadPropertyWithDefault<unique_ptr<Expression>>(101, "right", result.right);
-	deserializer.ReadProperty<ExpressionType>(102, "comparison", result.comparison);
+	auto left = deserializer.ReadPropertyWithDefault<unique_ptr<Expression>>(100, "left");
+	auto right = deserializer.ReadPropertyWithDefault<unique_ptr<Expression>>(101, "right");
+	auto comparison = deserializer.ReadProperty<ExpressionType>(102, "comparison");
+	JoinCondition result(std::move(left), std::move(right), comparison);
 	return result;
 }
 
@@ -463,21 +465,19 @@ void RowGroupOrderOptions::Serialize(Serializer &serializer) const {
 	serializer.WriteProperty<StorageIndex>(100, "column_idx", column_idx);
 	serializer.WriteProperty<OrderByStatistics>(101, "order_by", order_by);
 	serializer.WriteProperty<OrderType>(102, "order_type", order_type);
-	serializer.WriteProperty<OrderByNullType>(103, "null_order", null_order);
-	serializer.WriteProperty<OrderByColumnType>(104, "column_type", column_type);
-	serializer.WriteProperty<optional_idx>(105, "row_limit", row_limit);
-	serializer.WritePropertyWithDefault<idx_t>(106, "row_group_offset", row_group_offset);
+	serializer.WriteProperty<OrderByColumnType>(103, "column_type", column_type);
+	serializer.WriteProperty<optional_idx>(104, "row_limit", row_limit);
+	serializer.WritePropertyWithDefault<idx_t>(105, "row_group_offset", row_group_offset);
 }
 
 unique_ptr<RowGroupOrderOptions> RowGroupOrderOptions::Deserialize(Deserializer &deserializer) {
 	auto column_idx = deserializer.ReadProperty<StorageIndex>(100, "column_idx");
 	auto order_by = deserializer.ReadProperty<OrderByStatistics>(101, "order_by");
 	auto order_type = deserializer.ReadProperty<OrderType>(102, "order_type");
-	auto null_order = deserializer.ReadProperty<OrderByNullType>(103, "null_order");
-	auto column_type = deserializer.ReadProperty<OrderByColumnType>(104, "column_type");
-	auto row_limit = deserializer.ReadProperty<optional_idx>(105, "row_limit");
-	auto row_group_offset = deserializer.ReadPropertyWithDefault<idx_t>(106, "row_group_offset");
-	auto result = duckdb::unique_ptr<RowGroupOrderOptions>(new RowGroupOrderOptions(column_idx, order_by, order_type, null_order, column_type, row_limit, row_group_offset));
+	auto column_type = deserializer.ReadProperty<OrderByColumnType>(103, "column_type");
+	auto row_limit = deserializer.ReadProperty<optional_idx>(104, "row_limit");
+	auto row_group_offset = deserializer.ReadPropertyWithDefault<idx_t>(105, "row_group_offset");
+	auto result = duckdb::unique_ptr<RowGroupOrderOptions>(new RowGroupOrderOptions(column_idx, order_by, order_type, column_type, row_limit, row_group_offset));
 	return result;
 }
 
