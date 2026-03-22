@@ -29,9 +29,6 @@ public:
 	explicit ShreddingType(const LogicalType &type);
 
 public:
-	bool operator==(const ShreddingType &other) const;
-
-public:
 	ShreddingType Copy() const;
 
 public:

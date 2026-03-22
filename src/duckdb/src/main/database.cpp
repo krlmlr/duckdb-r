@@ -1,41 +1,41 @@
 #include "duckdb/main/database.hpp"
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/common/http_util.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/execution/index/index_type_set.hpp"
 #include "duckdb/execution/operator/helper/physical_set.hpp"
 #include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/common/types/type_manager.hpp"
 #include "duckdb/function/compression_function.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/capi/extension_api.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection_manager.hpp"
 #include "duckdb/main/database_file_opener.hpp"
+#include "duckdb/main/database_file_path_manager.hpp"
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/database_path_and_type.hpp"
 #include "duckdb/main/db_instance_cache.hpp"
 #include "duckdb/main/error_manager.hpp"
 #include "duckdb/main/extension_helper.hpp"
+#include "duckdb/main/result_set_manager.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/planner/collation_binding.hpp"
 #include "duckdb/planner/extension_callback.hpp"
+#include "duckdb/storage/block_allocator.hpp"
+#include "duckdb/storage/buffer/buffer_pool.hpp"
+#include "duckdb/storage/compression/empty_validity.hpp"
+#include "duckdb/storage/external_file_cache.hpp"
 #include "duckdb/storage/object_cache.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
 #include "duckdb/storage/storage_extension.hpp"
-#include "duckdb/storage/block_allocator.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "duckdb/main/capi/extension_api.hpp"
-#include "duckdb/storage/external_file_cache.hpp"
-#include "duckdb/storage/compression/empty_validity.hpp"
-#include "duckdb/logging/logger.hpp"
-#include "duckdb/common/http_util.hpp"
 #include "mbedtls_wrapper.hpp"
-#include "duckdb/main/database_file_path_manager.hpp"
-#include "duckdb/main/result_set_manager.hpp"
-#include "duckdb/main/extension_callback_manager.hpp"
 
 #ifndef DUCKDB_NO_THREADS
 #include "duckdb/common/thread.hpp"
@@ -463,13 +463,10 @@ void DatabaseInstance::Configure(DBConfig &new_config, const char *database_path
 	if (!config.allocator) {
 		config.allocator = make_uniq<Allocator>();
 	}
-	config.block_allocator = std::move(new_config.block_allocator);
-	if (!config.block_allocator) {
-		auto default_block_size = Settings::Get<DefaultBlockSizeSetting>(config);
-		config.block_allocator = make_uniq<BlockAllocator>(
-		    *config.allocator, default_block_size, DBConfig::GetSystemAvailableMemory(*config.file_system) * 8 / 10,
-		    config.options.block_allocator_size);
-	}
+	auto default_block_size = Settings::Get<DefaultBlockSizeSetting>(config);
+	config.block_allocator = make_uniq<BlockAllocator>(*config.allocator, default_block_size,
+	                                                   DBConfig::GetSystemAvailableMemory(*config.file_system) * 8 / 10,
+	                                                   config.options.block_allocator_size);
 	config.replacement_scans = std::move(new_config.replacement_scans);
 	if (new_config.callback_manager) {
 		config.callback_manager = std::move(new_config.callback_manager);
@@ -542,18 +539,11 @@ shared_ptr<EncryptionUtil> DatabaseInstance::GetEncryptionUtil(bool read_only) {
 	}
 
 	if (!config.encryption_util) {
-		// No encryption_util, attempt to get a hold of httpfs
-		if (read_only) {
-			// load is attempted, but no install is performed
-			ExtensionHelper::TryAutoLoadAvailableExtension(*this, "httpfs");
-		} else {
-			// load is attempted, otherwise install+load
-			ExtensionHelper::TryAutoLoadExtension(*this, "httpfs");
-		}
+		ExtensionHelper::TryAutoLoadExtension(*this, "httpfs");
 	}
 
 	if (config.encryption_util) {
-		// already available (potentially via httpfs loading)
+		// httpfs is correctly loaded
 		return config.encryption_util;
 	}
 
@@ -563,12 +553,11 @@ shared_ptr<EncryptionUtil> DatabaseInstance::GetEncryptionUtil(bool read_only) {
 		return GetMbedTLSUtil(force_mbedtls);
 	}
 
-	throw InvalidConfigurationException(" DuckDB currently has a read-only crypto module "
-	                                    "loaded. Please ensure httpfs is loaded using `LOAD httpfs`, or for DuckDB "
-	                                    "database files consider READONLY mode."
-	                                    " To write an encrypted database or parquet file that is NOT securely "
-	                                    "encrypted, one can use SET force_mbedtls_unsafe = "
-	                                    "'true'.");
+	throw InvalidConfigurationException(
+	    " DuckDB currently has a read-only crypto module "
+	    "loaded. Please re-open using READONLY, or ensure httpfs is loaded using `LOAD httpfs`. "
+	    " To write an encrypted database that is NOT securely encrypted, one can use SET force_mbedtls_unsafe = "
+	    "'true'.");
 }
 
 ValidChecker &DatabaseInstance::GetValidChecker() {

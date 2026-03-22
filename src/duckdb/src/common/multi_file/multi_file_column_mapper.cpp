@@ -10,6 +10,7 @@
 #include "duckdb/function/scalar/struct_functions.hpp"
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/planner/filter/expression_filter.hpp"
+#include "duckdb/planner/filter/perfect_hash_join_filter.hpp"
 
 namespace duckdb {
 
@@ -870,6 +871,10 @@ bool MultiFileColumnMapper::EvaluateFilterAgainstConstant(TableFilter &filter, c
 		auto &bloom_filter = filter.Cast<BFTableFilter>();
 		return bloom_filter.FilterValue(constant);
 	}
+	case TableFilterType::PERFECT_HASH_JOIN_FILTER: {
+		auto &perfect_hash_join_filter = filter.Cast<PerfectHashJoinFilter>();
+		return perfect_hash_join_filter.FilterValue(constant);
+	}
 	default:
 		throw NotImplementedException("Can't evaluate TableFilterType (%s) against a constant",
 		                              EnumUtil::ToString(type));
@@ -1035,20 +1040,8 @@ static unique_ptr<TableFilter> TryCastTableFilter(const TableFilter &global_filt
 }
 
 void SetIndexToZero(unique_ptr<Expression> &root_expr) {
-#ifdef DEBUG
-	optional_idx index;
-	ExpressionIterator::VisitExpressionMutable<BoundReferenceExpression>(root_expr, [&](BoundReferenceExpression &ref,
-	                                                                                    unique_ptr<Expression> &expr) {
-		if (index.IsValid() && index.GetIndex() != ref.index) {
-			throw InternalException("Expected an expression that only references a single column, but found multiple!");
-		}
-		index = ref.index;
-		ref.index = 0;
-	});
-#else
 	ExpressionIterator::VisitExpressionMutable<BoundReferenceExpression>(
 	    root_expr, [&](BoundReferenceExpression &ref, unique_ptr<Expression> &expr) { ref.index = 0; });
-#endif
 }
 
 bool CanPropagateCast(const MultiFileIndexMapping &mapping, const LogicalType &local_type,

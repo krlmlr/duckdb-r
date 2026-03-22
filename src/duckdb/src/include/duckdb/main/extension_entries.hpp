@@ -303,6 +303,7 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"icu_collate_ku", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_ky", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_lb", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"icu_collate_lij", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_lkt", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_ln", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_lo", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -320,7 +321,9 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"icu_collate_ne", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_nl", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_nn", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"icu_collate_no", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_noaccent", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"icu_collate_nso", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_om", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_or", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_pa", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -341,12 +344,14 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"icu_collate_sr_ba", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_sr_me", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_sr_rs", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"icu_collate_st", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_sv", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_sw", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_ta", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_te", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_th", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_tk", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"icu_collate_tn", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_to", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_tr", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_ug", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -359,8 +364,6 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"icu_collate_xh", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_yi", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_yo", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
-    {"icu_collate_yue", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
-    {"icu_collate_yue_cn", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_zh", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_zh_cn", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"icu_collate_zh_hk", "icu", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -572,6 +575,7 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"skewness", "core_functions", CatalogType::AGGREGATE_FUNCTION_ENTRY},
     {"sleep_ms", "core_functions", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"sql_auto_complete", "autocomplete", CatalogType::TABLE_FUNCTION_ENTRY},
+    {"sql_tokenize", "autocomplete", CatalogType::TABLE_FUNCTION_ENTRY},
     {"sqlite_attach", "sqlite_scanner", CatalogType::TABLE_FUNCTION_ENTRY},
     {"sqlite_query", "sqlite_scanner", CatalogType::TABLE_FUNCTION_ENTRY},
     {"sqlite_scan", "sqlite_scanner", CatalogType::TABLE_FUNCTION_ENTRY},
@@ -590,7 +594,6 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"st_buffer", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"st_buildarea", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"st_centroid", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
-    {"st_closestpoint", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"st_collect", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"st_collectionextract", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"st_concavehull", "spatial", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -1053,7 +1056,6 @@ static constexpr ExtensionEntry EXTENSION_SETTINGS[] = {
     {"ca_cert_file", "httpfs"},
     {"calendar", "icu"},
     {"disable_parquet_prefetching", "parquet"},
-    {"ducklake_default_data_inlining_row_limit", "ducklake"},
     {"ducklake_max_retry_count", "ducklake"},
     {"ducklake_retry_backoff", "ducklake"},
     {"ducklake_retry_wait_ms", "ducklake"},
@@ -1062,7 +1064,6 @@ static constexpr ExtensionEntry EXTENSION_SETTINGS[] = {
     {"enable_global_s3_configuration", "httpfs"},
     {"enable_server_cert_verification", "httpfs"},
     {"force_download", "httpfs"},
-    {"geometry_always_xy", "spatial"},
     {"hf_max_per_page", "httpfs"},
     {"hnsw_ef_search", "vss"},
     {"hnsw_enable_experimental_persistence", "vss"},
@@ -1134,9 +1135,7 @@ static constexpr ExtensionEntry EXTENSION_COPY_FUNCTIONS[] = {
 // Note: these are currently hardcoded in scripts/generate_extensions_function.py
 // TODO: automate by passing though to script via duckdb
 static constexpr ExtensionEntry EXTENSION_TYPES[] = {
-    {"json", "json"},
-    {"inet", "inet"},
-}; // END_OF_EXTENSION_TYPES
+    {"json", "json"}, {"inet", "inet"}, {"geometry", "spatial"}}; // END_OF_EXTENSION_TYPES
 
 // Note: these are currently hardcoded in scripts/generate_extensions_function.py
 // TODO: automate by passing though to script via duckdb

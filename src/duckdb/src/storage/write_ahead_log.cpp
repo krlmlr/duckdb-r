@@ -42,10 +42,6 @@ AttachedDatabase &WriteAheadLog::GetDatabase() {
 	return storage_manager.GetAttached();
 }
 
-StorageManager &WriteAheadLog::GetStorageManager() {
-	return storage_manager;
-}
-
 BufferedFileWriter &WriteAheadLog::Initialize() {
 	if (Initialized()) {
 		return *writer;
@@ -467,7 +463,7 @@ void WriteAheadLog::WriteSetTable(const string &schema, const string &table) {
 
 void WriteAheadLog::WriteInsert(DataChunk &chunk) {
 	D_ASSERT(chunk.size() > 0);
-	chunk.Verify();
+	chunk.Verify(GetDatabase().GetDatabase());
 
 	WriteAheadLogSerializer serializer(*this, WALType::INSERT_TUPLE);
 	serializer.WriteProperty(101, "chunk", chunk);
@@ -485,7 +481,7 @@ void WriteAheadLog::WriteRowGroupData(const PersistentCollectionData &data) {
 void WriteAheadLog::WriteDelete(DataChunk &chunk) {
 	D_ASSERT(chunk.size() > 0);
 	D_ASSERT(chunk.ColumnCount() == 1 && chunk.data[0].GetType() == LogicalType::ROW_TYPE);
-	chunk.Verify();
+	chunk.Verify(GetDatabase().GetDatabase());
 
 	WriteAheadLogSerializer serializer(*this, WALType::DELETE_TUPLE);
 	serializer.WriteProperty(101, "chunk", chunk);
@@ -496,7 +492,7 @@ void WriteAheadLog::WriteUpdate(DataChunk &chunk, const vector<column_t> &column
 	D_ASSERT(chunk.size() > 0);
 	D_ASSERT(chunk.ColumnCount() == 2);
 	D_ASSERT(chunk.data[1].GetType().id() == LogicalType::ROW_TYPE);
-	chunk.Verify();
+	chunk.Verify(GetDatabase().GetDatabase());
 
 	WriteAheadLogSerializer serializer(*this, WALType::UPDATE_TUPLE);
 	serializer.WriteProperty(101, "column_indexes", column_indexes);
@@ -549,13 +545,6 @@ void WriteAheadLog::Flush() {
 
 void WriteAheadLog::IncrementWALEntriesCount() {
 	storage_manager.IncrementWALEntriesCount();
-}
-
-void WriteAheadLog::MarkBlocksInUseAsModified() {
-	auto &block_manager = storage_manager.GetBlockManager();
-	for (const block_id_t block_id : blocks_in_use) {
-		block_manager.MarkBlockAsModified(block_id);
-	}
 }
 
 } // namespace duckdb

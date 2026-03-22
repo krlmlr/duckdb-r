@@ -52,8 +52,6 @@ public:
 	};
 
 public:
-	virtual bool CanDeserializeProperty(const field_id_t field_id, const char *tag) = 0;
-
 	// Read into an existing value
 	template <typename T>
 	inline void ReadProperty(const field_id_t field_id, const char *tag, T &ret) {

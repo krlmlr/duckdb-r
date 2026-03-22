@@ -226,8 +226,6 @@ enum class FunctionStability : uint8_t;
 
 enum class GateStatus : uint8_t;
 
-enum class GeometryStorageType : uint8_t;
-
 enum class GeometryType : uint8_t;
 
 enum class HLLStorageType : uint8_t;
@@ -793,9 +791,6 @@ const char* EnumUtil::ToChars<FunctionStability>(FunctionStability value);
 
 template<>
 const char* EnumUtil::ToChars<GateStatus>(GateStatus value);
-
-template<>
-const char* EnumUtil::ToChars<GeometryStorageType>(GeometryStorageType value);
 
 template<>
 const char* EnumUtil::ToChars<GeometryType>(GeometryType value);
@@ -1499,9 +1494,6 @@ FunctionStability EnumUtil::FromString<FunctionStability>(const char *value);
 
 template<>
 GateStatus EnumUtil::FromString<GateStatus>(const char *value);
-
-template<>
-GeometryStorageType EnumUtil::FromString<GeometryStorageType>(const char *value);
 
 template<>
 GeometryType EnumUtil::FromString<GeometryType>(const char *value);
