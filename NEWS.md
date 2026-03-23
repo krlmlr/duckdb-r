@@ -1,5 +1,190 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.5.0.9007
+
+## Bug fixes
+
+- Fix configure script.
+
+## Chore
+
+- Vendoring compatible with worktrees.
+
+- Minimize difference with flavors.
+
+- Rename.
+
+- Describe `.dd` files.
+
+- Use `gtar` only if `xz` is also available.
+
+- Initialize to avoid CRAN warnings.
+
+## Continuous integration
+
+- Fix multi-commit vendoring.
+
+- Call script instead of workflow.
+
+- Fix.
+
+- Debug.
+
+- Explicit output.
+
+- Try passthrough matrix.
+
+- Overarching matrix.
+
+- Call workflow, not action.
+
+- Reenable full vendoring.
+
+- Simpler shallow clone.
+
+- Can pick branch, only on krlmlr.
+
+- Add arg for dispatch.
+
+- Focus on v1.5 for now for vendoring.
+
+- Bump checkout action.
+
+- Tweaks.
+
+- Use better check for GitHub token.
+
+- Tweak each- workflow to look for successful build statuses.
+
+- Add sync workflow.
+
+- Run vendoring only for krlmlr repo.
+
+- Add more branches.
+
+- Fix vendoring.
+
+## Uncategorized
+
+- Vendor: Update vendored sources to duckdb/duckdb@710adf3d0587022701c56f0b83fc60011f57efff (@krlmlr, #2287).
+
+- Vendor: Update vendored sources to duckdb/duckdb@6ff3b4f26cc9a916896f89167922704296ef9b6a (@krlmlr, #2286).
+
+- Vendor: Update vendored sources to duckdb/duckdb@4c959e279e1964d2b83ee518e3b92d030a13f2bb (@krlmlr, #2285).
+
+- Vendor: Update vendored sources to duckdb/duckdb@0bc00ee4ee8a4b38cfcce75d10c8ca7b3ea79de0 (@krlmlr, #2284).
+
+- Vendor: Update vendored sources to duckdb/duckdb@31ea662805538434b10bb4b914f3343793359265 (@krlmlr, #2283).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8c356ee3b845a3ba104cd610ebf54fda4bd050e9 (@krlmlr, #2282).
+
+- Vendor: Update vendored sources to duckdb/duckdb@84b786bf5cb54b06e4da4d96d25692b74b9a9946 (@krlmlr, #2275).
+
+- Vendor: Update vendored sources to duckdb/duckdb@58d30505e4e6c7c0a1900c589fc8c1fe23906aa1 (@krlmlr, #2274).
+
+- Vendor: Update vendored sources to duckdb/duckdb@496fd155a848c4136d7d8292bc7e7dc1c31a5446 (@krlmlr, #2273).
+
+- Vendor: Update vendored sources to duckdb/duckdb@52ae55817722faea564799ec41c13f887e207d19 (@krlmlr, #2272).
+
+- Vendor: Update vendored sources to duckdb/duckdb@2fb8b23749c740dc65380668275f2b3507eebcac (@krlmlr, #2271).
+
+- Vendor: Update vendored sources to duckdb/duckdb@beb433b63b59839e4845c303cd5544208c4f0395 (@krlmlr, #2270).
+
+- Vendor: Update vendored sources to duckdb/duckdb@d8cf64cfdfa5158370f60bb4360f40fdfa08faa4 (@krlmlr, #2269).
+
+- Vendor: Update vendored sources to duckdb/duckdb@c6a398eea4d2ef6b26ac4a8e7b61f09c31ad56b8 (@krlmlr, #2268).
+
+- Vendor: Update vendored sources to duckdb/duckdb@5467da56c41129a057b6588c4a333fad02d0e9d7 (@krlmlr, #2267).
+
+- Vendor: Update vendored sources to duckdb/duckdb@0b84cef194ac3da1ab440b79f7a194a3f25e0812 (@krlmlr, #2266).
+
+- Vendor: Update vendored sources to duckdb/duckdb@8a4abd8468a72b3beb6b519663c9323f6e3210da (@krlmlr, #2265).
+
+- Vendor: Update vendored sources to duckdb/duckdb@73ed005ad78d9244ffa7fe039f13829b9c7dad9d (@krlmlr, #2264).
+
+- Vendor: Update vendored sources to duckdb/duckdb@728343d282176abb91b2fc4e8cb8c47ca0484934 (@krlmlr, #2263).
+
+- Vendor: Update vendored sources to duckdb/duckdb@ddb7cd94daebf897d0a7c022a127a66347b00c1b (@krlmlr, #2262).
+
+- Vendor: Update vendored sources to duckdb/duckdb@0b4f52552eb46012910eece8ee225a9a287ed6e1 (@krlmlr, #2261).
+
+- Vendor: Update vendored sources to duckdb/duckdb@a641c019096170760989d85bd8014b7988605392 (@krlmlr, #2260).
+
+- Vendor: Update vendored sources to duckdb/duckdb@ba60b17ceabb3a7353ef409f630e03cb751a25fb (@krlmlr, #2259).
+
+- Vendor: Update vendored sources to duckdb/duckdb@5dcda9fd79a9346963191518e35c103135f72845 (@krlmlr, #2257).
+
+- Vendor: Update vendored sources to duckdb/duckdb@66a910f5cbda95a64e78cdc701b2313d37b6811e (@krlmlr, #2256).
+
+- Vendor: Update vendored sources to duckdb/duckdb@3f139372c8c756b5c12e3cf7d985e7b43eb6c9db (@krlmlr, #2255).
+
+- Vendor: Update vendored sources to duckdb/duckdb@a73b64c1c5b8d828173d9ab654ea405280188381 (@krlmlr, #2254).
+
+- Vendor: Update vendored sources to duckdb/duckdb@95c81316b02c1615ee737cfe520c649a2d037916 (@krlmlr, #2253).
+
+- Vendor: Update vendored sources to duckdb/duckdb@2e0afa39a7495a3e102438c1e29d4a3af8cb26f1 (@krlmlr, #2252).
+
+- Vendor: Update vendored sources to duckdb/duckdb@feec4c5da208a4ae00412538ae384186ccf35760 (@krlmlr, #2251).
+
+- Vendor: Update vendored sources to duckdb/duckdb@f56a389be388aca502bf28bbd61e202052efbdea (@krlmlr, #2250).
+
+- Vendor: Update vendored sources to duckdb/duckdb@b848852ba37130f11315163271310b88a645c689 (@krlmlr, #2249).
+
+- Vendor: Update vendored sources to duckdb/duckdb@1fb46ce492cdb6ff82014c18e91ac83220535fa8 (@krlmlr, #2248).
+
+- Vendor: Update vendored sources to duckdb/duckdb@fc2775bd3a31d2090fb55f2b6ac13d266b5da335 (@krlmlr, #2247).
+
+- Vendor: Update vendored sources to duckdb/duckdb@b80fb7710da9731d74a51cfb5b0b60b7ea40a0b7 (@krlmlr, #2246).
+
+- Vendor: Update vendored sources to duckdb/duckdb@47072f0b19fe2d474aa71e5cb071a762ed3ab097 (@krlmlr, #2245).
+
+- Vendor: Update vendored sources to duckdb/duckdb@1d5b25613c4bae5f72e5db9c0c22358e43e43c1c (@krlmlr, #2244).
+
+- Vendor: Update vendored sources to duckdb/duckdb@c2890df019ea9de091b5e5af5f8a54e751f13c88 (@krlmlr, #2243).
+
+- Vendor: Update vendored sources to duckdb/duckdb@180aa69cc0e759245612aec97e4cc3d5784c28cc (@krlmlr, #2242).
+
+- Vendor: Update vendored sources to duckdb/duckdb@718f2f15663a70027c3240596dd3d25755c71674 (@krlmlr, #2240).
+
+- Vendor: Update vendored sources to duckdb/duckdb@d51d4066eb4e9c0d4b7e9c01e3b967a61329ad70 (@krlmlr, #2239).
+
+- Vendor: Update vendored sources to duckdb/duckdb@5bb2658ebd5d336f9ef7c60cd21ceb001683321c (@krlmlr, #2238).
+
+- Vendor: Update vendored sources to duckdb/duckdb@4b24a74a12530f2c6459f2c26fe2183704deecc5 (@krlmlr, #2237).
+
+- Vendor: Update vendored sources to duckdb/duckdb@c1a75bc712ab8647ee538d90f139be587506d333 (@krlmlr, #2236).
+
+- Vendor: Update vendored sources to duckdb/duckdb@1bb1133b1f8499b6897fd36712752a297bf39eec (@krlmlr, #2235).
+
+- Feat: `GEOMETRY` columns can be returned, either as BLOBs (default) or as wk objects (via the wk package) using `dbConnect(geometry = "wk")` (@1741643+krlmlr, @198982749+Copilot, @Copilot, @krlmlr, #2279).
+
+- Chore: Clean up user directory on CRAN after finishing tests (#2289) (#2289).
+
+- Merge pull request #2277 from duckdb/gha-commit-c3e9dea.
+
+- Feat: Use `TRY_CAST()` instead of `CAST()` in dplyr SQL translation for type conversion functions (@1741643+krlmlr, @198982749+Copilot, #2231).
+
+- Chore: Use `gtar` when available to suppress Apple extended attribute warnings on Linux (@1741643+krlmlr, @198982749+Copilot, #2228).
+
+- Merge pull request #2224 from duckdb/gha-commit-277f836.
+
+- Merge tag 'v1.5.0'.
+
+- Update to DuckDB v1.5.0, see <https://github.com/duckdb/duckdb/releases/tag/v1.5.0> for details.
+
+- Support `descending` and `nulls_first` in `expr_window()` and `rel_order()` (#2074, #2075).
+
+- The dbplyr translation of `as.numeric()` and `as.double()` uses `DOUBLE` instead of `NUMERIC` (#2023, #2031).
+
+- Update to testthat edition 3.
+
+- Avoid `ATTRIB()` for compatibility with R 4.6, materialize ALTREP row names to integer sequence with full ALTREP methods (#2034).
+
+- Fix: Avoid `ATTRIB()` for compatibility with R 4.6, materialize ALTREP row names to integer sequence with full ALTREP methods (@1741643+krlmlr, @198982749+Copilot, @krlmlr, #2034).
+
+- Merge pull request #2218 from duckdb/gha-commit-25c1b8b.
+
+
 # duckdb 1.5.0.9006
 
 ## Continuous integration
