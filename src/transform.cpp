@@ -1,6 +1,10 @@
 #include "duckdb/common/types/geometry_crs.hpp"
 #include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/vector/array_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "rapi.hpp"
 #include "typesr.hpp"
 
@@ -600,7 +604,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		for (size_t i = 0; i < children.size(); i++) {
 			const auto &struct_child = children[i];
 			SEXP child_dest = VECTOR_ELT(dest, i);
-			duckdb_r_transform(*struct_child, child_dest, dest_offset, n, convert_opts, name);
+			duckdb_r_transform(struct_child, child_dest, dest_offset, n, convert_opts, name);
 		}
 
 		break;
