@@ -5,6 +5,7 @@
 #include "altrepdataframe_relation.hpp"
 #include "cpp11/declarations.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_result.hpp"
@@ -345,10 +346,10 @@ struct AltrepVectorWrapper {
 
 		auto struct_vector = &chunk.data[0];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
-			struct_vector = StructVector::GetEntries(*struct_vector)[parent_column_index[i]].get();
+			struct_vector = &StructVector::GetEntries(*struct_vector)[parent_column_index[i]];
 		}
 
-		return *StructVector::GetEntries(*struct_vector)[column_index];
+		return StructVector::GetEntries(*struct_vector)[column_index];
 	}
 
 	void *Dataptr() {

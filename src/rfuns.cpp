@@ -269,7 +269,7 @@ void isna_double_loop(idx_t count, const double *data, bool *result_data, Validi
 
 void isna_double(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto count = args.size();
-	auto input = args.data[0];
+	auto &input = args.data[0];
 
 	switch (input.GetVectorType()) {
 	case VectorType::FLAT_VECTOR: {
@@ -340,7 +340,7 @@ void isna_any_loop(idx_t count, bool *result_data, ValidityMask mask) {
 
 void isna_any(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto count = args.size();
-	auto input = args.data[0];
+	auto &input = args.data[0];
 
 	switch (input.GetVectorType()) {
 	case VectorType::FLAT_VECTOR: {
@@ -535,6 +535,7 @@ AggregateFunctionSet base_r_max() {
 } // namespace duckdb
 #include "duckdb/common/operator/double_cast_operator.hpp"
 #include "duckdb/common/operator/string_cast.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
 #include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
 #include "rfuns_extension.hpp"
 
@@ -728,9 +729,9 @@ template <typename LHS_TYPE, typename RHS_TYPE>
 void InExecute(DataChunk &args, ExpressionState &state, Vector &result) {
 
 	auto count = args.size();
-	auto x = args.data[0];
+	auto &x = args.data[0];
 
-	auto y = args.data[1];
+	auto &y = args.data[1];
 	if (y.GetVectorType() != VectorType::CONSTANT_VECTOR) {
 		throw InvalidInputException("rhs must be a constant");
 	}
