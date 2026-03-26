@@ -226,11 +226,11 @@ private:
 	                            SEXP functions, string &timezone_config) {
 		auto fit = filter_collection.begin();
 		cpp11::sexp res =
-		    TransformFilterExpression((*fit).Filter(), columns[(*fit).ColumnIndex()], functions, timezone_config);
+		    TransformFilterExpression((*fit).Filter(), columns[(*fit).GetIndex()], functions, timezone_config);
 		++fit;
 		for (; fit != filter_collection.end(); ++fit) {
 			cpp11::sexp rhs =
-			    TransformFilterExpression((*fit).Filter(), columns[(*fit).ColumnIndex()], functions, timezone_config);
+			    TransformFilterExpression((*fit).Filter(), columns[(*fit).GetIndex()], functions, timezone_config);
 			res = CreateExpression(functions, "and_kleene", res, rhs);
 		}
 		return res;

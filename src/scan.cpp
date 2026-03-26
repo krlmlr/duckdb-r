@@ -1,4 +1,5 @@
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "rapi.hpp"
 #include "typesr.hpp"

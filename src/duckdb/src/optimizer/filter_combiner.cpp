@@ -813,6 +813,10 @@ FilterPushdownResult FilterCombiner::TryPushdownTemporalCastFilter(TableFilterSe
 	if (!TryGetProjectionIndex(*cast_expr.child, proj_index)) {
 		return FilterPushdownResult::NO_PUSHDOWN;
 	}
+	auto &column_index = column_ids[proj_index];
+	if (column_index.IsPushdownExtract()) {
+		return FilterPushdownResult::NO_PUSHDOWN;
+	}
 
 	// evaluate the constant side
 	Value constant_value, casted_value;
