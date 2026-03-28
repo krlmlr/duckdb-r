@@ -217,8 +217,8 @@ static unique_ptr<FunctionData> ParquetWriteBind(ClientContext &context, CopyFun
 				}
 				auto &shredding_types_value = option.second[0];
 				if (shredding_types_value.type().id() != LogicalTypeId::STRUCT) {
-					BinderException("SHREDDING value should be a STRUCT of column names to types, i.e: {col1: "
-					                "'INTEGER[]', col2: 'BOOLEAN'}");
+					throw BinderException("SHREDDING value should be a STRUCT of column names to types, i.e: {col1: "
+					                      "'INTEGER[]', col2: 'BOOLEAN'}");
 				}
 				const auto &struct_type = shredding_types_value.type();
 				const auto &struct_children = StructValue::GetChildren(shredding_types_value);
@@ -613,8 +613,7 @@ static void ParquetCopySerialize(Serializer &serializer, const FunctionData &bin
 	                                    default_value.string_dictionary_page_size_limit);
 	serializer.WritePropertyWithDefault(116, "geoparquet_version", bind_data.geoparquet_version,
 	                                    default_value.geoparquet_version);
-	serializer.WritePropertyWithDefault<ShreddingType>(117, "shredding_types", bind_data.shredding_types,
-	                                                   default_value.shredding_types);
+	serializer.WriteProperty(117, "shredding_types", bind_data.shredding_types);
 }
 
 static unique_ptr<FunctionData> ParquetCopyDeserialize(Deserializer &deserializer, CopyFunction &function) {
@@ -648,8 +647,7 @@ static unique_ptr<FunctionData> ParquetCopyDeserialize(Deserializer &deserialize
 	    115, "string_dictionary_page_size_limit", default_value.string_dictionary_page_size_limit);
 	data->geoparquet_version =
 	    deserializer.ReadPropertyWithExplicitDefault(116, "geoparquet_version", default_value.geoparquet_version);
-	data->shredding_types =
-	    deserializer.ReadPropertyWithExplicitDefault<ShreddingType>(117, "shredding_types", ShreddingType());
+	data->shredding_types = deserializer.ReadProperty<ShreddingType>(117, "shredding_types");
 
 	return std::move(data);
 }

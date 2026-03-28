@@ -7,28 +7,29 @@
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/typedefs.hpp"
+#include "duckdb/common/types/value_map.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/function/function_set.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_config.hpp"
+#include "duckdb/main/client_data.hpp"
+#include "duckdb/main/settings.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
-#include "duckdb/storage/data_table.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
+#include "duckdb/planner/filter/conjunction_filter.hpp"
+#include "duckdb/planner/filter/in_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/local_storage.hpp"
+#include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/storage_index.hpp"
-#include "duckdb/main/client_data.hpp"
-#include "duckdb/planner/filter/optional_filter.hpp"
-#include "duckdb/planner/filter/in_filter.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_comparison_expression.hpp"
-#include "duckdb/planner/filter/conjunction_filter.hpp"
-#include "duckdb/common/types/value_map.hpp"
-#include "duckdb/main/settings.hpp"
+#include "duckdb/storage/table/data_table_info.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 
 namespace duckdb {
 
@@ -330,9 +331,7 @@ public:
 			}
 
 			// Before looping back, check if we are interrupted
-			if (context.interrupted) {
-				throw InterruptException();
-			}
+			context.InterruptCheck();
 		} while (true);
 	}
 
@@ -467,7 +466,8 @@ bool ExtractComparisonsAndInFilters(TableFilter &filter, vector<reference<Consta
 		in_filters.push_back(filter.Cast<InFilter>());
 		return true;
 	}
-	case TableFilterType::BLOOM_FILTER: {
+	case TableFilterType::BLOOM_FILTER:
+	case TableFilterType::PERFECT_HASH_JOIN_FILTER: {
 		return true; // We can't use it for finding cmp/in filters, but we can just ignore it
 	}
 	case TableFilterType::CONJUNCTION_AND: {
@@ -622,15 +622,9 @@ bool TryScanIndex(ART &art, IndexEntry &entry, const ColumnList &column_list, Ta
 	vector<reference<ART>> arts_to_scan;
 	arts_to_scan.push_back(art);
 	if (entry.deleted_rows_in_use) {
-		if (entry.deleted_rows_in_use->GetIndexType() != ART::TYPE_NAME) {
-			throw InternalException("Concurrent changes made to a non-ART index");
-		}
 		arts_to_scan.push_back(entry.deleted_rows_in_use->Cast<ART>());
 	}
 	if (entry.added_data_during_checkpoint) {
-		if (entry.added_data_during_checkpoint->GetIndexType() != ART::TYPE_NAME) {
-			throw InternalException("Concurrent changes made to a non-ART index");
-		}
 		arts_to_scan.push_back(entry.added_data_during_checkpoint->Cast<ART>());
 	}
 

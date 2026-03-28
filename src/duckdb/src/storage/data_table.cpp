@@ -1,4 +1,5 @@
 #include "duckdb/storage/data_table.hpp"
+#include "duckdb/storage/table/data_table_info.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
@@ -29,6 +30,7 @@
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
+#include "duckdb/main/database.hpp"
 
 namespace duckdb {
 
@@ -879,7 +881,7 @@ void DataTable::LocalAppend(LocalAppendState &state, ClientContext &context, Dat
 		                           "a different transaction",
 		                           GetTableName(), TableModification());
 	}
-	chunk.Verify();
+	chunk.Verify(context.db);
 
 	// Insert any row ids into the DELETE ART and verify constraints afterward.
 	// This happens only for the global indexes.
@@ -894,10 +896,10 @@ void DataTable::LocalAppend(LocalAppendState &state, ClientContext &context, Dat
 }
 
 void DataTable::LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
-                            const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
+                            const vector<unique_ptr<BoundConstraint>> &bound_constraints, bool unsafe) {
 	LocalAppendState append_state;
 	InitializeLocalAppend(append_state, table, context, bound_constraints);
-	LocalAppend(append_state, context, chunk, false);
+	LocalAppend(append_state, context, chunk, unsafe);
 	FinalizeLocalAppend(append_state);
 }
 
@@ -1116,7 +1118,7 @@ void DataTable::ScanTableSegment(DuckTransaction &transaction, idx_t row_start, 
 			}
 			SelectionVector sel(start_in_chunk, chunk_count);
 			chunk.Slice(sel, chunk_count);
-			chunk.Verify();
+			chunk.Verify(GetAttached().GetDatabase());
 		}
 		function(chunk);
 		chunk.Reset();
@@ -1129,58 +1131,28 @@ void DataTable::MergeStorage(RowGroupCollection &data, optional_ptr<StorageCommi
 	row_groups->Verify();
 }
 
-static void GatherBlockIds(WriteAheadLog &log, const PersistentColumnData &column_data,
-                           unordered_set<block_id_t> &block_ids) {
-	for (const auto &pointer : column_data.pointers) {
-		const auto block_id = pointer.block_pointer.block_id;
-		if (block_id != INVALID_BLOCK && log.NewBlockInUse(block_id)) {
-			block_ids.insert(block_id);
-		}
-	}
-	// Recurse into the children.
-	for (const auto &child_column_data : column_data.child_columns) {
-		GatherBlockIds(log, child_column_data, block_ids);
-	}
-}
-
 void DataTable::WriteToLog(DuckTransaction &transaction, WriteAheadLog &log, idx_t row_start, idx_t count,
                            optional_ptr<StorageCommitState> commit_state) {
 	log.WriteSetTable(info->schema, info->table);
-	if (!commit_state) {
-		ScanTableSegment(transaction, row_start, count, [&](DataChunk &chunk) { log.WriteInsert(chunk); });
-		return;
-	}
-
-	idx_t optimistic_count = 0;
-	auto entry = commit_state->GetRowGroupData(*this, row_start, optimistic_count);
-	if (!entry) {
-		ScanTableSegment(transaction, row_start, count, [&](DataChunk &chunk) { log.WriteInsert(chunk); });
-		return;
-	}
-
-	// Optimistically write the entry.
-	D_ASSERT(optimistic_count > 0);
-	log.WriteRowGroupData(*entry);
-	if (optimistic_count > count) {
-		throw InternalException(
-		    "Optimistically written count cannot exceed actual count (got %llu, but expected count is %llu)",
-		    optimistic_count, count);
-	}
-
-	// Get all the blocks that need to be kept alive as long as the WAL is alive.
-	for (const auto &row_group_data : entry->row_group_data) {
-		for (const auto &column_data : row_group_data.column_data) {
-			GatherBlockIds(log, column_data, commit_state->GetBlockIdsInUse());
+	if (commit_state) {
+		idx_t optimistic_count = 0;
+		auto entry = commit_state->GetRowGroupData(*this, row_start, optimistic_count);
+		if (entry) {
+			D_ASSERT(optimistic_count > 0);
+			log.WriteRowGroupData(*entry);
+			if (optimistic_count > count) {
+				throw InternalException(
+				    "Optimistically written count cannot exceed actual count (got %llu, but expected count is %llu)",
+				    optimistic_count, count);
+			}
+			// write any remaining (non-optimistically written) rows to the WAL normally
+			row_start += optimistic_count;
+			count -= optimistic_count;
+			if (count == 0) {
+				return;
+			}
 		}
 	}
-
-	// Write any remaining (non-optimistically written) rows to the WAL.
-	row_start += optimistic_count;
-	count -= optimistic_count;
-	if (count == 0) {
-		return;
-	}
-
 	ScanTableSegment(transaction, row_start, count, [&](DataChunk &chunk) { log.WriteInsert(chunk); });
 }
 
@@ -1599,7 +1571,7 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, Vector &
                        const vector<PhysicalIndex> &column_ids, DataChunk &updates) {
 	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
 	D_ASSERT(column_ids.size() == updates.ColumnCount());
-	updates.Verify();
+	updates.Verify(context.db);
 
 	auto count = updates.size();
 	if (count == 0) {
@@ -1653,7 +1625,7 @@ void DataTable::UpdateColumn(TableCatalogEntry &table, ClientContext &context, V
                              const vector<column_t> &column_path, DataChunk &updates) {
 	D_ASSERT(row_ids.GetType().InternalType() == ROW_TYPE);
 	D_ASSERT(updates.ColumnCount() == 1);
-	updates.Verify();
+	updates.Verify(context.db);
 	if (updates.size() == 0) {
 		return;
 	}
