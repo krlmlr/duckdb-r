@@ -7,7 +7,7 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(duckdb)
+library(duckdb.1.5.dev)
 
 # CRAN guard
 #
@@ -30,7 +30,7 @@ if (run_tests %in% c("true", "1", "yes", "on")) {
 }
 
 if (run) {
-  test_check("duckdb")
+  test_check("duckdb.1.5.dev")
 } else {
   message(
     "\n",
