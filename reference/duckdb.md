@@ -9,11 +9,13 @@ Return an
 for use with Arrow Database Connectivity via the adbcdrivermanager
 package.
 
-`dbConnect()` connects to a database instance.
+[`dbConnect()`](https://dbi.r-dbi.org/reference/dbConnect.html) connects
+to a database instance.
 
-`dbDisconnect()` closes a DuckDB database connection. The associated
-DuckDB database instance is shut down automatically, it is no longer
-necessary to set `shutdown = TRUE` or to call `duckdb_shutdown()`.
+[`dbDisconnect()`](https://dbi.r-dbi.org/reference/dbDisconnect.html)
+closes a DuckDB database connection. The associated DuckDB database
+instance is shut down automatically, it is no longer necessary to set
+`shutdown = TRUE` or to call `duckdb_shutdown()`.
 
 ## Usage
 
@@ -42,7 +44,8 @@ dbConnect(
   tz_out_convert = c("with", "force"),
   config = list(),
   bigint = "numeric",
-  array = "none"
+  array = "none",
+  geometry = "blob"
 )
 
 # S4 method for class 'duckdb_connection'
@@ -121,6 +124,17 @@ dbDisconnect(conn, ..., shutdown = TRUE)
   an error is generated. If `"matrix"` is selected, arrays are returned
   as a column matrix. Each array is one row in the matrix.
 
+- geometry:
+
+  How geometry columns should be returned. There are two options:
+  `"blob"` and `"wk"`. If `"blob"` is selected, geometry columns are
+  returned as a list of raw vectors containing WKB data. If `"wk"` is
+  selected, geometry columns are returned as wk `wk_wkb` vectors. Use
+  [`wk::wk_handle()`](https://paleolimbot.github.io/wk/reference/wk_handle.html)
+  or
+  [`sf::st_as_sfc()`](https://r-spatial.github.io/sf/reference/st_as_sfc.html)
+  to convert to other geometry formats.
+
 - conn:
 
   A `duckdb_connection` object
@@ -134,12 +148,13 @@ dbDisconnect(conn, ..., shutdown = TRUE)
 `duckdb()` returns an object of class
 [duckdb_driver](https://r.duckdb.org/reference/duckdb_driver-class.md).
 
-`dbDisconnect()` and `duckdb_shutdown()` are called for their side
-effect.
+[`dbDisconnect()`](https://dbi.r-dbi.org/reference/dbDisconnect.html)
+and `duckdb_shutdown()` are called for their side effect.
 
 An object of class "adbc_driver"
 
-`dbConnect()` returns an object of class
+[`dbConnect()`](https://dbi.r-dbi.org/reference/dbConnect.html) returns
+an object of class
 [duckdb_connection](https://r.duckdb.org/reference/duckdb_connection-class.md).
 
 ## Details
