@@ -511,7 +511,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_duckdb_dev_rapi_unlock",                  (DL_FUNC) &_duckdb_dev_rapi_unlock,                   1},
     {"_duckdb_dev_rapi_unregister_arrow",        (DL_FUNC) &_duckdb_dev_rapi_unregister_arrow,         2},
     {"_duckdb_dev_rapi_unregister_df",           (DL_FUNC) &_duckdb_dev_rapi_unregister_df,            2},
-    {"_duckdb_rapi_rel_to_altrep",               (DL_FUNC) &_duckdb_rapi_rel_to_altrep,                3},
     {NULL, NULL, 0}
 };
 }
