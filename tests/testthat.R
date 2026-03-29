@@ -7,7 +7,7 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(duckdb)
+library(duckdb.1.5.dev)
 
 # CRAN guard
 #
@@ -19,7 +19,7 @@ library(duckdb)
 run_tests <- tolower(trimws(Sys.getenv("DUCKDB_R_RUN_TESTS", "")))
 
 if (run_tests %in% c("true", "1", "yes", "on")) {
-  test_check("duckdb")
+  test_check("duckdb.1.5.dev")
 } else {
   message(
     "\n",
