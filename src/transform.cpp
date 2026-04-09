@@ -570,7 +570,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	}
 	case LogicalTypeId::LIST: {
 		// figure out the total and max element length of the list vector child
-		const auto src_data = ListVector::GetData(src_vec);
+		const auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 		auto &child_type = ListType::GetChildType(src_vec.GetType());
 		Vector child_vector(child_type, nullptr);
 
@@ -611,7 +611,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	}
 
 	case LogicalTypeId::MAP: {
-		auto src_data = ListVector::GetData(src_vec);
+		const auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 
 		auto &key_type = MapType::KeyType(src_vec.GetType());
 		auto &value_type = MapType::ValueType(src_vec.GetType());
