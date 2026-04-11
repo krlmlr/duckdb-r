@@ -84,7 +84,7 @@ static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &res
 		if (RTYPE::IsNull(val)) {
 			result_mask.SetInvalid(i);
 		} else {
-			auto result_data = FlatVector::GetData<DST>(result);
+			auto result_data = FlatVector::GetDataMutable<DST>(result);
 			result_data[i] = RTYPE::Convert(val);
 		}
 	}
@@ -95,7 +95,7 @@ static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t
 	source_data += sexp_offset;
 	auto &result_mask = FlatVector::Validity(result);
 	auto child_rtype = rtype.GetListChildType();
-	auto result_data = FlatVector::GetData<list_entry_t>(result);
+	auto result_data = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto val = source_data[i];
 		if (RSexpType::IsNull(val)) {
@@ -115,7 +115,7 @@ static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t
 template <class SRC, class DST, class RTYPE>
 static inline void AppendMatrixSegmentAtomic(SRC *src_ptr, int nrows, int ncols, idx_t sexp_offset,
                                              Vector &child_vector, idx_t count) {
-	auto child_data = FlatVector::GetData<DST>(child_vector);
+	auto child_data = FlatVector::GetDataMutable<DST>(child_vector);
 	auto &child_mask = FlatVector::Validity(child_vector);
 	idx_t vector_idx = 0;
 	for (idx_t i = 0; i < count; i++) {

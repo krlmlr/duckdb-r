@@ -100,7 +100,7 @@ LogicalType RStringsType::Get() {
 
 template <class SRC, class DST, class RTYPE>
 static void AppendColumnSegment(SRC *source_data, Vector &result, idx_t count) {
-	auto result_data = FlatVector::GetData<DST>(result);
+	auto result_data = FlatVector::GetDataMutable<DST>(result);
 	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto val = source_data[i];
