@@ -78,7 +78,7 @@ struct DedupPointerEnumType {
 template <class SRC, class DST, class RTYPE>
 static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &result, idx_t count) {
 	source_data += sexp_offset;
-	auto &result_mask = FlatVector::Validity(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto val = source_data[i];
 		if (RTYPE::IsNull(val)) {
@@ -93,7 +93,7 @@ static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &res
 static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t sexp_offset, Vector &result,
                                     idx_t count) {
 	source_data += sexp_offset;
-	auto &result_mask = FlatVector::Validity(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 	auto child_rtype = rtype.GetListChildType();
 	auto result_data = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
@@ -116,7 +116,7 @@ template <class SRC, class DST, class RTYPE>
 static inline void AppendMatrixSegmentAtomic(SRC *src_ptr, int nrows, int ncols, idx_t sexp_offset,
                                              Vector &child_vector, idx_t count) {
 	auto child_data = FlatVector::GetDataMutable<DST>(child_vector);
-	auto &child_mask = FlatVector::Validity(child_vector);
+	auto &child_mask = FlatVector::ValidityMutable(child_vector);
 	idx_t vector_idx = 0;
 	for (idx_t i = 0; i < count; i++) {
 		auto matrix_elt_idx = sexp_offset + i;
