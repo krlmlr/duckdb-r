@@ -1,70 +1,54 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
-# duckdb 1.5.0.9006
+# duckdb 1.5.2.9000
 
-## Continuous integration
+## fledge
 
-- Add more branches.
-
-
-# duckdb 1.5.0.9005
-
-## Continuous integration
-
-- Fix vendoring.
+- CRAN release v1.5.2 (#2312).
 
 
-# duckdb 1.5.0.9004
+# duckdb 1.5.2
+
+## Bug fixes
+
+- Update to DuckDB v1.5.2, see <https://github.com/duckdb/duckdb/releases/tag/v1.5.2> for details.
+
+- Fix compiler warning on recent clang on macOS.
 
 ## Features
 
 - Use `TRY_CAST()` instead of `CAST()` in dplyr SQL translation for type conversion functions (#2230, #2231).
 
-
-# duckdb 1.5.0.9003
-
 ## Chore
 
-- Use `gtar` when available to suppress Apple extended attribute warnings on Linux (#2227, #2228).
+- Use `R_getRegisteredNamespace()` in R 4.6.
+
+## Documentation
+
+- Describe branching strategy (#2280, #2281).
+
+## Testing
+
+- Use explicit default duckdb connection for arrow tests (#2301).
+
+- Rework arrow tests, prepare for compatibility with dbplyr 2.6.0 (#2300).
 
 
-# duckdb 1.5.0.9002
+# duckdb 1.5.1
 
 ## Bug fixes
 
-- Avoid `ATTRIB()` for compatibility with R 4.6, materialize ALTREP row names to integer sequence with full ALTREP methods (#2033, #2034).
+- Update to DuckDB v1.5.1, see <https://github.com/duckdb/duckdb/releases/tag/v1.5.1> for details.
+
+## Features
+
+- `GEOMETRY` columns can be returned, either as BLOBs (default) or as wk objects (via the wk package) using `dbConnect(geometry = "wk")` (#2278, #2279).
 
 ## Chore
 
-- Auto-update from GitHub Actions (#2224).
+- Fix `-Wdeprecated` compiler warnings (#2295, #2296) and protection buglet (#2294).
 
-## Uncategorized
-
-- Merge tag 'v1.5.0'.
-
-- Update to DuckDB v1.5.0, see <https://github.com/duckdb/duckdb/releases/tag/v1.5.0> for details.
-
-- Support `descending` and `nulls_first` in `expr_window()` and `rel_order()` (#2074, #2075).
-
-- The dbplyr translation of `as.numeric()` and `as.double()` uses `DOUBLE` instead of `NUMERIC` (#2023, #2031).
-
-- Update to testthat edition 3.
-
-- Avoid `ATTRIB()` for compatibility with R 4.6, materialize ALTREP row names to integer sequence with full ALTREP methods (#2034).
-
-
-# duckdb 1.5.0.9001
-
-## Chore
-
-- Initialize to avoid CRAN warnings.
-
-
-# duckdb 1.5.0.9000
-
-## Chore
-
-- Auto-update from GitHub Actions (#2218).
+- Use `gtar` when available to suppress Apple extended attribute warnings on Linux (#2227, #2228).
 
 
 # duckdb 1.5.0
