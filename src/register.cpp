@@ -2,8 +2,14 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/planner/table_filter_set.hpp"
 #include "rapi.hpp"
@@ -158,12 +164,95 @@ public:
 	ClientProperties config;
 
 private:
+	// The column at index 0 of the underlying scan corresponds to column_name_expr.
+	static SEXP TransformExpression(const Expression &expr, SEXP column_name_expr, SEXP functions,
+	                                string &timezone_config) {
+		if (expr.GetExpressionClass() == ExpressionClass::BOUND_COMPARISON) {
+			auto &comp = expr.Cast<BoundComparisonExpression>();
+			const Expression *ref_side = nullptr;
+			const Expression *const_side = nullptr;
+			ExpressionType comparison_type = comp.GetExpressionType();
+			if (comp.left->GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			    comp.right->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				ref_side = comp.left.get();
+				const_side = comp.right.get();
+			} else if (comp.right->GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			           comp.left->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				ref_side = comp.right.get();
+				const_side = comp.left.get();
+				switch (comparison_type) {
+				case ExpressionType::COMPARE_GREATERTHAN:
+					comparison_type = ExpressionType::COMPARE_LESSTHAN;
+					break;
+				case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+					comparison_type = ExpressionType::COMPARE_LESSTHANOREQUALTO;
+					break;
+				case ExpressionType::COMPARE_LESSTHAN:
+					comparison_type = ExpressionType::COMPARE_GREATERTHAN;
+					break;
+				case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+					comparison_type = ExpressionType::COMPARE_GREATERTHANOREQUALTO;
+					break;
+				default:
+					break;
+				}
+			}
+			if (!ref_side || !const_side) {
+				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
+			}
+			Value const_value = const_side->Cast<BoundConstantExpression>().value;
+			cpp11::sexp constant_sexp = RApiTypes::ValueToSexp(const_value, timezone_config);
+			cpp11::sexp constant_expr = CreateScalar(functions, constant_sexp);
+			switch (comparison_type) {
+			case ExpressionType::COMPARE_EQUAL:
+				return CreateExpression(functions, "equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_GREATERTHAN:
+				return CreateExpression(functions, "greater", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+				return CreateExpression(functions, "greater_equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_LESSTHAN:
+				return CreateExpression(functions, "less", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+				return CreateExpression(functions, "less_equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_NOTEQUAL:
+				return CreateExpression(functions, "not_equal", column_name_expr, constant_expr);
+			default:
+				throw InternalException("%s can't be transformed to Arrow Scan Pushdown Filter", expr.ToString());
+			}
+		}
+		if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
+			auto &conj = expr.Cast<BoundConjunctionExpression>();
+			const char *op =
+			    expr.GetExpressionType() == ExpressionType::CONJUNCTION_AND ? "and_kleene" : "or_kleene";
+			auto cit = conj.children.begin();
+			cpp11::sexp acc = TransformExpression(**cit, column_name_expr, functions, timezone_config);
+			++cit;
+			for (; cit != conj.children.end(); ++cit) {
+				cpp11::sexp rhs = TransformExpression(**cit, column_name_expr, functions, timezone_config);
+				acc = CreateExpression(functions, op, acc, rhs);
+			}
+			return acc;
+		}
+		throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
+	}
+
 	static SEXP TransformFilterExpression(TableFilter &filter, const string &column_name, SEXP functions,
 	                                      string &timezone_config) {
 		cpp11::sexp column_name_sexp = Rf_mkString(column_name.c_str());
 		cpp11::sexp column_name_expr = CreateFieldRef(functions, column_name_sexp);
 
 		switch (filter.filter_type) {
+		case TableFilterType::EXPRESSION_FILTER: {
+			auto &expr_filter = filter.Cast<ExpressionFilter>();
+			return TransformExpression(*expr_filter.expr, column_name_expr, functions, timezone_config);
+		}
+		case TableFilterType::OPTIONAL_FILTER: {
+			auto &opt_filter = filter.Cast<OptionalFilter>();
+			if (!opt_filter.child_filter) {
+				return Rf_ScalarLogical(true);
+			}
+			return TransformFilterExpression(*opt_filter.child_filter, column_name, functions, timezone_config);
+		}
 		case TableFilterType::CONSTANT_COMPARISON: {
 			auto constant_filter = (ConstantFilter &)filter;
 			cpp11::sexp constant_sexp = RApiTypes::ValueToSexp(constant_filter.constant, timezone_config);
