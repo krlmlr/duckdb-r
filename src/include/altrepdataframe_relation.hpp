@@ -1,6 +1,7 @@
 #include "duckdb/main/relation.hpp"
 #include "rapi.hpp"
 #include "reltoaltrep.hpp"
+
 #include <exception>
 
 namespace duckdb {

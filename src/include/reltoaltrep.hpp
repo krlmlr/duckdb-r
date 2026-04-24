@@ -1,8 +1,7 @@
 #pragma once
 
-#include "rapi.hpp"
-
 #include "duckdb/main/query_result.hpp"
+#include "rapi.hpp"
 
 namespace duckdb {
 

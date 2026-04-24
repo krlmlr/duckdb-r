@@ -1,8 +1,8 @@
 #pragma once
 
-#include "rapi.hpp"
-#include "duckdb/common/progress_bar/progress_bar_display.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/common/progress_bar/progress_bar_display.hpp"
+#include "rapi.hpp"
 
 namespace duckdb {
 
