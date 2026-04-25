@@ -21,8 +21,10 @@ Why this skill exists.
   (`tests/testthat/_snaps/`). We do not rewrite the vendor commit; instead
   we author a parallel `broken-<sha>-dev` branch that starts at the failing
   commit, layers on the necessary R-side fix, and re-applies all later
-  commits from the original `*-dev` branch on top. CI then promotes the
-  green tip back into `*-dev`.
+  commits from the original `*-dev` branch on top. Promoting the green tip
+  back into the parent `*-dev` branch is a manual step performed outside
+  this skill (today there is no CI/CD that does it automatically; this may
+  be automated in the future).
 
 End-to-end workflow.
   1. Refresh `krlmlr/*` remote-tracking refs from scratch — the dev
