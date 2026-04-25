@@ -2,10 +2,11 @@ Scheduled job: scan all `*-dev` branches (including `broken-*-dev`, excluding
 `*-dev-base`) in `krlmlr/duckdb-r` for the earliest commit whose `rcc`
 commit-status (set by the "Smoke test: stock R" job in the `rcc` workflow) is
 `failure` since 2026-04-11. For each such branch, if no `broken-<sha>-dev`
-branch exists yet (full 40-char SHA), create it, fix `testthat::test_local()`
-and `R CMD check .`, update snapshots, then cherry-pick all later commits
-from the `*-dev` branch and push. Never modify vendored sources
-(`src/duckdb/`, `inst/include/cpp11/`, `inst/include/cpp11.hpp`).
+branch exists yet (full 40-char SHA), create it, fix `testthat::test_local()` and
+`rcmdcheck::rcmdcheck()` (do not run `R CMD check .` directly on the source
+tree), update snapshots, then cherry-pick all later commits from the
+`*-dev` branch and push. Never modify vendored sources (`src/duckdb/`,
+`inst/include/cpp11/`, `inst/include/cpp11.hpp`).
 
 ---
 
@@ -40,17 +41,19 @@ End-to-end workflow.
      b. Reproduce the breakage locally — install the package
         (`_R_SHLIB_STRIP_=true R CMD INSTALL .`, with `MAKEFLAGS=-j$(nproc)`
         for parallel build), run `testthat::test_local()`, then
-        `R CMD check .`. The first build of `src/duckdb/` is heavy
-        (10-15 min on cold cache); set generous timeouts. Read the error
-        output carefully to classify the failure (compile, link, runtime,
-        snapshot, NOTE/WARNING).
+        `rcmdcheck::rcmdcheck()` (which wraps `R CMD build` + `R CMD
+        check`; do not run `R CMD check .` on the source tree directly).
+        The first build of `src/duckdb/` is heavy (10-15 min on cold
+        cache); set generous timeouts. Read the error output carefully
+        to classify the failure (compile, link, runtime, snapshot,
+        NOTE/WARNING).
      c. Apply the smallest fix in priority order: `patch/` → glue
         (`src/*.cpp`, `src/include/`) → R code (`R/`) → snapshots
         (`tests/testthat/_snaps/`) → tests (`tests/testthat/test-*.R`).
         Stop at the first level that resolves the failure. Never touch
         vendored paths (see Constraints).
-     d. `R CMD check .` until clean (`Status: OK` or only pre-existing
-        NOTE).
+     d. `rcmdcheck::rcmdcheck()` until clean (`Status: OK` or only
+        pre-existing NOTE).
      e. Cherry-pick every remaining commit from the upstream `*-dev`
         branch on top of the fix. Vendor commits apply cleanly by
         construction; non-vendor commits (forward-ports from `main`,
@@ -61,8 +64,8 @@ End-to-end workflow.
         and move on to the next pair.
 
 Environment assumptions (current).
-  * R 4.x and standard development tooling (gcc/g++, make, git) are
-    pre-installed.
+  * R 4.x and standard development tooling (gcc/g++, make, git, `curl`,
+    `jq`) are pre-installed.
   * The `gh` CLI is NOT installed and GitHub Actions build logs are NOT
     accessible from this environment. Failures must be reproduced locally —
     there is no shortcut by reading a CI log.
@@ -77,7 +80,7 @@ When CI build logs become available (forward-looking).
   `<sha>` and read the tail. Most diagnostics point straight at the file
   and line, allowing the agent to draft a targeted fix and skip the slow
   initial full `R CMD INSTALL` of `src/duckdb/`. The local install +
-  `testthat::test_local()` + `R CMD check .` cycle remains the
+  `testthat::test_local()` + `rcmdcheck::rcmdcheck()` cycle remains the
   authoritative final gate — logs only short-circuit triage, they do not
   replace verification.
 -->
@@ -130,23 +133,39 @@ COMMITS_OLDEST_FIRST=$(git log "krlmlr/$BRANCH" \
   --first-parent --since="$SINCE" --format="%H" --reverse)
 ```
 
-For each `$SHA` in that list, look up the `rcc` commit-status — use whichever
-tool is available in the current environment:
-
-- **GitHub MCP** (preferred when invoked by an agent that exposes one): query
-  the commit-statuses endpoint for `$REPO` at `$SHA` and pick the entry whose
-  `context == "rcc"`.
-- **`gh` CLI** (when available locally):
-  `gh api "repos/$REPO/commits/$SHA/statuses" | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'`
-- **Plain HTTPS** (portable, no `gh` needed):
-  `curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/commits/$SHA/statuses" | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'`
-
-Walk the commits oldest-first, stop at the first `failure`:
+Define a concrete `lookup_rcc_status` helper. The default below uses `curl`
++ `jq` so it works without `gh` (CC Web does not ship `gh`); pick whichever
+of the alternatives matches the host environment:
 
 ```bash
+# Default: portable HTTPS, no `gh` needed. Requires `curl` and `jq`.
+lookup_rcc_status() {
+  local sha="$1"
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    "https://api.github.com/repos/$REPO/commits/$sha/statuses" \
+    | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'
+}
+
+# Alternative when `gh` is installed (also requires `jq`):
+#   gh api "repos/$REPO/commits/$sha/statuses" \
+#     | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'
+#
+# Alternative when invoked by an agent that exposes a GitHub MCP:
+#   call the commit-statuses endpoint for $REPO at $sha, then pick the
+#   entry whose `context == "rcc"`. No `jq` needed in this path.
+```
+
+Walk the commits oldest-first, stop at the first `failure`. Use `pipefail`
+so a failed status lookup is not silently swallowed:
+
+```bash
+set -o pipefail
+
 FIRST_FAIL=""
 while IFS= read -r SHA; do
-  STATUS=$(... look up rcc state for $SHA ...)
+  STATUS=$(lookup_rcc_status "$SHA")
   echo "$BRANCH  ${SHA}  $STATUS"
   if [[ "$STATUS" == "failure" ]]; then
     FIRST_FAIL="$SHA"
@@ -185,15 +204,21 @@ intermediate commit is checked on CI/CD via `each.yaml`.
 ### 4b. Install and run tests; collect failures
 
 ```bash
+set -o pipefail
 export MAKEFLAGS="-j$(nproc)"
 _R_SHLIB_STRIP_=true R CMD INSTALL . 2>&1 | tail -20
 Rscript -e 'testthat::test_local(stop_on_failure = FALSE)' 2>&1
 ```
 
-Read the output carefully. The first build of `src/duckdb/` from a cold cache
-takes **10–15 minutes** — set generous timeouts. Subsequent rebuilds are
-incremental and much faster. If only `R/`, `tests/`, `man/`, or
-`tests/testthat/_snaps/` change, the C++ rebuild is skipped entirely.
+`pipefail` is required so that a failing `R CMD INSTALL` propagates its
+non-zero exit status through the `tail` pipe. The last 20 lines are
+typically enough to diagnose a build failure; if they aren't, drop the pipe
+and re-run for the full log.
+
+The first build of `src/duckdb/` from a cold cache takes **10–15 minutes**
+— set generous timeouts. Subsequent rebuilds are incremental and much
+faster. If only `R/`, `tests/`, `man/`, or `tests/testthat/_snaps/`
+change, the C++ rebuild is skipped entirely.
 
 Note: spurious changes to `src/*.dd` (dependency-tracking files) caused by a
 Makefile bug should be discarded with `git checkout -- src/*.dd` rather than
@@ -269,8 +294,13 @@ Iterate until all tests pass.
 
 ### 4d. Final check
 
+Use `rcmdcheck::rcmdcheck()` so the package is built (`R CMD build`) and
+checked from the resulting tarball — running `R CMD check .` directly on
+the source tree is incorrect and will give misleading results.
+
 ```bash
-R CMD check . --no-manual --as-cran 2>&1 | tail -20
+set -o pipefail
+Rscript -e 'rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "warning")' 2>&1 | tail -20
 ```
 
 Must show `Status: OK` or at most `1 NOTE` (pre-existing CRAN notes are
@@ -319,10 +349,11 @@ Conflict handling:
   `git cherry-pick --continue`. Do **not** use `--skip` unless the commit
   is genuinely a no-op after our fix.
 
-After all cherry-picks, re-run the final check:
+After all cherry-picks, re-run the final check (same form as Step 4d):
 
 ```bash
-R CMD check . --no-manual --as-cran 2>&1 | tail -20
+set -o pipefail
+Rscript -e 'rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "warning")' 2>&1 | tail -20
 ```
 
 to confirm the fully-assembled branch is clean.
@@ -372,8 +403,10 @@ No failure found: v1.4-andium-dev
   `krlmlr/*` ref; never rely on any previously-checked-out state.
 - **Reproduce locally, do not guess.** GitHub Actions logs are not
   reachable from this environment yet, so every fix must be validated by a
-  local `R CMD INSTALL` + `testthat::test_local()` + `R CMD check .` cycle.
-  The first `R CMD INSTALL` is slow (10–15 min); do not abort it.
+  local `R CMD INSTALL` + `testthat::test_local()` +
+  `rcmdcheck::rcmdcheck()` cycle. Never run `R CMD check .` directly on
+  the source tree. The first `R CMD INSTALL` is slow (10–15 min); do not
+  abort it.
 - **Tooling fallback**: if `gh` is not installed, query the
   `/repos/<owner>/<repo>/commits/<sha>/statuses` endpoint via `curl` with
   `GITHUB_TOKEN`, or via a GitHub MCP tool when the agent provides one.
