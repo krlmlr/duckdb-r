@@ -211,8 +211,11 @@ private:
 		}
 
 		default:
-			throw NotImplementedException("Arrow table filter pushdown %s not supported yet",
-			                              filter.ToString(column_name));
+			// FIXME: DuckDB now emits ExpressionFilter (and possibly other new filter types)
+			// for predicates that used to be ConstantFilter. The arrow pushdown translation
+			// does not yet handle these; fall back to passing every row and let DuckDB apply
+			// the filter above the scan.
+			return Rf_ScalarLogical(true);
 		}
 	}
 
