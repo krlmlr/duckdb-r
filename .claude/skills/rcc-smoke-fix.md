@@ -3,8 +3,7 @@ Scheduled job: scan all `*-dev` branches (including `broken-*-dev`, excluding
 commit-status (set by the "Smoke test: stock R" job in the `rcc` workflow) is
 `failure` since 2026-04-11. For each such branch, if no `broken-<sha>-dev`
 branch exists yet (full 40-char SHA), create it, fix `testthat::test_local()` and
-`rcmdcheck::rcmdcheck()` (do not run `R CMD check .` directly on the source
-tree), update snapshots, then cherry-pick all later commits from the
+`rcmdcheck::rcmdcheck()`, update snapshots, then cherry-pick all later commits from the
 `*-dev` branch and push. Never modify vendored sources (`src/duckdb/`,
 `inst/include/cpp11/`, `inst/include/cpp11.hpp`).
 
@@ -41,9 +40,8 @@ End-to-end workflow.
      b. Reproduce the breakage locally — install the package
         (`_R_SHLIB_STRIP_=true R CMD INSTALL .`, with `MAKEFLAGS=-j$(nproc)`
         for parallel build), run `testthat::test_local()`, then
-        `rcmdcheck::rcmdcheck()` (which wraps `R CMD build` + `R CMD
-        check`; do not run `R CMD check .` on the source tree directly).
-        The first build of `src/duckdb/` is heavy (10-15 min on cold
+        `rcmdcheck::rcmdcheck()` (which builds the package tarball and
+        checks it). The first build of `src/duckdb/` is heavy (10-15 min on cold
         cache); set generous timeouts. Read the error output carefully
         to classify the failure (compile, link, runtime, snapshot,
         NOTE/WARNING).
@@ -281,7 +279,7 @@ Other common fixes:
 |------------------------------------|--------------------------------------------------|
 | Missing export / namespace error   | `Rscript -e 'roxygen2::roxygenize()'`            |
 | `cpp11::cpp_register()` out of date| `Rscript -e 'cpp11::cpp_register()'`             |
-| NOTE / WARNING in R CMD check      | Fix in `R/`, `man/`, or `patch/`                 |
+| NOTE / WARNING in `rcmdcheck` output| Fix in `R/`, `man/`, or `patch/`                 |
 | Compiler warning in vendored code  | New file under `patch/` (do **not** suppress)    |
 
 After any change, re-run:
@@ -294,9 +292,7 @@ Iterate until all tests pass.
 
 ### 4d. Final check
 
-Use `rcmdcheck::rcmdcheck()` so the package is built (`R CMD build`) and
-checked from the resulting tarball — running `R CMD check .` directly on
-the source tree is incorrect and will give misleading results.
+Use `rcmdcheck::rcmdcheck()` to build the package tarball and check it:
 
 ```bash
 set -o pipefail
@@ -404,9 +400,8 @@ No failure found: v1.4-andium-dev
 - **Reproduce locally, do not guess.** GitHub Actions logs are not
   reachable from this environment yet, so every fix must be validated by a
   local `R CMD INSTALL` + `testthat::test_local()` +
-  `rcmdcheck::rcmdcheck()` cycle. Never run `R CMD check .` directly on
-  the source tree. The first `R CMD INSTALL` is slow (10–15 min); do not
-  abort it.
+  `rcmdcheck::rcmdcheck()` cycle. The first `R CMD INSTALL` is slow
+  (10–15 min); do not abort it.
 - **Tooling fallback**: if `gh` is not installed, query the
   `/repos/<owner>/<repo>/commits/<sha>/statuses` endpoint via `curl` with
   `GITHUB_TOKEN`, or via a GitHub MCP tool when the agent provides one.
