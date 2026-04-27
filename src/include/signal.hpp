@@ -1,9 +1,9 @@
 #pragma once
 
-#include <csignal>
-
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/main/client_context.hpp"
+
+#include <csignal>
 
 // Toy repo: https://github.com/krlmlr/cancel.test
 
