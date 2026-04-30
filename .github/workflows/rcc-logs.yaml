@@ -1,8 +1,9 @@
-# Periodically collect results and failure logs for all GitHub Actions runs
-# of the "rcc" workflow and store them on the orphan branch "rcc".
+# Periodically collect results and failure logs for completed runs of the
+# "rcc" workflow and store them on the orphan branch "rcc".
 #
-# The orphan branch holds only the collected data (runs.json, runs/<id>.json,
-# runs/<id>.log) and shares no history with the default branch.
+# The orphan branch holds only the collected data
+# (runs.json, runs.ndjson, logs/<id>.log) and shares no history with the
+# default branch.
 
 on:
   schedule:
@@ -28,41 +29,32 @@ jobs:
       actions: read
 
     steps:
-      - name: Checkout default branch (for the script)
-        uses: actions/checkout@v6
-        with:
-          path: src
+      - uses: actions/checkout@v6
 
-      - name: Prepare rcc branch checkout
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Configure git identity
         run: |
-          set -euo pipefail
-          mkdir -p out
-          cd out
-          git init -q
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add origin \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-          if git fetch --depth=1 origin rcc 2>/dev/null; then
-            echo "Existing rcc branch found; checking it out."
-            git checkout -b rcc FETCH_HEAD
+      - name: Add rcc worktree at runs/
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin rcc >/dev/null 2>&1; then
+            echo "Existing rcc branch found; checking it out as a worktree."
+            git fetch origin rcc:rcc
+            git worktree add runs rcc
           else
-            echo "rcc branch does not exist yet; creating an orphan branch."
-            git checkout --orphan rcc
-            git reset --hard >/dev/null 2>&1 || true
+            echo "rcc branch does not exist yet; creating an orphan worktree."
+            git worktree add --orphan -b rcc runs
           fi
 
       - name: Collect rcc workflow runs and failure logs
         env:
           GH_TOKEN: ${{ github.token }}
-          OUT_DIR: ${{ github.workspace }}/out
-        run: bash src/scripts/rcc-logs.sh
+        run: bash scripts/rcc-logs.sh
 
       - name: Commit and push to rcc branch
-        working-directory: out
+        working-directory: runs
         run: |
           set -euo pipefail
           git add -A
@@ -72,7 +64,7 @@ jobs:
           fi
           git commit -m "rcc-logs: refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           for attempt in 1 2 3 4; do
-            if git push -u origin rcc; then
+            if git push origin rcc; then
               exit 0
             fi
             sleep $(( 2 ** attempt ))
