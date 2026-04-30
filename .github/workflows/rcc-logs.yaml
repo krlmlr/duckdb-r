@@ -1,0 +1,81 @@
+# Periodically collect results and failure logs for all GitHub Actions runs
+# of the "rcc" workflow and store them on the orphan branch "rcc".
+#
+# The orphan branch holds only the collected data (runs.json, runs/<id>.json,
+# runs/<id>.log) and shares no history with the default branch.
+
+on:
+  schedule:
+    # Four times per day, evenly spaced (UTC): 00:05, 06:05, 12:05, 18:05.
+    - cron: "5 */6 * * *"
+  workflow_dispatch:
+
+name: rcc-logs
+
+concurrency:
+  group: rcc-logs
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.repository == 'krlmlr/duckdb-r'
+    runs-on: ubuntu-24.04
+
+    name: "Collect rcc workflow logs"
+
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Checkout default branch (for the script)
+        uses: actions/checkout@v6
+        with:
+          path: src
+
+      - name: Prepare rcc branch checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cd out
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          if git fetch --depth=1 origin rcc 2>/dev/null; then
+            echo "Existing rcc branch found; checking it out."
+            git checkout -b rcc FETCH_HEAD
+          else
+            echo "rcc branch does not exist yet; creating an orphan branch."
+            git checkout --orphan rcc
+            git reset --hard >/dev/null 2>&1 || true
+          fi
+
+      - name: Collect rcc workflow runs and failure logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUT_DIR: ${{ github.workspace }}/out
+        run: bash src/scripts/rcc-logs.sh
+
+      - name: Commit and push to rcc branch
+        working-directory: out
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes; nothing to commit."
+            exit 0
+          fi
+          git commit -m "rcc-logs: refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          for attempt in 1 2 3 4; do
+            if git push -u origin rcc; then
+              exit 0
+            fi
+            sleep $(( 2 ** attempt ))
+          done
+          echo "git push failed after retries"
+          exit 1
