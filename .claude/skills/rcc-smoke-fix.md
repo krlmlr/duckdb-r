@@ -1,11 +1,12 @@
-Scheduled job: scan all `*-dev` branches (including `broken-*-dev`, excluding
-`*-dev-base`) in `krlmlr/duckdb-r` for the earliest commit whose `rcc`
+Scheduled job: scan all `*-dev` branches (including `broken-*-dev`) in
+`krlmlr/duckdb-r` for the earliest commit whose `rcc`
 commit-status (set by the "Smoke test: stock R" job in the `rcc` workflow) is
 `failure` since 2026-04-11. For each such branch, if no `broken-<sha>-dev`
 branch exists yet (full 40-char SHA), create it, fix `testthat::test_local()` and
 `rcmdcheck::rcmdcheck()`, update snapshots, then cherry-pick all later commits from the
-`*-dev` branch and push. Never modify vendored sources (`src/duckdb/`,
-`inst/include/cpp11/`, `inst/include/cpp11.hpp`).
+`*-dev` branch and push. Never edit vendored sources (`src/duckdb/`,
+`inst/include/cpp11/`, `inst/include/cpp11.hpp`) by hand; editing `patch/`
+will produce expected, committable changes under `src/duckdb/`.
 
 ---
 
@@ -29,8 +30,8 @@ Why this skill exists.
 End-to-end workflow.
   1. Refresh `krlmlr/*` remote-tracking refs from scratch — the dev
      branches are force-pushed and any cached state is suspect.
-  2. Enumerate `*-dev` branches (excluding `*-dev-base`, `*-dev-old*`,
-     `*-dev-broken`) and existing `broken-*-dev` branches in one pass.
+  2. Enumerate `*-dev` branches and existing `broken-*-dev` branches in
+     one pass.
   3. For each `*-dev` branch, walk first-parent history oldest-first since
      SINCE and look up each commit's `rcc` commit-status until the earliest
      `failure` is found. Skip the branch if no failure exists or if the
@@ -48,8 +49,11 @@ End-to-end workflow.
      c. Apply the smallest fix in priority order: `patch/` → glue
         (`src/*.cpp`, `src/include/`) → R code (`R/`) → snapshots
         (`tests/testthat/_snaps/`) → tests (`tests/testthat/test-*.R`).
-        Stop at the first level that resolves the failure. Never touch
-        vendored paths (see Constraints).
+        Stop at the first level that resolves the failure. Never edit
+        vendored paths by hand — but expect `src/duckdb/` to change as a
+        downstream effect when a `patch/` file is added or modified (the
+        patch is applied to the vendored tree); commit those derived
+        changes alongside the patch.
      d. `rcmdcheck::rcmdcheck()` until clean (`Status: OK` or only
         pre-existing NOTE).
      e. Cherry-pick every remaining commit from the upstream `*-dev`
@@ -98,8 +102,7 @@ git fetch krlmlr --force --prune --tags
 ## Step 2 — Collect all branches and existing `broken-*` branches in one pass
 
 ```bash
-# All krlmlr remote-tracking branches that end in -dev,
-# excluding -dev-base, -dev-old*, -dev-broken.
+# All krlmlr remote-tracking branches that end in -dev
 DEV_BRANCHES=$(git branch -r \
   | grep -oP 'krlmlr/\K\S+' \
   | grep -E '\-dev$' \
@@ -113,10 +116,6 @@ BROKEN_BRANCHES=$(git branch -r \
 echo "=== Dev branches ===" && echo "$DEV_BRANCHES"
 echo "=== Broken branches (existing) ===" && echo "$BROKEN_BRANCHES"
 ```
-
-The `\-dev$` anchor naturally drops `*-dev-base`, `*-dev-old`, `*-dev-old-2`,
-and `*-dev-broken` while keeping every active line (`main-dev`,
-`v1.5-variegata-dev`, `v1.4-andium-dev`, …).
 
 ## Step 3 — For each `*-dev` branch, find the earliest failing commit
 
@@ -224,9 +223,13 @@ fixed; see `AGENTS.md` for the root cause.
 
 ### 4c. Fix issues — allowed modifications and priority order
 
-**Never modify** any of the following vendored / auto-generated paths:
+**Never edit by hand** any of the following vendored / auto-generated paths:
 
-- `src/duckdb/` (vendored DuckDB C++ core)
+- `src/duckdb/` (vendored DuckDB C++ core) — note: `src/duckdb/` WILL change
+  as a downstream effect of editing `patch/` (the patch is applied to the
+  vendored tree); those derived changes are expected and must be committed
+  with the patch (see priority 1 below). It is only direct edits that are
+  forbidden.
 - `inst/include/cpp11/`, `inst/include/cpp11.hpp` (vendored cpp11 from
   `krlmlr/cpp11`)
 - `scripts/vendor.sh`, `scripts/vendor-one.sh`, `scripts/lts.sh`,
@@ -248,6 +251,12 @@ the failure):
    compilation, linking, or warning policy. Assign the next available
    number; do not renumber existing patches. Send the same change as a PR
    to `duckdb/duckdb` so it can eventually be retired.
+
+   Apply a new or edited patch with `patch -p1 -i patch/<file>.patch` so
+   that `src/duckdb/` reflects the patched state the build expects. The
+   resulting modifications under `src/duckdb/` are the expected downstream
+   effect of the patch and must be committed together with the patch
+   file.
 
 2. **Glue code** (`src/*.cpp`, `src/include/`, `src/*.dd`) — adapt the R↔C++
    bridge to a changed DuckDB API before touching any R-level code. New
@@ -307,13 +316,18 @@ fine). Fix any new ERRORs or new WARNINGs.
 ```bash
 SHORT=$(git rev-parse --short=12 "$SHA")
 git add -- R/ tests/ man/ NAMESPACE src/*.cpp src/include/ src/*.dd patch/
+# Also stage `src/duckdb/` if (and only if) you modified `patch/` and the
+# patch was applied to the vendored tree:
+git diff --cached --name-only -- patch/ | grep -q . && \
+  git add -- src/duckdb/
 # Only if there are staged changes:
 git diff --cached --quiet || \
   git commit -m "fix: R-side fix for failing rcc at ${SHORT}"
 ```
 
-Never `git add` paths under `src/duckdb/`, `inst/include/cpp11/`, or any
-flavor file managed by `scripts/lts.sh`.
+Never `git add` paths under `inst/include/cpp11/` or any flavor file
+managed by `scripts/lts.sh`. `src/duckdb/` should only appear in a fix
+commit when it carries the downstream effect of a `patch/` change.
 
 ### 4f. Cherry-pick all remaining commits from `*-dev`
 
@@ -336,8 +350,13 @@ point and must be carried forward.
 
 Conflict handling:
 
-- Conflict on `src/duckdb/`, `inst/include/cpp11/`, or `inst/include/cpp11.hpp`:
-  should never happen; stop and report.
+- Conflict on `inst/include/cpp11/` or `inst/include/cpp11.hpp`: should
+  never happen; stop and report.
+- Conflict on `src/duckdb/`: rare; usually means our `patch/` change
+  overlaps with a later vendor commit. Take the cherry-picked version
+  (`git checkout --theirs src/duckdb/`), re-apply our patch
+  (`patch -p1 -i patch/<file>.patch`), then `git add src/duckdb/` and
+  `git cherry-pick --continue`.
 - Conflict on any other file (glue, `patch/`, `R/`, tests, snapshots): the
   cherry-picked commit is a fix commit whose change overlaps with our own
   fix. Resolve by accepting the cherry-picked version
@@ -376,9 +395,12 @@ No failure found: v1.4-andium-dev
 
 ## Constraints (hard rules)
 
-- **Never** modify `src/duckdb/`, `inst/include/cpp11/`,
-  `inst/include/cpp11.hpp`, or any `scripts/vendor*.sh` /
-  `scripts/lts.{sh,patch}` file. `patch/` **may** be modified.
+- **Never edit by hand** `inst/include/cpp11/`, `inst/include/cpp11.hpp`,
+  or any `scripts/vendor*.sh` / `scripts/lts.{sh,patch}` file.
+  `src/duckdb/` may not be edited directly either, but it WILL change as
+  a downstream effect of editing `patch/` (the patch is applied to the
+  vendored tree); those derived changes are expected and must be
+  committed alongside the patch. `patch/` itself **may** be edited.
 - **Never** hand-edit flavor files (`DESCRIPTION` `Package:` field,
   `R/duckdb-package.R`, `src/include/rapi.hpp`'s `DUCKDB_PACKAGE_NAME`,
   `inst/include/duckdb_types.hpp`, `tests/testthat.R`); they are produced
@@ -392,9 +414,7 @@ No failure found: v1.4-andium-dev
   (`krlmlr/duckdb-r`) to a branch named `broken-<sha>-dev` (full 40-char
   SHA). The `-dev` suffix is required so `each.yaml` triggers per-commit
   CI on the new branch.
-- **Branch scope**: only `*-dev` branches that match `\-dev$` (`main-dev`,
-  `v1.5-variegata-dev`, `v1.4-andium-dev`, …); never touch `*-dev-base`,
-  `*-dev-old`, `*-dev-broken`.
+- **Branch scope**: only branches matching `\-dev$`.
 - Branches being force-pushed to: always use the freshly-fetched
   `krlmlr/*` ref; never rely on any previously-checked-out state.
 - **Reproduce locally, do not guess.** GitHub Actions logs are not
