@@ -131,26 +131,73 @@ COMMITS_OLDEST_FIRST=$(git log "krlmlr/$BRANCH" \
 ```
 
 Define a concrete `lookup_rcc_status` helper. The default below uses `curl`
-+ `jq` so it works without `gh` (CC Web does not ship `gh`); pick whichever
-of the alternatives matches the host environment:
++ `jq` and works whether or not a token is available; pick whichever of the
+alternatives matches the host environment.
+
+Notes from the field (CC Web, 2026-04):
+- The MCP GitHub tools available today (`get_commit`, `list_commits`,
+  `pull_request_read`) do **not** expose arbitrary commit statuses. The
+  curl path is the only reliable way to look up `rcc` for an arbitrary SHA.
+- Use the **combined** status endpoint `commits/$sha/status` (singular),
+  not `/statuses` (plural). The combined endpoint already returns the
+  most recent state per context, which is what we want.
+- Always pass an explicit `User-Agent` header. The default curl UA is
+  treated more aggressively by GitHub's edge.
+- Unauthenticated requests are rate-limited to **60/IP/hour**. The
+  sandbox's egress NATs through ~2 IPs, so the practical budget is small
+  (~120/hr). Authenticate with a `GITHUB_TOKEN` whenever possible —
+  authenticated limits are 5000/hr and survive a full branch scan.
+- A 403 from `/commits/$sha/status` with body containing
+  `"API rate limit exceeded"` means the IP, not the request, is
+  exhausted. Back off + retry: the egress IP can rotate per connection,
+  so a small loop sometimes lands on a fresh IP. If every retry fails,
+  stop and report — guessing failing SHAs and pushing speculative
+  `broken-*-dev` branches is worse than waiting for the rate limit to
+  reset (`/rate_limit` reports the reset epoch).
 
 ```bash
-# Default: portable HTTPS, no `gh` needed. Requires `curl` and `jq`.
+# Default: portable HTTPS with retry + backoff. Requires `curl` and `jq`.
+# Honors $GITHUB_TOKEN if present (5000/hr); otherwise falls back to
+# unauthenticated (60/IP/hr) with up to 8 attempts.
 lookup_rcc_status() {
   local sha="$1"
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer $GITHUB_TOKEN" \
-    "https://api.github.com/repos/$REPO/commits/$sha/statuses" \
-    | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'
+  local attempts=8 i=0 http body state auth=()
+  [[ -n "${GITHUB_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  while (( i++ < attempts )); do
+    local resp
+    resp=$(curl -sS -A "rcc-smoke-fix/1 (+https://github.com/krlmlr/duckdb-r)" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "${auth[@]}" \
+      -w $'\n__HTTP__%{http_code}' \
+      "https://api.github.com/repos/$REPO/commits/$sha/status")
+    http=${resp##*$'\n__HTTP__'}
+    body=${resp%$'\n__HTTP__'*}
+    if [[ "$http" == "200" ]]; then
+      echo "$body" | jq -r '[.statuses[]? | select(.context == "rcc")] | first | .state // "none"'
+      return 0
+    fi
+    # 403 with rate-limit body → back off and retry; egress IP may rotate.
+    if [[ "$http" == "403" ]] && grep -q "rate limit" <<< "$body"; then
+      sleep $(( 2 * i ))
+      continue
+    fi
+    # Other failure modes: surface and stop.
+    echo "error_http_$http" >&2
+    return 1
+  done
+  echo "rate_limited" >&2
+  return 2
 }
 
 # Alternative when `gh` is installed (also requires `jq`):
-#   gh api "repos/$REPO/commits/$sha/statuses" \
-#     | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'
+#   gh api "repos/$REPO/commits/$sha/status" \
+#     | jq -r '[.statuses[]? | select(.context == "rcc")] | first | .state // "none"'
 #
-# Alternative when invoked by an agent that exposes a GitHub MCP:
-#   call the commit-statuses endpoint for $REPO at $sha, then pick the
+# Alternative when invoked by an agent that exposes a GitHub MCP that
+# surfaces commit statuses (none of the current `mcp__github__*` tools
+# do as of 2026-04 — verify before relying on this path):
+#   call the combined-status endpoint for $REPO at $sha, then pick the
 #   entry whose `context == "rcc"`. No `jq` needed in this path.
 ```
 
@@ -173,10 +220,16 @@ done <<< "$COMMITS_OLDEST_FIRST"
 # Existence check comes AFTER finding the earliest failure.
 # Checking inside the loop would short-circuit on a later already-fixed commit
 # before reaching an earlier failure that still has no fix branch.
+#
+# Match by SHA, not by exact name: the canonical convention is
+# `broken-<sha>-dev`, but pre-existing branches may use the legacy
+# `broken-<branch>-<sha>` form (e.g. `broken-main-dev-<sha>`). Either
+# proves the SHA is already addressed and should be skipped.
 if [[ -z "$FIRST_FAIL" ]]; then
   echo "$BRANCH: no rcc failure — skip"
-elif echo "$BROKEN_BRANCHES" | grep -qxF "broken-${FIRST_FAIL}-dev"; then
-  echo "$BRANCH: broken-${FIRST_FAIL}-dev already exists — skip"
+elif echo "$BROKEN_BRANCHES" | grep -qE "(^|-)${FIRST_FAIL}(-|$)"; then
+  EXISTING=$(echo "$BROKEN_BRANCHES" | grep -E "(^|-)${FIRST_FAIL}(-|$)" | head -1)
+  echo "$BRANCH: $EXISTING already addresses $FIRST_FAIL — skip"
 else
   echo "NEEDS_FIX  $BRANCH  $FIRST_FAIL"
 fi
