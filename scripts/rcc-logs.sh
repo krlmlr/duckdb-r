@@ -69,6 +69,21 @@ echo "Total runs reported: ${total}"
 # Combined index, sorted newest first.
 jq -s 'sort_by(.created_at) | reverse' "${runs_ndjson}" > "${OUT_DIR}/runs.json"
 
+# Compact YAML mapping from run id to commit SHA and state.
+# `state` is the run's conclusion when completed (e.g. success, failure,
+# timed_out, cancelled, skipped), otherwise its status (queued, in_progress).
+{
+  printf '# Mapping from rcc workflow run id to head commit and state.\n'
+  printf '# state = conclusion if status=="completed", else status.\n'
+  printf '# Sorted newest first.\n'
+  jq -r '
+    sort_by(.created_at) | reverse | .[] |
+    "- id: \(.id)\n  commit: \(.head_sha)\n  state: \(
+      if .status == "completed" then (.conclusion // "unknown") else .status end
+    )"
+  ' "${OUT_DIR}/runs.json"
+} > "${OUT_DIR}/runs.yaml"
+
 is_failure_conclusion() {
   case "$1" in
     failure|timed_out|startup_failure|action_required) return 0 ;;
