@@ -1,15 +1,17 @@
 #!/bin/bash
-# Collect results and failure logs for all GitHub Actions runs of the "rcc"
-# workflow.
+# Collect results and failure logs for all *completed* GitHub Actions runs
+# of the "rcc" workflow. In-flight runs (queued / in_progress) are ignored
+# so that the stored data only ever reflects confirmed results.
 #
 # Output layout (under $OUT_DIR, default ".") :
-#   runs.json          - summary array of all runs (one entry per run)
+#   runs.json          - summary array of all completed runs
+#   runs.ndjson        - one {id, commit, state} record per line
 #   runs/<id>.json     - per-run metadata
 #   runs/<id>.log      - last $LOG_TAIL lines of the combined run log,
-#                        only for completed runs whose conclusion indicates
-#                        a failure. Logs older than ~90 days are no longer
-#                        retained by GitHub; in that case the file contains
-#                        a short marker instead.
+#                        only for runs whose conclusion indicates a
+#                        failure. Logs older than ~90 days are no longer
+#                        retained by GitHub; in that case the file
+#                        contains a short marker instead.
 #
 # The script is idempotent: per-run metadata is rewritten only when it
 # changes, and failure logs are fetched only when the file does not yet
@@ -36,8 +38,9 @@ PER_PAGE="${PER_PAGE:-100}"
 
 mkdir -p "${OUT_DIR}/runs"
 
+all_ndjson="$(mktemp)"
 runs_ndjson="$(mktemp)"
-trap 'rm -f "${runs_ndjson}"' EXIT
+trap 'rm -f "${all_ndjson}" "${runs_ndjson}"' EXIT
 
 echo "Fetching workflow runs for ${WORKFLOW}..."
 gh api --paginate \
@@ -61,28 +64,27 @@ gh api --paginate \
           triggering_actor: (.triggering_actor.login // null)
         }' \
   | jq -c . \
-  > "${runs_ndjson}"
+  > "${all_ndjson}"
 
-total="$(wc -l < "${runs_ndjson}" | tr -d ' ')"
-echo "Total runs reported: ${total}"
+total="$(wc -l < "${all_ndjson}" | tr -d ' ')"
 
-# Combined index, sorted newest first.
-jq -s 'sort_by(.created_at) | reverse' "${runs_ndjson}" > "${OUT_DIR}/runs.json"
+# Drop in-flight runs: only keep runs whose result is confirmed.
+jq -c 'select(.status == "completed")' "${all_ndjson}" > "${runs_ndjson}"
+completed="$(wc -l < "${runs_ndjson}" | tr -d ' ')"
+echo "Runs reported: ${total} (completed: ${completed})"
 
-# Compact YAML mapping from run id to commit SHA and state.
-# `state` is the run's conclusion when completed (e.g. success, failure,
-# timed_out, cancelled, skipped), otherwise its status (queued, in_progress).
-{
-  printf '# Mapping from rcc workflow run id to head commit and state.\n'
-  printf '# state = conclusion if status=="completed", else status.\n'
-  printf '# Sorted newest first.\n'
-  jq -r '
-    sort_by(.created_at) | reverse | .[] |
-    "- id: \(.id)\n  commit: \(.head_sha)\n  state: \(
-      if .status == "completed" then (.conclusion // "unknown") else .status end
-    )"
-  ' "${OUT_DIR}/runs.json"
-} > "${OUT_DIR}/runs.yaml"
+# Sort newest first, used by every output.
+sorted_ndjson="$(mktemp)"
+trap 'rm -f "${all_ndjson}" "${runs_ndjson}" "${sorted_ndjson}"' EXIT
+jq -s 'sort_by(.created_at) | reverse | .[]' "${runs_ndjson}" \
+  | jq -c . > "${sorted_ndjson}"
+
+# Combined per-run metadata index.
+jq -s '.' "${sorted_ndjson}" > "${OUT_DIR}/runs.json"
+
+# Mapping from run id to head commit and conclusion, one record per line.
+jq -c '{id, commit: .head_sha, state: (.conclusion // "unknown")}' \
+  "${sorted_ndjson}" > "${OUT_DIR}/runs.ndjson"
 
 is_failure_conclusion() {
   case "$1" in
@@ -97,7 +99,6 @@ expired=0
 
 while IFS= read -r run; do
   id="$(jq -r '.id' <<<"${run}")"
-  status="$(jq -r '.status' <<<"${run}")"
   conclusion="$(jq -r '.conclusion // ""' <<<"${run}")"
 
   metafile="${OUT_DIR}/runs/${id}.json"
@@ -106,9 +107,6 @@ while IFS= read -r run; do
     printf '%s\n' "${new_meta}" > "${metafile}"
   fi
 
-  if [ "${status}" != "completed" ]; then
-    continue
-  fi
   if ! is_failure_conclusion "${conclusion}"; then
     continue
   fi
