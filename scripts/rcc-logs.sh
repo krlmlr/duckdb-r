@@ -28,6 +28,9 @@
 #               (default: 10000)
 #   SINCE     - earliest commit date to consider, ISO 8601
 #               (default: 2026-04-11)
+#   MAX_NEW   - cap on commits inspected via the GitHub API per invocation;
+#               commits already recorded in runs2.ndjson don't count against
+#               this cap (default: 400)
 #
 # Requires: gh, jq, unzip, git. Portable to bash on Linux and macOS.
 
@@ -36,6 +39,7 @@ set -euo pipefail
 OUT_DIR="${OUT_DIR:-runs}"
 LOG_TAIL="${LOG_TAIL:-10000}"
 SINCE="${SINCE:-2026-04-11}"
+MAX_NEW="${MAX_NEW:-400}"
 
 mkdir -p "${OUT_DIR}/logs2"
 
@@ -83,6 +87,7 @@ processed=0
 skipped_no_status=0
 skipped_pending=0
 skipped_known=0
+inspected=0
 moved=0
 fetched=0
 expired=0
@@ -92,6 +97,11 @@ while IFS= read -r sha; do
     skipped_known=$((skipped_known + 1))
     continue
   fi
+
+  if [ "${inspected}" -ge "${MAX_NEW}" ]; then
+    break
+  fi
+  inspected=$((inspected + 1))
 
   status_json="$(gh api "repos/{owner}/{repo}/commits/${sha}/statuses" 2>/dev/null \
     | jq -c '[.[] | select(.context == "rcc")] | .[0] // empty')"
@@ -203,6 +213,6 @@ while IFS= read -r sha; do
   fi
 done < "${shas_file}"
 
-echo "Recorded: ${processed}, already known: ${skipped_known}, no rcc status: ${skipped_no_status}, pending: ${skipped_pending}"
+echo "Inspected: ${inspected}/${MAX_NEW}, recorded: ${processed}, already known: ${skipped_known}, no rcc status: ${skipped_no_status}, pending: ${skipped_pending}"
 echo "Logs moved: ${moved}, fetched: ${fetched}, unavailable: ${expired}"
 echo "Done."
