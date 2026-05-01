@@ -165,13 +165,9 @@ while IFS= read -r sha; do
   fi
 
   logfile="${OUT_DIR}/logs2/${sha}.log"
-  if [ -f "${logfile}" ]; then
-    continue
-  fi
-
   old_logfile="${OUT_DIR}/logs/${run_id}.log"
   if [ -f "${old_logfile}" ]; then
-    mv "${old_logfile}" "${logfile}"
+    mv -f "${old_logfile}" "${logfile}"
     moved=$((moved + 1))
     continue
   fi
