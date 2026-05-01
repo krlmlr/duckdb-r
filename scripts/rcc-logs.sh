@@ -106,6 +106,7 @@ while IFS= read -r sha; do
   status_json="$(gh api "repos/{owner}/{repo}/commits/${sha}/statuses" 2>/dev/null \
     | jq -c '[.[] | select(.context == "rcc")] | .[0] // empty')"
   if [ -z "${status_json}" ]; then
+    echo "Commit ${sha}: no rcc status, skipping"
     skipped_no_status=$((skipped_no_status + 1))
     continue
   fi
