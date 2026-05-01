@@ -16,10 +16,11 @@ drv_to_string <- function(drv) {
     stop("pass a duckdb_driver object")
   }
   sprintf(
-    "<duckdb_driver dbdir='%s' read_only=%s bigint=%s>",
+    "<duckdb_driver dbdir='%s' read_only=%s bigint=%s R=%s>",
     drv@dbdir,
     drv@read_only,
-    drv@convert_opts$bigint
+    drv@convert_opts$bigint,
+    paste(R.version$major, R.version$minor, sep = ".")
   )
 }
 
