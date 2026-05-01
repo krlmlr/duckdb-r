@@ -147,6 +147,7 @@ while IFS= read -r sha; do
 
   run_status="$(jq -r '.status // ""' <<<"${run_json}")"
   if [ "${run_status}" != "completed" ]; then
+    echo "Commit ${sha}: run ${run_id} status is ${run_status}, skipping for now"
     skipped_pending=$((skipped_pending + 1))
     continue
   fi
@@ -169,6 +170,7 @@ while IFS= read -r sha; do
   old_logfile="${OUT_DIR}/logs/${run_id}.log"
   if [ -f "${old_logfile}" ]; then
     mv -f "${old_logfile}" "${logfile}"
+    echo "Moved existing log file for run ${run_id} into place for commit ${sha}"
     moved=$((moved + 1))
     continue
   fi
