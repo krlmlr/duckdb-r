@@ -21,8 +21,9 @@ Why this skill exists.
   `src/include/`), R code (`R/`), or test snapshots
   (`tests/testthat/_snaps/`). We do not rewrite the upstream vendor commit;
   instead we author a parallel `broken-<sha>-dev` branch whose first commit
-  is an **amended replacement** of the failing `<sha>` (same parent, same
-  message, vendor diff plus R-side fix folded in). All later commits from
+  is an **amended replacement** of the failing `<sha>` (same parent;
+  original vendor message kept verbatim and a short R-side fix note
+  appended; vendor diff plus R-side fix folded in). All later commits from
   the original `*-dev` branch are then cherry-picked on top. The result is
   a continuous "vendor + repair" history with no extra fix commit, which
   preserves continuity and keeps cherry-picks clean. Promoting the green
@@ -288,10 +289,13 @@ fixed; see `AGENTS.md` for the root cause.
 
 When a failure is in a test gated by `requireNamespace()` (e.g. `arrow`,
 `DBItest`, `dbplyr`) and that Suggests dependency is missing from the local
-library, install it with `install.packages("foo")` — leave `repos=` unset so
-the env-configured default (Posit P3M binary builds for the current Linux
-release) is used. Passing `repos="https://cloud.r-project.org"` forces a
-much slower source compile.
+library, install it with `install.packages("foo")` — leave `repos=` unset
+first, so the env-configured default (Posit P3M binary builds for the
+current Linux release) is used; that's much faster than a CRAN source
+compile. If the default repo can't serve the package (404, mirror down,
+unsupported R version), fall back to an explicit `repos=` (e.g.
+`"https://cloud.r-project.org"`) and retry — but only after the default
+has actually failed.
 
 ### 4c. Fix issues — allowed modifications and priority order
 
@@ -387,10 +391,14 @@ fine). Fix any new ERRORs or new WARNINGs.
 
 The fix must be **amended into the failing commit itself**, so the tip of
 `broken-<sha>-dev` is a single-commit-deep replacement of `<sha>` (same
-parent, same author/message, vendor diff + R-side fix) rather than a
-two-commit chain. Cherry-picks then layer cleanly on top, and the branch
-keeps a continuous "vendor + repair" history without an explicit "fix"
-commit.
+parent, vendor diff + R-side fix) rather than a two-commit chain.
+Cherry-picks then layer cleanly on top, and the branch keeps a
+continuous "vendor + repair" history without an explicit "fix" commit.
+
+The amended commit message **keeps the original vendor message intact**
+and **appends** a short note documenting the R-side finding (what broke,
+why, what was changed). Append-only: do not rewrite or shorten the
+upstream-authored portion.
 
 ```bash
 git add -- R/ tests/ man/ NAMESPACE src/*.cpp src/include/ src/*.dd patch/
@@ -398,9 +406,19 @@ git add -- R/ tests/ man/ NAMESPACE src/*.cpp src/include/ src/*.dd patch/
 # patch was applied to the vendored tree:
 git diff --cached --name-only -- patch/ | grep -q . && \
   git add -- src/duckdb/
-# Only if there are staged changes:
+# Only if there are staged changes: amend, preserving the original
+# vendor message and appending a short fix note. Replace <DETAILS>
+# with 1-5 lines describing the upstream API change and the R-side
+# adaptation (e.g. "Handle new EXPRESSION_FILTER kind in
+# TransformFilterExpression — upstream PR #22005 unified
+# ConstantFilter into ExpressionFilter.").
+ORIG_MSG=$(git log -1 --format=%B)
 git diff --cached --quiet || \
-  git commit --amend --no-edit
+  git commit --amend -m "${ORIG_MSG}
+
+R-side fix
+----------
+<DETAILS>"
 ```
 
 This rewrites the local `broken-<sha>-dev` HEAD only — the original
