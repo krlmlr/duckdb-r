@@ -19,13 +19,16 @@ Why this skill exists.
   `main-dev`, `v1.5-variegata` for `v1.5-variegata-dev`, `v1.4-andium` for
   `v1.4-andium-dev`). A vendor commit can break R-side glue (`src/*.cpp`,
   `src/include/`), R code (`R/`), or test snapshots
-  (`tests/testthat/_snaps/`). We do not rewrite the vendor commit; instead
-  we author a parallel `broken-<sha>-dev` branch that starts at the failing
-  commit, layers on the necessary R-side fix, and re-applies all later
-  commits from the original `*-dev` branch on top. Promoting the green tip
-  back into the parent `*-dev` branch is a manual step performed outside
-  this skill (today there is no CI/CD that does it automatically; this may
-  be automated in the future).
+  (`tests/testthat/_snaps/`). We do not rewrite the upstream vendor commit;
+  instead we author a parallel `broken-<sha>-dev` branch whose first commit
+  is an **amended replacement** of the failing `<sha>` (same parent, same
+  message, vendor diff plus R-side fix folded in). All later commits from
+  the original `*-dev` branch are then cherry-picked on top. The result is
+  a continuous "vendor + repair" history with no extra fix commit, which
+  preserves continuity and keeps cherry-picks clean. Promoting the green
+  tip back into the parent `*-dev` branch is a manual step performed
+  outside this skill (today there is no CI/CD that does it automatically;
+  this may be automated in the future).
 
 End-to-end workflow.
   1. Refresh `krlmlr/*` remote-tracking refs from scratch — the dev
@@ -380,10 +383,16 @@ Rscript -e 'rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on 
 Must show `Status: OK` or at most `1 NOTE` (pre-existing CRAN notes are
 fine). Fix any new ERRORs or new WARNINGs.
 
-### 4e. Commit the fix
+### 4e. Fold the fix into the failing commit (amend, do not add)
+
+The fix must be **amended into the failing commit itself**, so the tip of
+`broken-<sha>-dev` is a single-commit-deep replacement of `<sha>` (same
+parent, same author/message, vendor diff + R-side fix) rather than a
+two-commit chain. Cherry-picks then layer cleanly on top, and the branch
+keeps a continuous "vendor + repair" history without an explicit "fix"
+commit.
 
 ```bash
-SHORT=$(git rev-parse --short=12 "$SHA")
 git add -- R/ tests/ man/ NAMESPACE src/*.cpp src/include/ src/*.dd patch/
 # Also stage `src/duckdb/` if (and only if) you modified `patch/` and the
 # patch was applied to the vendored tree:
@@ -391,12 +400,18 @@ git diff --cached --name-only -- patch/ | grep -q . && \
   git add -- src/duckdb/
 # Only if there are staged changes:
 git diff --cached --quiet || \
-  git commit -m "fix: R-side fix for failing rcc at ${SHORT}"
+  git commit --amend --no-edit
 ```
 
+This rewrites the local `broken-<sha>-dev` HEAD only — the original
+`<sha>` on `krlmlr/main-dev` (or whichever upstream) is untouched, so the
+"never amend pushed commits" rule still holds: the amend produces a new
+commit on a new, never-before-pushed branch.
+
 Never `git add` paths under `inst/include/cpp11/` or any flavor file
-managed by `scripts/lts.sh`. `src/duckdb/` should only appear in a fix
-commit when it carries the downstream effect of a `patch/` change.
+managed by `scripts/lts.sh`. `src/duckdb/` should only appear in the
+amended commit when it carries the downstream effect of a `patch/`
+change.
 
 ### 4f. Cherry-pick all remaining commits from `*-dev`
 
@@ -477,7 +492,10 @@ No failure found: v1.4-andium-dev
 - **Never** suppress C++ warnings via `#pragma clang diagnostic ignored` or
   similar. Add a `patch/` file that fixes the underlying issue (see
   `AGENTS.md`). CRAN rejects packages that silence warnings.
-- **Never** amend commits that have already been pushed.
+- **Never** amend commits that have already been pushed. Step 4e amends
+  the failing `<sha>` only on the freshly-created local `broken-<sha>-dev`
+  branch (which has not been pushed); the original `<sha>` on the upstream
+  `*-dev` branch is left alone.
 - **Commit status to check**: context `rcc` (not the full check-run name).
 - **Branch target**: all pushes go to the `krlmlr` remote
   (`krlmlr/duckdb-r`) to a branch named `broken-<sha>-dev` (full 40-char
