@@ -283,6 +283,13 @@ Note: spurious changes to `src/*.dd` (dependency-tracking files) caused by a
 Makefile bug should be discarded with `git checkout -- src/*.dd` rather than
 fixed; see `AGENTS.md` for the root cause.
 
+When a failure is in a test gated by `requireNamespace()` (e.g. `arrow`,
+`DBItest`, `dbplyr`) and that Suggests dependency is missing from the local
+library, install it with `install.packages("foo")` — leave `repos=` unset so
+the env-configured default (Posit P3M binary builds for the current Linux
+release) is used. Passing `repos="https://cloud.r-project.org"` forces a
+much slower source compile.
+
 ### 4c. Fix issues — allowed modifications and priority order
 
 **Never edit by hand** any of the following vendored / auto-generated paths:
