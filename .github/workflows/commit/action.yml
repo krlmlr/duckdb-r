@@ -25,10 +25,8 @@ runs:
     - name: Write diff and fail for workflow_dispatch
       if: steps.check.outputs.has_changes == 'true' && github.event_name == 'workflow_dispatch'
       run: |
-        set -x
-        git diff > changes.patch
         echo "Changes detected in workflow_dispatch build. Diff:"
-        cat changes.patch
+        git diff
         exit 1
       shell: bash
 
