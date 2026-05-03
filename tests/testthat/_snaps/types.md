@@ -7,6 +7,9 @@
         "bignum", "time_ns", "geometry", NULL)
       as.list(dbGetQuery(con, paste0("SELECT * EXCLUDE (", paste(bad, collapse = ", "),
       ") REPLACE(replace(varchar, chr(0), '') AS varchar) FROM test_all_types(use_large_enum=true)")))
+    Condition
+      Warning in `rapi_execute()`:
+      Coercing nanoseconds to a lower resolution may result in a loss of data.
     Output
       $bool
       [1] FALSE  TRUE    NA
@@ -59,6 +62,10 @@
       $timestamp_ms
       [1] "-290308-12-22 00:00:00.00000 UTC" "294247-01-10 04:00:54.77539 UTC" 
       [3] NA                                
+      
+      $timestamp_tz_ns
+      [1] "1677-09-22 00:00:00.000000 UTC" "2262-04-11 23:47:16.854776 UTC"
+      [3] NA                              
       
       $float
       [1] -3.402823e+38  3.402823e+38            NA
