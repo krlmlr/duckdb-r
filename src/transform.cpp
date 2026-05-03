@@ -55,6 +55,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::DATE:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::INTERVAL:
@@ -183,6 +184,11 @@ double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(int64_t timestamp) {
 	return static_cast<double>(timestamp) / Interval::NANOS_PER_SEC;
 }
 
+template <>
+double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_TZ_NS>(int64_t timestamp) {
+	return ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(timestamp);
+}
+
 template <LogicalTypeId LT>
 void ConvertTimestampVector(const Vector &src_vec, size_t count, const SEXP dest, uint64_t dest_offset) {
 	auto src_data = FlatVector::GetData<int64_t>(src_vec);
@@ -247,6 +253,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -433,6 +440,11 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		break;
 	case LogicalTypeId::TIMESTAMP_NS:
 		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_NS>(src_vec, n, dest, dest_offset);
+		std::call_once(nanosecond_coercion_warning, Rf_warning,
+		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
+		break;
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_TZ_NS>(src_vec, n, dest, dest_offset);
 		std::call_once(nanosecond_coercion_warning, Rf_warning,
 		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;

@@ -13,6 +13,7 @@ test_that("test_all_types() output", {
       "timestamp_tz",
       "time_tz",
       "timestamp_ns",
+      "timestamp_tz_ns",
       "timestamp_array",
       "timestamptz_array",
 
