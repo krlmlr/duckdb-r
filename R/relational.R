@@ -702,6 +702,9 @@ rel_from_table_function <- function(con, function_name, positional_parameters = 
 }
 
 rel_to_parquet <- function(rel, file_name, options = list()) {
+  if (!is.character(file_name) || length(file_name) != 1L || !nzchar(file_name)) {
+    stop("`file_name` must be a non-empty string.", call. = FALSE)
+  }
   rethrow_rapi_rel_to_parquet(rel, file_name, options)
 }
 
