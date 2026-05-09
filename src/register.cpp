@@ -5,6 +5,7 @@
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
@@ -167,19 +168,21 @@ private:
 	// The column at index 0 of the underlying scan corresponds to column_name_expr.
 	static SEXP TransformExpression(const Expression &expr, SEXP column_name_expr, SEXP functions,
 	                                string &timezone_config) {
-		if (expr.GetExpressionClass() == ExpressionClass::BOUND_COMPARISON) {
-			auto &comp = expr.Cast<BoundComparisonExpression>();
+		if (BoundComparisonExpression::IsComparison(expr)) {
+			auto &comp = expr.Cast<BoundFunctionExpression>();
+			auto &left = BoundComparisonExpression::Left(comp);
+			auto &right = BoundComparisonExpression::Right(comp);
 			const Expression *ref_side = nullptr;
 			const Expression *const_side = nullptr;
 			ExpressionType comparison_type = comp.GetExpressionType();
-			if (comp.left->GetExpressionClass() == ExpressionClass::BOUND_REF &&
-			    comp.right->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
-				ref_side = comp.left.get();
-				const_side = comp.right.get();
-			} else if (comp.right->GetExpressionClass() == ExpressionClass::BOUND_REF &&
-			           comp.left->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
-				ref_side = comp.right.get();
-				const_side = comp.left.get();
+			if (left.GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			    right.GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				ref_side = &left;
+				const_side = &right;
+			} else if (right.GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			           left.GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				ref_side = &right;
+				const_side = &left;
 				switch (comparison_type) {
 				case ExpressionType::COMPARE_GREATERTHAN:
 					comparison_type = ExpressionType::COMPARE_LESSTHAN;
