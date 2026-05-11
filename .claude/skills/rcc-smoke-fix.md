@@ -242,6 +242,55 @@ fi
 
 Collect all `NEEDS_FIX  <branch>  <sha>` lines. Process them in order.
 
+## Step 3a — Look ahead for self-healing
+
+For each `NEEDS_FIX` pair, continue walking `$COMMITS_OLDEST_FIRST`
+forward from `$FIRST_FAIL` and check whether `rcc` returns to `success`
+without manual intervention on this branch. This happens when two
+adjacent upstream commits form one logically consistent change but were
+vendored as separate steps, leaving a transient break between them. The
+goal here is only to characterise the **first** failing window — later
+breakages on the same branch are scanned separately on their own
+`broken-*-dev` branch (the recursion rule in the header).
+
+```bash
+HEAL_AT=""
+LAST_FAIL="$FIRST_FAIL"
+seen_fail=0
+while IFS= read -r SHA; do
+  if [[ "$seen_fail" == 0 ]]; then
+    [[ "$SHA" == "$FIRST_FAIL" ]] && seen_fail=1
+    continue
+  fi
+  STATUS=$(lookup_rcc_status "$SHA")
+  if is_rcc_failure "$STATUS"; then
+    LAST_FAIL="$SHA"
+    continue
+  fi
+  if [[ "$STATUS" == "success" ]]; then
+    HEAL_AT="$SHA"
+    break
+  fi
+  # pending / none / error from runs2.ndjson: cannot prove a self-heal
+  HEAL_AT=""
+  break
+done <<< "$COMMITS_OLDEST_FIRST"
+
+if [[ -n "$HEAL_AT" ]]; then
+  WINDOW=$(git rev-list --count --first-parent \
+    "${FIRST_FAIL}^..${LAST_FAIL}")
+  echo "SELF_HEAL  $BRANCH  fail=$FIRST_FAIL  last_fail=$LAST_FAIL  heal=$HEAL_AT  window=$WINDOW"
+else
+  echo "PERSISTENT  $BRANCH  fail=$FIRST_FAIL"
+fi
+```
+
+- `HEAL_AT` empty → failure persists to HEAD (or the index is
+  incomplete): use the standard single-commit fix workflow
+  (Step 4 unmodified).
+- `HEAL_AT` set → failure is transient: Step 4c-bis picks between a
+  **squash** and a **transient patch** strategy based on `$WINDOW`.
+
 ## Step 4 — Create, fix, and push a `broken-*` branch
 
 Repeat for each `NEEDS_FIX` pair `($BRANCH, $SHA)`:
@@ -326,6 +375,29 @@ has actually failed.
 
 ### 4c. Fix issues — allowed modifications and priority order
 
+Classify the failure before picking a fix; the classification also
+drives the self-healing strategy in Step 4c-bis.
+
+- **Vendored library broken** — the DuckDB C++ core does not even
+  build cleanly: compile/link errors with files under `src/duckdb/...`
+  in the diagnostic, or unresolved symbols inside the core. Fix lives
+  in `patch/` (priority 1 below). Self-heal of this class typically
+  arrives as a follow-up vendor commit, so the squash strategy is
+  natural when the window is 1.
+- **Call sites incompatible** — the core builds, but `src/*.cpp`,
+  `src/include/*.hpp`, `R/`, or `tests/` reference a DuckDB API that
+  was renamed, removed, or reshaped. Fix lives in glue or R code
+  (priorities 2–5 below). Self-heal of this class typically arrives
+  as a forward-ported glue/R commit on `*-dev`, so either a squash
+  (window 1) or a transient patch (wider) applies.
+
+Quick check: `grep -E '(^|/)src/duckdb/' <log>` vs
+`grep -E '(^|/)src/(rapi|database|...)' <log>` on the failure log
+fetched in Step 4b separates the two cleanly in most cases. When the
+log shows a runtime/test failure rather than a build error, the failure
+is almost always "call sites incompatible" (the build linked fine but
+behaviour changed).
+
 **Never edit by hand** any of the following vendored / auto-generated paths:
 
 - `src/duckdb/` (vendored DuckDB C++ core) — note: `src/duckdb/` WILL change
@@ -401,6 +473,105 @@ Rscript -e 'testthat::test_local(stop_on_failure = FALSE)' 2>&1
 ```
 
 Iterate until all tests pass.
+
+### 4c-bis. Self-healing strategies (only when `HEAL_AT` is set)
+
+If Step 3a recorded a `HEAL_AT`, pick a strategy by window width:
+
+| `$WINDOW` | Strategy        | Audit trail                                                                                  |
+|-----------|-----------------|----------------------------------------------------------------------------------------------|
+| `1`       | Squash          | One amended vendor commit replaces both `FIRST_FAIL` and `HEAL_AT`; both upstream messages quoted. |
+| `≥ 2`     | Transient patch | `patch/NNNN-transient-*.patch` introduced at `FIRST_FAIL`, deleted at `HEAL_AT`.             |
+
+Pick **squash** only when `HEAL_AT` is the immediate next first-parent
+commit after `FIRST_FAIL`. For anything wider, prefer the transient
+patch — squashing more than two upstream commits hides too much of
+upstream's authored history and breaks the "one vendor commit per
+upstream commit" invariant that the rest of this skill assumes.
+
+**Squash strategy** (`STRATEGY=squash`, `$WINDOW == 1`). After Step 4a
+the HEAD of `broken-${FIRST_FAIL}-dev` is `FIRST_FAIL`. Apply
+`HEAL_AT`'s tree on top, then collapse onto `FIRST_FAIL`'s parent and
+recommit with a constructed message that names both upstream SHAs:
+
+```bash
+STRATEGY=squash
+
+git cherry-pick --no-commit "$HEAL_AT"
+# (resolve any conflicts here; they are uncommon because both commits
+# are usually vendor-only, but a non-vendor commit at HEAL_AT may
+# conflict with the build state of FIRST_FAIL.)
+git reset --soft "${FIRST_FAIL}^"
+
+FIRST_MSG=$(git log -1 --format=%B "$FIRST_FAIL")
+HEAL_MSG=$(git log -1 --format=%B "$HEAL_AT")
+
+git commit -m "${FIRST_MSG}
+
+Combined upstream commit ${HEAL_AT}
+-----------------------------------
+The build fails when ${FIRST_FAIL} is taken on its own; upstream
+${HEAL_AT} restores consistency. Vendored together here to avoid a
+transient build break — both commits would otherwise have been
+vendored as separate steps.
+
+Original message of ${HEAL_AT}
+------------------------------
+${HEAL_MSG}"
+```
+
+In Step 4g, **skip** `HEAL_AT` when iterating `REMAINING` — its tree
+is already in the amended commit.
+
+**Transient patch strategy** (`STRATEGY=transient`, `$WINDOW >= 2`).
+Add a numbered patch whose header documents the exact window:
+
+```
+# Transient: <short symptom, e.g. "missing ExpressionFilter ctor">
+# Introduced  : <FIRST_FAIL>
+# Removed at  : <HEAL_AT>
+# Upstream    : <PR URL or "none">
+#
+# This patch repairs a transient inconsistency between two adjacent
+# upstream vendor commits. Do not keep it past <HEAL_AT>; the vendored
+# tree there is self-consistent.
+```
+
+Pick the next available `patch/NNNN-...` number; name the file
+`NNNN-transient-<short>.patch`. Apply with
+`patch -p1 -i patch/NNNN-transient-<short>.patch` and commit the
+derived `src/duckdb/` changes together with the patch into the
+`FIRST_FAIL` amend (Step 4f).
+
+In Step 4g, when the cherry-pick reaches `HEAL_AT`, remove the
+transient patch in the same commit and append a removal note:
+
+```bash
+git cherry-pick --no-commit "$HEAL_AT"
+git rm patch/*-transient-*.patch
+# Re-sync the vendored tree to HEAL_AT exactly, so the patch removal
+# does not leave the patched-state diff behind in src/duckdb/.
+git checkout "$HEAL_AT" -- src/duckdb/
+HEAL_MSG=$(git log -1 --format=%B "$HEAL_AT")
+git commit -m "${HEAL_MSG}
+
+Removed transient patch
+-----------------------
+patch/NNNN-transient-<short>.patch is no longer needed: the vendored
+tree at this commit is self-consistent against the R-side glue."
+```
+
+For a **call-site** self-heal the same shape applies, but the
+"transient patch" is a small glue/R diff folded into the `FIRST_FAIL`
+amend and reverted at `HEAL_AT`. Store the reverse-diff next to the
+forward diff in `patch/transient-glue/<short>.patch` (audit-only —
+not applied by the build) so the audit trail is reproducible even
+when no `src/duckdb/` change is involved.
+
+If `lookup_rcc_status` returned `none`/`pending` for any commit
+between `FIRST_FAIL` and the candidate `HEAL_AT`, the self-heal is
+unproven — Step 3a will have left `HEAL_AT` empty and you will not
+reach this section. Do not "fill in" missing CI data by hand.
 
 ### 4d. Final check
 
@@ -485,12 +656,31 @@ change.
 ### 4g. Cherry-pick all remaining commits from `*-dev`
 
 ```bash
-# Commits on the *-dev branch that come *after* the failing commit
+# Commits on the *-dev branch that come *after* the failing commit.
 REMAINING=$(git log "${SHA}..krlmlr/${BRANCH}" \
   --first-parent --format="%H" --reverse)
 
 for C in $REMAINING; do
+  if [[ "$C" == "$HEAL_AT" && "$STRATEGY" == "squash" ]]; then
+    # HEAL_AT's tree was already folded into the FIRST_FAIL amend
+    # (Step 4c-bis, squash strategy). Skip it here.
+    continue
+  fi
   git cherry-pick "$C" --allow-empty
+  if [[ "$C" == "$HEAL_AT" && "$STRATEGY" == "transient" ]]; then
+    # Remove the transient patch and re-sync src/duckdb/ to HEAL_AT's
+    # tree exactly (Step 4c-bis, transient patch strategy).
+    git rm patch/*-transient-*.patch 2>/dev/null || true
+    git checkout "$HEAL_AT" -- src/duckdb/
+    git add -- src/duckdb/ patch/
+    HEAL_MSG=$(git log -1 --format=%B "$HEAL_AT")
+    git commit --amend -m "${HEAL_MSG}
+
+Removed transient patch
+-----------------------
+The transient patch added at ${FIRST_FAIL} is no longer needed: the
+vendored tree at this commit is self-consistent."
+  fi
 done
 ```
 
@@ -556,6 +746,23 @@ No failure found: v1.4-andium-dev
   the failing `<sha>` only on the freshly-created local `broken-<sha>-dev`
   branch (which has not been pushed); the original `<sha>` on the upstream
   `*-dev` branch is left alone.
+- **Transient patches** (`patch/NNNN-transient-*.patch`) are only allowed
+  when Step 3a observed a self-heal with a specific `HEAL_AT`. The patch
+  header MUST name `FIRST_FAIL`, `HEAL_AT`, and the upstream PR (or
+  `none`). The patch MUST be removed in the amended `HEAL_AT` cherry-pick
+  (Step 4g). Never let a transient patch survive past its `HEAL_AT`;
+  either promote it to a permanent `patch/` file (and drop the
+  `transient` prefix) or delete it.
+- **Squashed vendor commits** (Step 4c-bis) are only allowed when
+  `$WINDOW == 1` — i.e., `HEAL_AT` is the immediate next first-parent
+  commit after `FIRST_FAIL`. The amended commit message MUST quote
+  both upstream messages verbatim under a `Combined upstream commit
+  <sha>` block; do not paraphrase upstream wording.
+- **Self-heal classification is advisory.** If the orphan-branch index
+  returns `none`/`pending`/`error` for any intermediate commit between
+  `FIRST_FAIL` and a candidate `HEAL_AT`, treat the window as
+  non-self-healing and fall back to the single-commit fix workflow.
+  Do not assume CI absence means success.
 - **Commit status to check**: context `rcc` (not the full check-run name).
 - **Branch target**: all pushes go to the `krlmlr` remote
   (`krlmlr/duckdb-r`) to a branch named `broken-<sha>-dev` (full 40-char
