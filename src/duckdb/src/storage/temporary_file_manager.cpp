@@ -644,19 +644,13 @@ bool TemporaryFileManager::IsEncrypted() const {
 }
 
 unique_ptr<FileBuffer> TemporaryFileManager::ReadTemporaryBuffer(QueryContext context, block_id_t id,
-                                                                 unique_ptr<FileBuffer> reusable_buffer,
-                                                                 idx_t *eviction_size) {
+                                                                 unique_ptr<FileBuffer> reusable_buffer) {
 	TemporaryFileIndex index;
 	optional_ptr<TemporaryFileHandle> handle;
 	{
 		TemporaryFileManagerLock lock(manager_lock);
 		index = GetTempBlockIndex(lock, id);
 		handle = GetFileHandle(lock, index.identifier);
-	}
-
-	// If eviction size requested, set it to the size of the block (compressed size if applicable).
-	if (eviction_size) {
-		*eviction_size = NumericCast<idx_t>(index.identifier.size);
 	}
 
 	// before the reusable buffer is given,

@@ -64,8 +64,8 @@ private:
 
 class InMemoryRowGroupWriter : public RowGroupWriter {
 public:
-	InMemoryRowGroupWriter(TableDataWriter &writer, TableCatalogEntry &table,
-	                       PartialBlockManager &partial_block_manager, InMemoryCheckpointer &checkpoint_manager);
+	InMemoryRowGroupWriter(TableCatalogEntry &table, PartialBlockManager &partial_block_manager,
+	                       InMemoryCheckpointer &checkpoint_manager);
 
 public:
 	CheckpointOptions GetCheckpointOptions() const override;

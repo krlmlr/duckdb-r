@@ -127,6 +127,7 @@ static constexpr ExtensionFunctionEntry EXTENSION_FUNCTIONS[] = {
     {"ceiling", "core_functions", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"check_peg_parser", "autocomplete", CatalogType::TABLE_FUNCTION_ENTRY},
     {"chr", "core_functions", CatalogType::SCALAR_FUNCTION_ENTRY},
+    {"clear_httpfs_connection_cache", "httpfs", CatalogType::TABLE_FUNCTION_ENTRY},
     {"corr", "core_functions", CatalogType::AGGREGATE_FUNCTION_ENTRY},
     {"cos", "core_functions", CatalogType::SCALAR_FUNCTION_ENTRY},
     {"cosh", "core_functions", CatalogType::SCALAR_FUNCTION_ENTRY},
@@ -1176,10 +1177,7 @@ static constexpr ExtensionEntry EXTENSION_SECRET_TYPES[] = {
 // Note: these are currently hardcoded in scripts/generate_extensions_function.py
 // TODO: automate by passing though to script via duckdb
 static constexpr ExtensionEntry EXTENSION_COPY_FUNCTIONS[] = {
-    {"parquet", "parquet"},
-    {"json", "json"},
-    {"avro", "avro"},
-    {"iceberg", "iceberg"}}; // END_OF_EXTENSION_COPY_FUNCTIONS
+    {"parquet", "parquet"}, {"json", "json"}, {"avro", "avro"}}; // END_OF_EXTENSION_COPY_FUNCTIONS
 
 // Note: these are currently hardcoded in scripts/generate_extensions_function.py
 // TODO: automate by passing though to script via duckdb

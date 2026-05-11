@@ -14,7 +14,6 @@
 #include "duckdb/storage/table/table_statistics.hpp"
 #include "duckdb/storage/storage_index.hpp"
 #include "duckdb/common/enums/index_removal_type.hpp"
-#include "duckdb/common/enums/row_group_append_mode.hpp"
 
 namespace duckdb {
 
@@ -159,7 +158,7 @@ public:
 	idx_t GetRowGroupSize() const {
 		return row_group_size;
 	}
-	void SetRowGroupAppendMode(RowGroupAppendMode mode);
+	void SetAppendRequiresNewRowGroup();
 	//! Returns the total amount of segments - use sparingly, as this forces all segments to be loaded
 	idx_t GetSegmentCount();
 
@@ -193,8 +192,8 @@ private:
 	MetaBlockPointer metadata_pointer;
 	//! Other metadata pointers
 	vector<MetaBlockPointer> metadata_pointers;
-	//! Controls whether the next append creates a new row group or reuses the existing one
-	RowGroupAppendMode row_group_append_mode;
+	//! Whether or not we need to append a new row group prior to appending
+	bool requires_new_row_group;
 };
 
 class RowGroupIterationHelper {

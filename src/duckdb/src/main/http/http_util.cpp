@@ -10,17 +10,11 @@
 #include "duckdb/main/database_file_opener.hpp"
 #include "duckdb/main/settings.hpp"
 
-#ifdef DISABLE_DUCKDB_REMOTE_INSTALL
-#define DUCKDB_DISABLE_BUILTIN_HTTPLIB
-#endif
-#ifdef DUCKDB_DISABLE_EXTENSION_LOAD
-#define DUCKDB_DISABLE_BUILTIN_HTTPLIB
-#endif
-
-#ifndef DUCKDB_DISABLE_BUILTIN_HTTPLIB
+#ifndef DISABLE_DUCKDB_REMOTE_INSTALL
+#ifndef DUCKDB_DISABLE_EXTENSION_LOAD
 #include "httplib.hpp"
 #endif
-
+#endif
 #ifndef DUCKDB_NO_THREADS
 #include <chrono>
 #include <thread>
@@ -51,7 +45,6 @@ string HTTPHeaders::GetHeaderValue(const string &key) const {
 	return entry->second;
 }
 
-#ifndef DUCKDB_DISABLE_BUILTIN_HTTPLIB
 unique_ptr<HTTPResponse> TransformResponse(duckdb_httplib::Result &res) {
 	auto status_code = HTTPUtil::ToStatusCode(res ? res->status : 0);
 	auto result = make_uniq<HTTPResponse>(status_code);
@@ -67,7 +60,6 @@ unique_ptr<HTTPResponse> TransformResponse(duckdb_httplib::Result &res) {
 	}
 	return result;
 }
-#endif
 
 HTTPResponse::HTTPResponse(HTTPStatusCode code) : status(code) {
 }
@@ -139,7 +131,6 @@ BaseRequest::BaseRequest(RequestType type, const string &url, const HTTPHeaders 
 	HTTPUtil::DecomposeURL(url, path, proto_host_port);
 }
 
-#ifndef DUCKDB_DISABLE_BUILTIN_HTTPLIB
 class HTTPLibClient : public HTTPClient {
 public:
 	HTTPLibClient(HTTPParams &http_params, const string &proto_host_port) : HTTPClient(proto_host_port) {
@@ -229,14 +220,9 @@ private:
 		}
 	}
 };
-#endif
 
 unique_ptr<HTTPClient> HTTPUtil::InitializeClient(HTTPParams &http_params, const string &proto_host_port) {
-#ifndef DUCKDB_DISABLE_BUILTIN_HTTPLIB
 	return make_uniq<HTTPLibClient>(http_params, proto_host_port);
-#else
-	return nullptr;
-#endif
 }
 
 void HTTPUtil::CloseClient(unique_ptr<HTTPClient> &&) {
@@ -246,10 +232,6 @@ void HTTPUtil::CloseClient(unique_ptr<HTTPClient> &&) {
 unique_ptr<HTTPResponse> HTTPUtil::SendRequest(BaseRequest &request, unique_ptr<HTTPClient> &client) {
 	if (!client) {
 		client = InitializeClient(request.params, request.proto_host_port);
-		if (!client) {
-			throw InvalidConfigurationException(
-			    "HTTPClient is not been setup yet (possibly due to configuration), no HTTP request can be performed");
-		}
 	}
 
 	std::function<unique_ptr<HTTPResponse>(void)> on_request([&]() {

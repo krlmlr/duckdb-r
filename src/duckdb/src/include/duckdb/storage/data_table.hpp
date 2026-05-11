@@ -235,8 +235,6 @@ public:
 
 	idx_t ColumnCount() const;
 	idx_t GetTotalRows() const;
-	idx_t GetRowGroupCount() const;
-	idx_t GetRowGroupCountWithLocalStorage(ClientContext &context);
 
 	vector<ColumnSegmentInfo> GetColumnSegmentInfo(const QueryContext &context);
 

@@ -35,36 +35,26 @@ void AddStatements(vector<unique_ptr<SQLStatement>> &body_statements,
 	if (transaction_handling == PreprocessingTransactionHandling::WRAP_IN_TRANSACTION) {
 		auto begin_info = make_uniq<TransactionInfo>(
 		    TransactionType::BEGIN_TRANSACTION, TransactionInvalidationPolicy::ALL_ERRORS_INVALIDATE_TRANSACTION, true);
-		auto begin_stmt = make_uniq<TransactionStatement>(std::move(begin_info));
-		begin_stmt->query = begin_stmt->ToString();
-		result_statements.push_back(std::move(begin_stmt));
+		result_statements.push_back(make_uniq<TransactionStatement>(std::move(begin_info)));
 	} else if (transaction_handling == PreprocessingTransactionHandling::SET_INVALIDATION_POLICY) {
 		// Here we do a `SET current_transaction_invalidation_policy='ALL_ERRORS_INVALIDATE_TRANSACTION';`, for the
 		// current transaction, to make sure multistatements/pragmas are fully transactional, and invalidate even with
 		// minor errors such as binder, parser, etc.
-		auto set_stmt = make_uniq<SetVariableStatement>(
+		result_statements.push_back(make_uniq<SetVariableStatement>(
 		    "current_transaction_invalidation_policy",
-		    make_uniq<ConstantExpression>(Value("ALL_ERRORS_INVALIDATE_TRANSACTION")), SetScope::GLOBAL);
-		set_stmt->query = set_stmt->ToString();
-		result_statements.push_back(std::move(set_stmt));
+		    make_uniq<ConstantExpression>(Value("ALL_ERRORS_INVALIDATE_TRANSACTION")), SetScope::GLOBAL));
 	}
-
 	// insert body_statements into result_statements
 	result_statements.insert(result_statements.end(), std::make_move_iterator(body_statements.begin()),
 	                         std::make_move_iterator(body_statements.end()));
-
 	if (transaction_handling == PreprocessingTransactionHandling::WRAP_IN_TRANSACTION) {
 		auto commit_info = make_uniq<TransactionInfo>(
 		    TransactionType::COMMIT, TransactionInvalidationPolicy::ALL_ERRORS_INVALIDATE_TRANSACTION, true);
-		auto commit_stmt = make_uniq<TransactionStatement>(std::move(commit_info));
-		commit_stmt->query = commit_stmt->ToString();
-		result_statements.push_back(std::move(commit_stmt));
+		result_statements.push_back(make_uniq<TransactionStatement>(std::move(commit_info)));
 	} else if (transaction_handling == PreprocessingTransactionHandling::SET_INVALIDATION_POLICY) {
-		auto set_stmt =
+		result_statements.push_back(
 		    make_uniq<SetVariableStatement>("current_transaction_invalidation_policy",
-		                                    make_uniq<ConstantExpression>(Value("STANDARD_POLICY")), SetScope::GLOBAL);
-		set_stmt->query = set_stmt->ToString();
-		result_statements.push_back(std::move(set_stmt));
+		                                    make_uniq<ConstantExpression>(Value("STANDARD_POLICY")), SetScope::GLOBAL));
 	}
 }
 
@@ -73,11 +63,11 @@ StatementPreprocessor::StatementPreprocessor(ClientContext &context) : context(c
 
 PreprocessingTransactionHandling GetTransactionHandling(vector<unique_ptr<SQLStatement>> &body_statements,
                                                         CurrentTransactionState full_transaction_state,
-                                                        bool skip_handling = false) {
-	if (body_statements.size() <= 1 || skip_handling) {
+                                                        bool can_wrap = true) {
+	if (body_statements.size() <= 1) {
 		return PreprocessingTransactionHandling::NONE;
 	}
-	if (full_transaction_state == NOT_IN_ACTIVE_TRANSACTION) {
+	if (full_transaction_state == NOT_IN_ACTIVE_TRANSACTION && can_wrap) {
 		return PreprocessingTransactionHandling::WRAP_IN_TRANSACTION;
 	}
 	if (full_transaction_state == IN_ACTIVE_TRANSACTION) {
@@ -100,7 +90,9 @@ void UnpackMultiStatement(MultiStatement &multi_statement, const CurrentTransact
 			has_select = true;
 		}
 	}
-	auto handling = GetTransactionHandling(multi_statement.statements, current_transaction_state, has_select);
+	bool can_wrap_in_transaction = !has_select;
+	auto handling =
+	    GetTransactionHandling(multi_statement.statements, current_transaction_state, can_wrap_in_transaction);
 	AddStatements(multi_statement.statements, handling, new_statements);
 }
 

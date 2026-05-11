@@ -43,7 +43,6 @@ struct TableScanLocalState : public LocalTableFunctionState {
 
 	idx_t rows_scanned = 0;
 	idx_t rows_in_current_row_group = 0;
-	idx_t row_groups_scanned = 0;
 };
 
 struct IndexScanLocalState : public LocalTableFunctionState {
@@ -68,15 +67,11 @@ public:
 		D_ASSERT(bind_data_p);
 		auto &bind_data = bind_data_p->Cast<TableScanBindData>();
 		auto &duck_table = bind_data.table.Cast<DuckTableEntry>();
-		auto &storage = duck_table.GetStorage();
-		max_threads = storage.MaxThreads(context);
-		total_row_groups_to_scan = storage.GetRowGroupCountWithLocalStorage(context);
+		max_threads = duck_table.GetStorage().MaxThreads(context);
 	}
 
 	//! The maximum number of threads for this table scan.
 	idx_t max_threads;
-	//! The total number of row groups available to this table scan.
-	idx_t total_row_groups_to_scan;
 	//! The projected columns of this table scan.
 	vector<idx_t> projection_ids;
 	//! The types of all scanned columns.
@@ -90,7 +85,6 @@ public:
 	virtual OperatorPartitionData TableScanGetPartitionData(ClientContext &context,
 	                                                        TableFunctionGetPartitionInput &input) = 0;
 	virtual idx_t TableScanRowsScanned(LocalTableFunctionState &state) = 0;
-	virtual idx_t TableScanRowGroupsScanned(LocalTableFunctionState &state) = 0;
 
 	idx_t MaxThreads() const override {
 		return max_threads;
@@ -259,10 +253,6 @@ public:
 		auto &l_state = state.Cast<IndexScanLocalState>();
 		return l_state.rows_scanned;
 	}
-
-	idx_t TableScanRowGroupsScanned(LocalTableFunctionState &) override {
-		return 0;
-	}
 };
 
 class DuckTableScanState : public TableScanGlobalState {
@@ -301,9 +291,6 @@ public:
 		l_state->scan_state.Initialize(std::move(storage_ids), context.client, input.filters, input.sample_options);
 
 		l_state->rows_in_current_row_group = storage.NextParallelScan(context.client, state, l_state->scan_state);
-		if (l_state->rows_in_current_row_group > 0) {
-			l_state->row_groups_scanned++;
-		}
 		if (input.CanRemoveFilterColumns()) {
 			l_state->all_columns.Initialize(context.client, scanned_types);
 		}
@@ -333,9 +320,6 @@ public:
 			// We have fully processed a row group. Add to scanned_rows
 			l_state.rows_scanned += l_state.rows_in_current_row_group;
 			l_state.rows_in_current_row_group = storage.NextParallelScan(context, state, l_state.scan_state);
-			if (l_state.rows_in_current_row_group > 0) {
-				l_state.row_groups_scanned++;
-			}
 
 			if (data_p.results_execution_mode == AsyncResultsExecutionMode::TASK_EXECUTOR) {
 				// We can avoid looping, and just return as appropriate
@@ -390,11 +374,6 @@ public:
 	idx_t TableScanRowsScanned(LocalTableFunctionState &state) override {
 		auto &l_state = state.Cast<TableScanLocalState>();
 		return l_state.rows_scanned;
-	}
-
-	idx_t TableScanRowGroupsScanned(LocalTableFunctionState &state) override {
-		auto &l_state = state.Cast<TableScanLocalState>();
-		return l_state.row_groups_scanned;
 	}
 };
 
@@ -823,20 +802,9 @@ unique_ptr<NodeStatistics> TableScanCardinality(ClientContext &context, const Fu
 	return make_uniq<NodeStatistics>(table_rows, estimated_cardinality);
 }
 
-void TableScanGetMetrics(ClientContext &, const FunctionData *, GlobalTableFunctionState &gstate_p,
-                         LocalTableFunctionState &local_state, const profiler_settings_t &requested_metrics,
-                         profiler_metrics_t &metrics) {
+idx_t TableScanRowsScanned(GlobalTableFunctionState &gstate_p, LocalTableFunctionState &local_state) {
 	auto &gstate = gstate_p.Cast<TableScanGlobalState>();
-	if (requested_metrics.find(MetricType::OPERATOR_ROWS_SCANNED) != requested_metrics.end()) {
-		metrics[MetricType::OPERATOR_ROWS_SCANNED] = Value::UBIGINT(gstate.TableScanRowsScanned(local_state));
-	}
-	if (requested_metrics.find(MetricType::OPERATOR_ROW_GROUPS_SCANNED) != requested_metrics.end()) {
-		metrics[MetricType::OPERATOR_ROW_GROUPS_SCANNED] =
-		    Value::UBIGINT(gstate.TableScanRowGroupsScanned(local_state));
-	}
-	if (requested_metrics.find(MetricType::OPERATOR_TOTAL_ROW_GROUPS_TO_SCAN) != requested_metrics.end()) {
-		metrics[MetricType::OPERATOR_TOTAL_ROW_GROUPS_TO_SCAN] = Value::UBIGINT(gstate.total_row_groups_to_scan);
-	}
+	return gstate.TableScanRowsScanned(local_state);
 }
 
 InsertionOrderPreservingMap<string> TableScanToString(TableFunctionToStringInput &input) {
@@ -915,7 +883,7 @@ TableFunction TableScanFunction::GetFunction() {
 	scan_function.statistics_extended = TableScanStatistics;
 	scan_function.dependency = TableScanDependency;
 	scan_function.cardinality = TableScanCardinality;
-	scan_function.get_metrics = TableScanGetMetrics;
+	scan_function.rows_scanned = TableScanRowsScanned;
 	scan_function.pushdown_complex_filter = nullptr;
 	scan_function.to_string = TableScanToString;
 	scan_function.table_scan_progress = TableScanProgress;
