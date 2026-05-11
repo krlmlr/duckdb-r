@@ -8,8 +8,15 @@ on:
         required: false
         default: ""
       event:
-        description: "Optional event to filter by; leave empty to match all events"
-        required: false
+        description: "Event to filter by; select 'any' to match all events"
+        required: true
+        type: choice
+        options:
+          - workflow_dispatch
+          - push
+          - pull_request
+          - schedule
+          - any
         default: "workflow_dispatch"
 
 jobs:
@@ -33,7 +40,7 @@ jobs:
 
           filters=""
           [ -n "${BRANCH}" ] && filters="${filters}&branch=${BRANCH}"
-          [ -n "${EVENT}" ] && filters="${filters}&event=${EVENT}"
+          [ "${EVENT}" != "any" ] && filters="${filters}&event=${EVENT}"
           echo "Fetching rcc runs with filters '${filters#&}' and status in_progress or queued..."
 
           workflow_id=$(gh api \
