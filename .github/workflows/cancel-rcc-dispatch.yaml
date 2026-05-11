@@ -2,6 +2,11 @@ name: cancel-rcc-dispatch
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "Optional branch to filter by (e.g. a -dev branch); when set, all events are considered instead of only workflow_dispatch"
+        required: false
+        default: ""
 
 jobs:
   cancel:
@@ -17,10 +22,17 @@ jobs:
       - name: Cancel pending workflow_dispatch runs of rcc
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
 
-          echo "Fetching workflow_dispatch runs of rcc with status in_progress or queued..."
+          if [ -n "${BRANCH}" ]; then
+            filter="branch=${BRANCH}"
+            echo "Fetching rcc runs for branch '${BRANCH}' with status in_progress or queued..."
+          else
+            filter="event=workflow_dispatch"
+            echo "Fetching workflow_dispatch runs of rcc with status in_progress or queued..."
+          fi
 
           workflow_id=$(gh api \
             -H "Accept: application/vnd.github+json" \
@@ -36,11 +48,11 @@ jobs:
             run_ids=$(gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "repos/${{ github.repository }}/actions/workflows/${workflow_id}/runs?event=workflow_dispatch&status=${status}&per_page=100" \
+              "repos/${{ github.repository }}/actions/workflows/${workflow_id}/runs?${filter}&status=${status}&per_page=100" \
               --jq '.workflow_runs[] | .id')
 
             if [ -z "${run_ids}" ]; then
-              echo "No ${status} workflow_dispatch runs found."
+              echo "No ${status} runs found for filter '${filter}'."
               continue
             fi
 
