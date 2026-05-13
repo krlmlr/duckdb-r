@@ -248,15 +248,15 @@ private:
 			auto &expr_filter = filter.Cast<ExpressionFilter>();
 			return TransformExpression(*expr_filter.expr, column_name_expr, functions, timezone_config);
 		}
-		case TableFilterType::OPTIONAL_FILTER: {
-			auto &opt_filter = filter.Cast<OptionalFilter>();
+		case TableFilterType::LEGACY_OPTIONAL_FILTER: {
+			auto &opt_filter = filter.Cast<LegacyOptionalFilter>();
 			if (!opt_filter.child_filter) {
 				return Rf_ScalarLogical(true);
 			}
 			return TransformFilterExpression(*opt_filter.child_filter, column_name, functions, timezone_config);
 		}
-		case TableFilterType::CONSTANT_COMPARISON: {
-			auto constant_filter = (ConstantFilter &)filter;
+		case TableFilterType::LEGACY_CONSTANT_COMPARISON: {
+			auto constant_filter = (LegacyConstantFilter &)filter;
 			cpp11::sexp constant_sexp = RApiTypes::ValueToSexp(constant_filter.constant, timezone_config);
 			cpp11::sexp constant_expr = CreateScalar(functions, constant_sexp);
 			switch (constant_filter.comparison_type) {
@@ -279,31 +279,30 @@ private:
 				return CreateExpression(functions, "not_equal", column_name_expr, constant_expr);
 			}
 			default:
-				throw InternalException("%s can't be transformed to Arrow Scan Pushdown Filter",
-				                        filter.ToString(column_name));
+				throw InternalException("Comparison on column %s can't be transformed to Arrow Scan Pushdown Filter",
+				                        column_name);
 			}
 		}
-		case TableFilterType::IS_NULL: {
+		case TableFilterType::LEGACY_IS_NULL: {
 			return CreateExpression(functions, "is_null", column_name_expr);
 		}
-		case TableFilterType::IS_NOT_NULL: {
+		case TableFilterType::LEGACY_IS_NOT_NULL: {
 			cpp11::sexp is_null_expr = CreateExpression(functions, "is_null", column_name_expr);
 			return CreateExpression(functions, "invert", is_null_expr);
 		}
-		case TableFilterType::CONJUNCTION_AND: {
-			auto &and_filter = (ConjunctionAndFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_AND: {
+			auto &and_filter = (LegacyConjunctionFilter &)filter;
 			return TransformChildFilters(functions, column_name, "and_kleene", and_filter.child_filters,
 			                             timezone_config);
 		}
-		case TableFilterType::CONJUNCTION_OR: {
-			auto &and_filter = (ConjunctionAndFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_OR: {
+			auto &and_filter = (LegacyConjunctionFilter &)filter;
 			return TransformChildFilters(functions, column_name, "or_kleene", and_filter.child_filters,
 			                             timezone_config);
 		}
 
 		default:
-			throw NotImplementedException("Arrow table filter pushdown %s not supported yet",
-			                              filter.ToString(column_name));
+			throw NotImplementedException("Arrow table filter pushdown on column %s not supported yet", column_name);
 		}
 	}
 
