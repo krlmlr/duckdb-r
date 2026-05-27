@@ -2,6 +2,8 @@
 
 #include "extension/parquet/writer/decimal_column_writer.cpp"
 
+#include "extension/parquet/writer/variant_column_writer.cpp"
+
 #include "extension/parquet/writer/list_column_writer.cpp"
 
 #include "extension/parquet/writer/array_column_writer.cpp"
