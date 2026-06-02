@@ -203,7 +203,7 @@ private:
 			if (!ref_side || !const_side) {
 				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
 			}
-			Value const_value = const_side->Cast<BoundConstantExpression>().value;
+			Value const_value = const_side->Cast<BoundConstantExpression>().GetValue();
 			cpp11::sexp constant_sexp = RApiTypes::ValueToSexp(const_value, timezone_config);
 			cpp11::sexp constant_expr = CreateScalar(functions, constant_sexp);
 			switch (comparison_type) {
@@ -226,10 +226,11 @@ private:
 		if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
 			auto &conj = expr.Cast<BoundConjunctionExpression>();
 			const char *op = expr.GetExpressionType() == ExpressionType::CONJUNCTION_AND ? "and_kleene" : "or_kleene";
-			auto cit = conj.children.begin();
+			auto &conj_children = conj.GetChildren();
+			auto cit = conj_children.begin();
 			cpp11::sexp acc = TransformExpression(**cit, column_name_expr, functions, timezone_config);
 			++cit;
-			for (; cit != conj.children.end(); ++cit) {
+			for (; cit != conj_children.end(); ++cit) {
 				cpp11::sexp rhs = TransformExpression(**cit, column_name_expr, functions, timezone_config);
 				acc = CreateExpression(functions, op, acc, rhs);
 			}
