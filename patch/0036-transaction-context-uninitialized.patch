@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Initialize TransactionContext invalidation policy
+
+Valgrind reports "conditional jump or move depends on uninitialised
+value(s)" in ClientContext::ErrorInvalidatesTransaction because
+TransactionContext::invalidation_policy is never initialized: the
+constructor's initializer list only sets context, auto_commit and
+current_transaction, leaving invalidation_policy (and auto_rollback)
+with indeterminate values. GetInvalidationPolicy() then reads the
+uninitialized member, and the taint propagates through Prepare,
+TryBindRelation and ExecuteTaskInternal.
+
+Give both members default initializers matching the defaults used by
+the TransactionInfo constructor.
+
+See https://www.stats.ox.ac.uk/pub/bdr/memtests/valgrind/duckdb/
+---
+ .../duckdb/transaction/transaction_context.hpp           | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/duckdb/src/include/duckdb/transaction/transaction_context.hpp b/src/duckdb/src/include/duckdb/transaction/transaction_context.hpp
+--- a/src/duckdb/src/include/duckdb/transaction/transaction_context.hpp
++++ b/src/duckdb/src/include/duckdb/transaction/transaction_context.hpp
+@@ -72,8 +72,8 @@ public:
+ private:
+ 	ClientContext &context;
+ 	bool auto_commit;
+-	TransactionInvalidationPolicy invalidation_policy;
+-	bool auto_rollback;
++	TransactionInvalidationPolicy invalidation_policy = TransactionInvalidationPolicy::STANDARD_POLICY;
++	bool auto_rollback = false;
+
+ 	unique_ptr<MetaTransaction> current_transaction;
+
+--
+2.52.0
