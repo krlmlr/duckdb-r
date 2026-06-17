@@ -6,7 +6,7 @@ test_that("long-running queries can be cancelled", {
   skip_on_cran()
 
   r_session <- callr::r_session$new()
-  pkg <- simulate_duckdb()$pkg
+  pkg <- get_package_name()
 
   r_session$run(function(pkg) {
     .GlobalEnv$con <- DBI::dbConnect(asNamespace(pkg)$duckdb())

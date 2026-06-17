@@ -2,7 +2,7 @@ test_that("disconnect releases database file", {
   skip_if_not(TEST_RE2)
 
   db_path <- withr::local_tempfile(fileext = ".duckdb")
-  pkg <- simulate_duckdb()$pkg
+  pkg <- get_package_name()
 
   session_1 <- callr::r_session$new()
   withr::defer(session_1$kill())

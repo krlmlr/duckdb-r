@@ -2,7 +2,7 @@ test_that("read_only flag and shutdown works as expected", {
   skip_if_not(TEST_RE2)
 
   dbdir <- tempfile()
-  pkg <- simulate_duckdb()$pkg
+  pkg <- get_package_name()
 
   # 1st: create a db and write some tables
 
