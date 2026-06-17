@@ -532,7 +532,7 @@ tbl_query <- function(src, query, ...) {
 #' @rdname backend-duckdb
 simulate_duckdb <- function(...) {
   structure(
-    list(package = get_package_name(), env = get_package_env()),
+    list(pkg = get_package_name(), env = get_package_env()),
     ...,
     class = c("duckdb_connection", "TestConnection", "DBIConnection")
   )
