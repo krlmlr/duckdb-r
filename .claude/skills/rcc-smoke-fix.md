@@ -1,18 +1,29 @@
 Scheduled job: scan all `*-dev` branches (including `broken-*-dev`) in
 `krlmlr/duckdb-r` for the earliest commit whose `rcc`
 commit-status (set by the "Smoke test: stock R" job in the `rcc` workflow) is
-`failure` since 2026-04-11. For each such branch, if no `broken-<sha>-dev`
-branch exists yet (full 40-char SHA), create it, fix `testthat::test_local()` and
+`failure` since 2026-04-11. For each such branch, if no
+`broken-<flavor>-<sha>-dev` branch exists yet (full 40-char SHA), create it,
+fix `testthat::test_local()` and
 `rcmdcheck::rcmdcheck()`, update snapshots, then cherry-pick all later commits from
 the `*-dev` branch and push.
 
-`broken-*-dev` branches are NOT terminal: a `broken-<X>-dev` branch is itself
-a `*-dev` branch and is scanned the same way. Its existence means only that
-`<X>` on the parent `*-dev` was repaired at one point — every later
-cherry-picked commit on `broken-<X>-dev` is still subject to `rcc` and can
-re-break. When a new failure appears in the cherry-picked region of
-`broken-<X>-dev`, derive a fresh `broken-<newsha>-dev` from that failing
-commit. The "skip if `broken-<sha>-dev` exists" check applies to the failing
+**Branch naming carries provenance.** A fix branch is named
+`broken-<flavor>-<sha>-dev`, where `<flavor>` identifies the upstream DuckDB
+line the failing commit came from: `main` for `main-dev`, `1.5` for
+`v1.5-variegata-dev`, `1.4` for `v1.4-andium-dev`, and so on. The flavor is
+derived from the branch being scanned (see Step 3) so that the fix branch name
+alone makes its origin obvious. (Legacy fix branches predating this convention
+were named `broken-<sha>-dev` without a flavor segment; rename them to the
+flavored form.)
+
+`broken-*-dev` branches are NOT terminal: a `broken-<flavor>-<X>-dev` branch is
+itself a `*-dev` branch and is scanned the same way. Its existence means only
+that `<X>` on the parent `*-dev` was repaired at one point — every later
+cherry-picked commit on `broken-<flavor>-<X>-dev` is still subject to `rcc` and
+can re-break. When a new failure appears in the cherry-picked region of
+`broken-<flavor>-<X>-dev`, derive a fresh `broken-<flavor>-<newsha>-dev` from
+that failing commit (the flavor is inherited from the scanned branch). The
+"skip if `broken-<flavor>-<sha>-dev` exists" check applies to the failing
 SHA, not to the branch being scanned.
 
 Cherry-pick conflicts are not
@@ -34,8 +45,8 @@ Why this skill exists.
   `v1.4-andium-dev`). A vendor commit can break R-side glue (`src/*.cpp`,
   `src/include/`), R code (`R/`), or test snapshots
   (`tests/testthat/_snaps/`). We do not rewrite the upstream vendor commit;
-  instead we author a parallel `broken-<sha>-dev` branch whose first commit
-  is an **amended replacement** of the failing `<sha>` (same parent;
+  instead we author a parallel `broken-<flavor>-<sha>-dev` branch whose first
+  commit is an **amended replacement** of the failing `<sha>` (same parent;
   original vendor message kept verbatim and a short R-side fix note
   appended; vendor diff plus R-side fix folded in). All later commits from
   the original `*-dev` branch are then cherry-picked on top. The result is
@@ -53,9 +64,10 @@ End-to-end workflow.
   3. For each `*-dev` branch, walk first-parent history oldest-first since
      SINCE and look up each commit's `rcc` commit-status until the earliest
      `failure` is found. Skip the branch if no failure exists or if the
-     corresponding `broken-<sha>-dev` is already published.
+     corresponding `broken-<flavor>-<sha>-dev` is already published.
   4. For every (branch, sha) pair that needs work:
-     a. Check out `<sha>` on a new local branch `broken-<sha>-dev`.
+     a. Derive `<flavor>` from the scanned branch, then check out `<sha>` on a
+        new local branch `broken-<flavor>-<sha>-dev`.
      b. Reproduce the breakage locally — install the package
         (`_R_SHLIB_STRIP_=true R CMD INSTALL .`, with `MAKEFLAGS=-j$(nproc)`
         for parallel build), run `testthat::test_local()`, then
@@ -91,7 +103,7 @@ End-to-end workflow.
         move on to the next pair.
 
 
-     f. Push `broken-<sha>-dev` to `krlmlr` with `--force-with-lease`
+     f. Push `broken-<flavor>-<sha>-dev` to `krlmlr` with `--force-with-lease`
         and move on to the next pair.
 
 Environment assumptions (current).
@@ -156,7 +168,41 @@ echo "=== Broken branches (existing) ===" && echo "$BROKEN_BRANCHES"
 
 ## Step 3 — For each `*-dev` branch, find the earliest failing commit
 
-Iterate over every entry in `$DEV_BRANCHES`. For each `$BRANCH`:
+Iterate over every entry in `$DEV_BRANCHES`. For each `$BRANCH`, first derive
+its `<flavor>` — the upstream DuckDB line that the fix branch name will carry.
+The flavor comes straight from the branch name, so a fix branch derived from
+`v1.5-variegata-dev` is `broken-1.5-<sha>-dev`, one from `main-dev` is
+`broken-main-<sha>-dev`, and a re-scan of an existing `broken-<flavor>-<sha>-dev`
+inherits the same `<flavor>`:
+
+```bash
+# main-dev                -> main
+# vX.Y-<codename>-dev      -> X.Y
+# broken-<flavor>-<sha>-dev -> <flavor>   (inherited on re-scan)
+derive_flavor() {
+  local branch="$1"
+  case "$branch" in
+    main-dev)
+      echo "main" ;;
+    broken-*-dev)
+      local rest="${branch#broken-}"   # <flavor>-<sha>-dev  or  <sha>-dev (legacy)
+      local first="${rest%%-*}"
+      if [[ "$first" =~ ^[0-9a-f]{40}$ ]]; then
+        # Legacy broken-<sha>-dev: no flavor segment, provenance unknown.
+        echo "ERROR: legacy unflavored branch $branch — rename it to broken-<flavor>-<sha>-dev" >&2
+        return 1
+      fi
+      echo "$first" ;;
+    v*-dev)
+      local v="${branch#v}"            # X.Y-<codename>-dev
+      echo "${v%%-*}" ;;               # X.Y
+    *)
+      echo "${branch%-dev}" ;;
+  esac
+}
+
+FLAVOR=$(derive_flavor "$BRANCH") || continue
+```
 
 ```bash
 SINCE="2026-04-11"
@@ -233,23 +279,23 @@ done <<< "$COMMITS_OLDEST_FIRST"
 # before reaching an earlier failure that still has no fix branch.
 if [[ -z "$FIRST_FAIL" ]]; then
   echo "$BRANCH: no rcc failure — skip"
-elif echo "$BROKEN_BRANCHES" | grep -qxF "broken-${FIRST_FAIL}-dev"; then
-  echo "$BRANCH: broken-${FIRST_FAIL}-dev already exists — skip"
+elif echo "$BROKEN_BRANCHES" | grep -qxF "broken-${FLAVOR}-${FIRST_FAIL}-dev"; then
+  echo "$BRANCH: broken-${FLAVOR}-${FIRST_FAIL}-dev already exists — skip"
 else
-  echo "NEEDS_FIX  $BRANCH  $FIRST_FAIL"
+  echo "NEEDS_FIX  $BRANCH  $FLAVOR  $FIRST_FAIL"
 fi
 ```
 
-Collect all `NEEDS_FIX  <branch>  <sha>` lines. Process them in order.
+Collect all `NEEDS_FIX  <branch>  <flavor>  <sha>` lines. Process them in order.
 
 ## Step 4 — Create, fix, and push a `broken-*` branch
 
-Repeat for each `NEEDS_FIX` pair `($BRANCH, $SHA)`:
+Repeat for each `NEEDS_FIX` triple `($BRANCH, $FLAVOR, $SHA)`:
 
 ### 4a. Check out the failing commit on the new fix branch
 
 ```bash
-FIX_BRANCH="broken-${SHA}-dev"
+FIX_BRANCH="broken-${FLAVOR}-${SHA}-dev"
 git checkout -B "$FIX_BRANCH" "$SHA"
 ```
 
@@ -441,7 +487,7 @@ Re-run `R CMD INSTALL` after formatting.
 ### 4f. Fold the fix into the failing commit (amend)
 
 The fix must be **amended into the failing commit itself**, so the tip of
-`broken-<sha>-dev` is a single-commit-deep replacement of `<sha>` (same
+`broken-<flavor>-<sha>-dev` is a single-commit-deep replacement of `<sha>` (same
 parent, vendor diff + R-side fix) rather than a two-commit chain.
 Cherry-picks then layer cleanly on top, and the branch keeps a
 continuous "vendor + repair" history without an explicit "fix" commit.
@@ -472,7 +518,7 @@ R-side fix
 <DETAILS>"
 ```
 
-This rewrites the local `broken-<sha>-dev` HEAD only — the original
+This rewrites the local `broken-<flavor>-<sha>-dev` HEAD only — the original
 `<sha>` on `krlmlr/main-dev` (or whichever upstream) is untouched, so the
 "never amend pushed commits" rule still holds: the amend produces a new
 commit on a new, never-before-pushed branch.
@@ -529,9 +575,9 @@ Return to Step 3 / Step 4 for the next `NEEDS_FIX` entry.
 When all are processed, report a summary:
 
 ```text
-Fixed: broken-<sha40>-dev (from main-dev,           cherry-picked N commits)
-Fixed: broken-<sha40>-dev (from v1.5-variegata-dev, cherry-picked M commits)
-Skipped (already fixed): broken-<sha40>-dev exists
+Fixed: broken-main-<sha40>-dev (from main-dev,           cherry-picked N commits)
+Fixed: broken-1.5-<sha40>-dev  (from v1.5-variegata-dev, cherry-picked M commits)
+Skipped (already fixed): broken-1.4-<sha40>-dev exists
 No failure found: v1.4-andium-dev
 ```
 
@@ -553,14 +599,15 @@ No failure found: v1.4-andium-dev
   similar. Add a `patch/` file that fixes the underlying issue (see
   `AGENTS.md`). CRAN rejects packages that silence warnings.
 - **Never** amend commits that have already been pushed. Step 4f amends
-  the failing `<sha>` only on the freshly-created local `broken-<sha>-dev`
-  branch (which has not been pushed); the original `<sha>` on the upstream
-  `*-dev` branch is left alone.
+  the failing `<sha>` only on the freshly-created local
+  `broken-<flavor>-<sha>-dev` branch (which has not been pushed); the original
+  `<sha>` on the upstream `*-dev` branch is left alone.
 - **Commit status to check**: context `rcc` (not the full check-run name).
 - **Branch target**: all pushes go to the `krlmlr` remote
-  (`krlmlr/duckdb-r`) to a branch named `broken-<sha>-dev` (full 40-char
-  SHA). The `-dev` suffix is required so `each.yaml` triggers per-commit
-  CI on the new branch.
+  (`krlmlr/duckdb-r`) to a branch named `broken-<flavor>-<sha>-dev` (full
+  40-char SHA), where `<flavor>` is derived from the scanned branch (`main`,
+  `1.5`, `1.4`, …) to make the fix branch's provenance obvious. The `-dev`
+  suffix is required so `each.yaml` triggers per-commit CI on the new branch.
 - **Branch scope**: only branches matching `\-dev$`.
 - Branches being force-pushed to: always use the freshly-fetched
   `krlmlr/*` ref; never rely on any previously-checked-out state.
