@@ -25,7 +25,7 @@ Skip a branch when:
     (no commits remain after the matching vendor commit).
 
 Cherry-pick conflicts are not expected here: the carried commits are
-overwhelmingly vendor snapshots that apply cleanly by construction. If one does
+exclusively vendor snapshots that apply cleanly by construction. If one does
 conflict, **abort and report** — do not resolve or `--skip`. A conflict means
 the upstream `*-dev` line diverged from the broken line in a way this mechanical
 catch-up cannot safely reconcile; hand it to a human / `rcc-smoke-fix.md`.
@@ -65,7 +65,7 @@ The matching rule (the crux).
   reachable from any current `*-dev` branch.
 
 End-to-end workflow.
-  1. Refresh `krlmlr/*` remote-tracking refs from scratch (dev branches are
+  1. Refresh `origin/*` remote-tracking refs from scratch (dev branches are
      force-pushed; cached state is suspect).
   2. Enumerate non-broken `*-dev` branches and `broken-*-dev` branches.
   3. For each `broken-*-dev` branch, gate on tip `rcc` == success, on
@@ -84,41 +84,43 @@ Why a bounded batch.
   stops being green and this skill steps aside on the next run.
 
 Environment assumptions (current).
-  * R 4.x and standard tooling (git, `jq`, optionally `gh`) are pre-installed.
-    This skill does NOT build the package — it is purely a git/CI operation.
+  * Runs in an environment like the local checkout: `origin` already points at
+    `krlmlr/duckdb-r`. Use `origin` directly — do not add or assume any other
+    remote.
+  * Standard tooling (git, `jq`) is pre-installed. This skill does NOT build the
+    package — it is purely a git/CI operation.
   * GitHub Actions results are available on the **orphan branch `rcc`** in
-    `krlmlr/duckdb-r` (no token required): `runs2.ndjson` holds one
+    `origin` (no token required): `runs2.ndjson` holds one
     `{commit, status, run}` record per line keyed by commit SHA. Use it for the
-    tip `rcc`-status gate, exactly as `rcc-smoke-fix.md` does. Fall back to `gh`
-    only when a SHA is absent and `gh auth status` succeeds; a GitHub MCP tool
-    may be used when the agent provides one.
+    tip `rcc`-status gate, exactly as `rcc-smoke-fix.md` does. There is NO `gh`
+    fallback — it does not work in this environment. When a commit's status
+    cannot be read from the index, treat it as unknown and skip the branch.
 -->
 
 ---
 
-## Step 1 — Refresh local mirror of krlmlr/duckdb-r (always, force-reset)
+## Step 1 — Refresh remote-tracking refs (always, force-reset)
+
+`origin` already points at `krlmlr/duckdb-r` in this environment; use it
+directly. Dev branches are force-pushed, so hard-reset cached state.
 
 ```bash
-if ! git remote get-url krlmlr &>/dev/null 2>&1; then
-  git remote add krlmlr https://github.com/krlmlr/duckdb-r.git
-fi
-# Hard-reset: throw away any cached remote-tracking state
-git fetch krlmlr --force --prune --tags
+git fetch origin --force --prune --tags
 ```
 
 ## Step 2 — Enumerate non-broken `*-dev` and `broken-*-dev` branches
 
 ```bash
-# Non-broken parents: every krlmlr branch ending in -dev that is NOT broken-*.
+# Non-broken parents: every origin branch ending in -dev that is NOT broken-*.
 NONBROKEN_DEV=$(git branch -r \
-  | grep -oP 'krlmlr/\K\S+' \
+  | grep -oP 'origin/\K\S+' \
   | grep -E '\-dev$' \
   | grep -vE '^broken-' \
   | sort)
 
 # The branches this skill advances.
 BROKEN_DEV=$(git branch -r \
-  | grep -oP 'krlmlr/\K\S+' \
+  | grep -oP 'origin/\K\S+' \
   | grep -E '^broken-.*-dev$' \
   | sort)
 
@@ -129,27 +131,19 @@ echo "=== broken-*-dev ==="      && echo "$BROKEN_DEV"
 ## Step 3 — `rcc`-status helper (shared with `rcc-smoke-fix.md`)
 
 Cache the orphan-branch run index once; look up a commit's `rcc` conclusion
-from it, falling back to `gh` only when the SHA is absent and `gh` is
-authenticated. Do not use `curl` or inspect environment variables.
+from it. There is **no `gh` fallback** — when the SHA is absent from the index
+the status is unknown and the branch is skipped (see Step 4a).
 
 ```bash
-git fetch krlmlr rcc
-RCC_NDJSON=$(git show krlmlr/rcc:runs2.ndjson 2>/dev/null || true)
-GH_OK=0; gh auth status &>/dev/null && GH_OK=1
-REPO="krlmlr/duckdb-r"
+git fetch origin rcc
+RCC_NDJSON=$(git show origin/rcc:runs2.ndjson 2>/dev/null || true)
 
 lookup_rcc_status() {
   local sha="$1" conclusion
   conclusion=$(jq -r --arg sha "$sha" \
     'select(.commit == $sha) | .run.conclusion // empty' \
     <<< "$RCC_NDJSON" | head -1)
-  [[ -n "$conclusion" ]] && { echo "$conclusion"; return; }
-  if [[ "$GH_OK" == "1" ]]; then
-    gh api "repos/$REPO/commits/$sha/statuses" \
-      | jq -r '[.[] | select(.context == "rcc")] | first | .state // "none"'
-  else
-    echo "none"
-  fi
+  echo "${conclusion:-none}"   # "none" => unknown => skip in doubt
 }
 ```
 
@@ -163,9 +157,11 @@ BATCH=30
 SUMMARY=()
 
 for B in $BROKEN_DEV; do
-  H=$(git rev-parse "krlmlr/$B")          # broken-branch tip
+  H=$(git rev-parse "origin/$B")          # broken-branch tip
 
-  # 4a. Gate: the tip must be green on rcc. Failing/pending => rcc-smoke-fix's job.
+  # 4a. Gate: the tip must be green on rcc. Anything else — failing, pending, or
+  #     unknown ("none", absent from the index) — is skipped (skip in doubt).
+  #     Failing/pending tips are rcc-smoke-fix's job.
   STATUS=$(lookup_rcc_status "$H")
   if [[ "$STATUS" != "success" ]]; then
     SUMMARY+=("skip  $B  (tip rcc=$STATUS)"); continue
@@ -175,7 +171,7 @@ for B in $BROKEN_DEV; do
   #     (it was promoted upstream — nothing to advance).
   contained=""
   for D in $NONBROKEN_DEV; do
-    if git merge-base --is-ancestor "$H" "krlmlr/$D"; then contained="$D"; break; fi
+    if git merge-base --is-ancestor "$H" "origin/$D"; then contained="$D"; break; fi
   done
   if [[ -n "$contained" ]]; then
     SUMMARY+=("skip  $B  (already contained in $contained)"); continue
@@ -196,7 +192,7 @@ for B in $BROKEN_DEV; do
   #     one matches, stop and report rather than guess.
   MATCH_BRANCH=""; MATCH_VENDOR=""; n_match=0
   for D in $NONBROKEN_DEV; do
-    V=$(git log "krlmlr/$D" -1 --format=%H --grep="duckdb/duckdb@$DUCK")
+    V=$(git log "origin/$D" -1 --format=%H --grep="duckdb/duckdb@$DUCK")
     if [[ -n "$V" ]]; then MATCH_BRANCH="$D"; MATCH_VENDOR="$V"; n_match=$((n_match+1)); fi
   done
   if [[ "$n_match" -eq 0 ]]; then
@@ -208,14 +204,14 @@ for B in $BROKEN_DEV; do
   # 4e. The next BATCH commits after the mirror point V on the parent line,
   #     oldest-first, first-parent only.
   mapfile -t NEXT < <(git rev-list --reverse --first-parent \
-                        "$MATCH_VENDOR..krlmlr/$MATCH_BRANCH" | head -n "$BATCH")
+                        "$MATCH_VENDOR..origin/$MATCH_BRANCH" | head -n "$BATCH")
   if [[ "${#NEXT[@]}" -eq 0 ]]; then
     SUMMARY+=("skip  $B  (up to date with $MATCH_BRANCH)"); continue
   fi
 
   echo "=== $B: advancing from $MATCH_BRANCH, ${#NEXT[@]} commits (tip vendors duckdb@${DUCK:0:10}) ==="
   git --no-pager log --format='  %h %s' -n "${#NEXT[@]}" --reverse \
-      "$MATCH_VENDOR..krlmlr/$MATCH_BRANCH" 2>/dev/null | head -n "${#NEXT[@]}"
+      "$MATCH_VENDOR..origin/$MATCH_BRANCH" 2>/dev/null | head -n "${#NEXT[@]}"
 
   # 4f. Dry-run in a DETACHED HEAD: the commits must apply cleanly before
   #     anything is published.
@@ -226,7 +222,7 @@ for B in $BROKEN_DEV; do
     #     The carried commits are new (re-vendored on the broken line), layered
     #     on top of H, so this is a fast-forward of B.
     git branch -f "$B" "$NEWTIP"
-    git push krlmlr "$B" --force-with-lease
+    git push origin "$B" --force-with-lease
     SUMMARY+=("advanced  $B  (+${#NEXT[@]} from $MATCH_BRANCH -> ${NEWTIP:0:10})")
   else
     git cherry-pick --abort
@@ -254,8 +250,9 @@ ABORT     broken-<sha40>-dev  (cherry-pick conflict — hand to rcc-smoke-fix / 
 ## Constraints (hard rules)
 
 - **Only advance green branches.** The tip's `rcc` commit-status (context
-  `rcc`, not the full check-run name) must be `success`. Failing or pending
-  tips belong to `rcc-smoke-fix.md`.
+  `rcc`, not the full check-run name) must be `success`. Failing, pending, or
+  unknown tips are skipped — failing/pending belong to `rcc-smoke-fix.md`, and
+  unknown (absent from the `rcc` index) means skip in doubt.
 - **Match by vendored commit, never by name or distance.** The corresponding
   `*-dev` branch is the one whose history vendors the same `duckdb/duckdb@<sha>`
   the broken tip vendors. Do not use the SHA embedded in the branch name, and
@@ -272,12 +269,13 @@ ABORT     broken-<sha40>-dev  (cherry-pick conflict — hand to rcc-smoke-fix / 
   run `R CMD INSTALL`, touch `src/duckdb/`, `inst/include/cpp11*`, `patch/`,
   flavor files, or any tracked source — all changes come solely from
   cherry-picked parent commits.
-- **Branch target & suffix.** Push to the `krlmlr` remote, to the same
-  `broken-<sha>-dev` branch (`--force-with-lease`). The `-dev` suffix is
-  required so `each.yaml` runs per-commit CI on the newly pushed commits.
-- **Always use freshly-fetched `krlmlr/*` refs;** never rely on previously
+- **Branch target & suffix.** Push to `origin` (which points at
+  `krlmlr/duckdb-r` in this environment), to the same `broken-<sha>-dev` branch
+  (`--force-with-lease`). The `-dev` suffix is required so `each.yaml` runs
+  per-commit CI on the newly pushed commits.
+- **Always use freshly-fetched `origin/*` refs;** never rely on previously
   checked-out state.
-- **Tooling.** Prefer the `rcc` orphan branch (`runs2.ndjson`) for status — no
-  auth needed. Fall back to `gh` only when a SHA is absent and `gh auth status`
-  succeeds; a GitHub MCP tool may be used when provided. Do not use `curl` or
-  inspect environment variables for authentication.
+- **Tooling.** Read `rcc` status only from the `rcc` orphan branch
+  (`runs2.ndjson`) — no auth needed. There is **no `gh` fallback** (it does not
+  work here); a SHA absent from the index is unknown and the branch is skipped.
+  Do not use `curl` or inspect environment variables for authentication.
