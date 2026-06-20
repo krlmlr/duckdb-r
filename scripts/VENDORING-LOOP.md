@@ -63,6 +63,13 @@ three repair skills in `.claude/skills/`.
   working unchanged.
 - **Bounded work.** Normal batches are ≤25 commits. The bleeding edge may run
   at most **25 commits ahead of its first failing build**, capping repair debt.
+- **Every glue tweak is auditable after the fact.** Any change Claude folds into
+  the history (glue `src/*.cpp` / `src/include/`, `R/`, snapshots, `patch/`)
+  must be recoverable and reviewable as an isolated delta — without trusting a
+  commit message. Because vendoring is deterministic, the *residual* between the
+  re-vendored pristine tree and what was committed *is* exactly the tweak; an
+  agentic review surface (primitive **E**, §3.4) turns that into a sign-off
+  workflow with tool assistance.
 
 ---
 
@@ -202,6 +209,25 @@ When the frontier is red, Claude repairs it **directly on `*-dev`**, not on a
 This is the "fix by amending/squashing the failing run and **not replaying the
 rest**" model. See §6 for the hybrid transition away from `broken-<sha>-dev`.
 
+**Reviewability of the fold.** Amending keeps history bisectable and the vendor
+markers intact, but it must not hide the R-side edit. Two guarantees make every
+folded tweak auditable after the fact:
+
+1. **Structured trailer.** The amended commit keeps the upstream vendor message
+   verbatim and appends a machine-greppable trailer block — at minimum a
+   `Glue-tweak:` line classifying the change (e.g. `api-rename`, `snapshot`,
+   `warning-fix`, `patch-refresh`) plus the short rationale already required by
+   `rcc-smoke-fix.md`. This lets the review surface enumerate touched commits in
+   one pass.
+2. **Deterministic residual.** The review surface (primitive **E**) recomputes
+   the pristine vendor tree for the commit and diffs it against what was
+   committed; the residual is the tweak, independent of the trailer. The trailer
+   is for discovery and intent; the residual is the source of truth.
+
+C++ core fixes belong in `patch/` (already discrete, reviewable files); only
+glue/`R/`/snapshot edits live as residuals — and those are exactly what the
+review surface isolates.
+
 ### 3.3 The loop / orchestration
 
 Each iteration (driven by Claude, or by a chained set of GHA triggers):
@@ -221,6 +247,48 @@ The loop terminates an iteration when `*-green == *-dev` (fully caught up) or
 when the bound is hit and the frontier still needs human/Claude attention.
 Ground truth is *always* re-read from GHA between steps; Claude never advances
 `*-green` on the strength of a local build.
+
+### 3.4 E. Review primitive — glue-tweak audit *(NEW: `scripts/glue-tweaks.sh` + `.github/workflows/glue-review.yaml`)*
+
+A standing requirement: **every tweak Claude folds into the glue code must be
+reviewable after the fact**, agentically and with tool assistance — not by
+re-reading giant vendor diffs by hand. This primitive is the review surface.
+
+**Extraction (deterministic, tool-assisted).** For any commit (or range) on
+`*-dev`, `scripts/glue-tweaks.sh`:
+
+1. Reads the commit's `duckdb/duckdb@<sha>` marker and the patch stack as of
+   that commit.
+2. Re-runs the vendor (`vendor-one.sh` against that exact upstream `<sha>` +
+   `patch/`) into a scratch tree to reconstruct the **pristine** vendored state
+   the commit *should* have, mechanically.
+3. Diffs pristine vs. committed. The **residual** — confined to glue
+   (`src/*.cpp`, `src/include/`), `R/`, `tests/`, snapshots, and any
+   non-mechanical `patch/` change — is *exactly* the human/agent tweak.
+4. Emits per-commit tweak patches and an aggregate "all glue tweaks since
+   `<ref>`" diff. `patch/` changes are already discrete files and are listed
+   alongside.
+
+Because step 2 is deterministic, this needs **zero extra bookkeeping**: a clean
+vendor commit yields an empty residual; a repaired one yields precisely its
+fix. The `Glue-tweak:` trailer (§3.2 D) is only an index to find candidates
+fast — the residual is authoritative.
+
+**Agentic review loop.** `glue-review.yaml` runs the extraction over the range
+since the last reviewed point (a `*-reviewed` marker ref, advanced on sign-off),
+and hands the residuals to a Claude review task that:
+
+- classifies each tweak (API rename, behavioural snapshot change, warning fix,
+  patch refresh, test adaptation),
+- flags anything that changes R-visible behaviour or weakens a test
+  (cross-checking against the priority order in `rcc-smoke-fix.md`),
+- posts a digest (PR comment / issue / summary) for human sign-off, and
+- on approval, advances the `*-reviewed` marker.
+
+This decouples *correctness* (the `rcc` green gate, which lets promotion
+proceed) from *review* (human accountability for R-side edits): promotion does
+not block on review, but no glue tweak escapes the audit trail. The review
+marker can trail `*-green` without holding up publication.
 
 ---
 
@@ -278,6 +346,7 @@ S3 secondary storage. See §8 Q1.
 | B Build | dispatch range + wait, read `rcc` branch | cron (replaces each + harvest) | `workflow_call` after vendor; `repository_dispatch` |
 | C Promote | dispatch + read tip | cron (frequent, cheap) | `workflow_call` after build |
 | D Repair | Claude does the work | n/a (needs Claude) | triggered by a "frontier red" signal (status / issue / `repository_dispatch`) |
+| E Review | Claude reviews residuals, advances `*-reviewed` on approval | cron extracts + opens a digest | `workflow_call` after promotion; `repository_dispatch` |
 
 Each primitive reads its inputs from ground truth (git refs + `rcc` branch) and
 writes only its own outputs, so any subset can run in any order without a shared
@@ -326,6 +395,8 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | r-universe build of `*-green` still fails despite green `rcc` | `rcc` smoke test must be a faithful subset of the r-universe build env; add an r-universe-parity check to the smoke job before cut-over |
 | Promotion advances over a *transiently* green commit | promote only on `success`; self-heal handling (squash/transient) runs in repair before promotion |
 | Bound (≤25) too tight/loose | make it a workflow input / repo variable; default 25 |
+| Folding a fix into a vendor commit hides the R-side tweak from review | deterministic residual extraction (primitive E) reconstructs the pristine vendor tree and isolates the tweak; `Glue-tweak:` trailer indexes candidates |
+| Residual extraction drifts if the patch stack changed between commits | extraction always uses the patch stack *as of that commit*; CI asserts a clean vendor commit produces an empty residual (regression guard) |
 
 ---
 
@@ -344,6 +415,13 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
    status, or `repository_dispatch` to wake a Claude session?
 6. **Bound semantics:** is the ≤25 measured in commits, or should tagged
    upstream releases always be allowed through regardless of distance?
+7. **Review marker & cadence:** one `*-reviewed` marker per line vs. a single
+   global ledger; review per-promotion, daily, or on demand. May the
+   `*-reviewed` marker lag arbitrarily behind `*-green`, or should a maximum
+   review backlog raise an alert?
+8. **Tweak-trailer schema:** exact `Glue-tweak:` field set and whether to also
+   emit the residual into a tracked ledger (e.g. `review/tweaks/<sha>.patch`)
+   for offline/diff-tool review, or compute it on demand only.
 
 ---
 
@@ -360,6 +438,10 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 5. Create `*-green` branches; document the model in `BRANCHES.md` and
    `scripts/VENDORING.md`.
 6. Parallel-run validation harness comparing new vs old markers byte-for-byte.
+7. `scripts/glue-tweaks.sh` — deterministic residual extractor (re-vendor +
+   diff), with a CI assertion that pristine vendor commits yield empty
+   residuals. Pairs with `glue-review.yaml` and the `*-reviewed` marker for the
+   agentic glue-tweak audit (primitive E).
 
 Items (1)–(2) are the smallest useful slice and have no dependency on the matrix
 work, so they can land first and be exercised against today's `rcc` markers.
