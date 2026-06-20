@@ -367,6 +367,32 @@ proceed) from *review* (human accountability for R-side edits): promotion does
 not block on review, but no glue tweak escapes the audit trail. The review
 marker can trail `*-green` without holding up publication.
 
+### 3.5 (Optional) `*-vendor` — a derived pure-vendoring branch
+
+The path filter (§3.4) cannot see a stray edit *inside* `src/duckdb/`. To make
+both that integrity check **and** the review baseline a cheap `git diff` with a
+stable compare URL — no rebuild — optionally maintain a **derived `*-vendor`
+branch**: one commit per vendored `duckdb/duckdb@<sha>`, equal to `vendor-one.sh`
+output + patch stack, with **no R-side fix folded in**. It is a *purely derived,
+idempotent artifact* (like the `rcc` branch), regenerable from scratch anytime;
+the invariant is **`*-dev ≡ *-vendor + repairs`**.
+
+Then, matched by the `duckdb@<sha>` marker:
+
+- `*-vendor..*-dev` (vendored paths) — any non-`patch/` difference = a stray
+  hand-edit (the continuous integrity guard).
+- `*-vendor..*-dev` (everything) — the *complete* human contribution, including
+  any inside-vendored deviation the path filter would miss; a superset of the
+  §3.4 review surface.
+
+**Worth it?** In the common case `*-vendor` is identical to `*-dev` except at the
+handful of repaired commits, so its marginal value over "path-filtered residual
++ a periodic re-vendor guard" is small, at the cost of a second branch kept in
+lockstep and regenerated each cycle. Recommendation: **start without it** (cheap
+confinement guard + amortized determinism guard on the green tip), and add
+`*-vendor` only if continuous cheap comparison or a human-facing compare URL is
+wanted. See §8 Q9.
+
 ---
 
 ## 4. Compute model & sharding (measured)
@@ -522,7 +548,8 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | Promotion advances over a *transiently* green commit | ruled out by construction: promotion only fast-forwards the **contiguous** green prefix and stops at the first red (§3.2 C). A transiently-green commit lies *beyond* a red one, so it is unreachable — promotion can never cross the frontier to reach it |
 | Bound (≤25) too tight/loose | make it a workflow input / repo variable; default 25 |
 | Folding a fix into a vendor commit hides the R-side tweak from review | path-filtered diff (primitive E) isolates everything outside the vendored path set; `Glue-tweak:` trailer indexes candidates |
-| A stray edit slips *into* a vendored path (`src/duckdb/` by hand) | forbidden by the skills; add a CI guard that a vendor commit's diff is confined to the vendored path set (anything else must be an intentional, trailer-tagged tweak) |
+| Undeclared glue tweak folded *outside* the vendored tree | confinement guard: assert a vendor commit's diff outside the mechanical path set is empty (else it must be an intentional, trailer-tagged tweak) — cheap path-filter check |
+| A stray edit slips *into* a vendored path (`src/duckdb/` by hand) | path filter can't see this (it excludes `src/duckdb/`); detect by **re-vendoring** and diffing the vendored paths — any non-`patch/` difference is a stray edit. Run as a periodic determinism guard on the green tip (amortized), or continuously via an optional `*-vendor` branch (§3.5) |
 
 ---
 
@@ -551,6 +578,10 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
    `review/tweaks/<sha>.patch`) for offline/diff-tool review, or compute it on
    demand only. Also: is the `Glue-tweak:` trailer worth requiring at all, given
    the path filter already isolates the delta without it?
+9. **Derived `*-vendor` branch (§3.5):** materialise a pure-vendoring branch for
+   continuous cheap stray-edit detection + review baseline, or rely on a
+   periodic re-vendor determinism guard on the green tip? Trade-off is
+   integrity-continuity vs. the upkeep of a second lockstep branch.
 
 ---
 
