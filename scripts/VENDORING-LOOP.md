@@ -445,13 +445,15 @@ cheap/R-only commits packed densely, header-cascade commits isolated.
 ~36 of those 101 commits are pure R-side (no vendored C++) and build in seconds;
 the rest carry a **~70–90 s fixed floor** that is mostly **LTO link of the big
 `.so` + R install + smoke test**, *not* compilation. So 65 C++ commits × ~90 s
-≈ 100 min is irreducible overhead if every commit is tested. Two levers:
+≈ 100 min is irreducible overhead if every commit is tested. The lever that
+actually moves this is **dropping LTO for the per-commit smoke build**: LTO is
+irrelevant to verifying that a commit compiles and tests pass, and dropping it
+cuts the link (hence the floor) substantially — keep LTO only on the shipped
+artifact.
 
-- **Disable LTO for the per-commit smoke build.** LTO is irrelevant to verifying
-  that a commit compiles and tests pass; dropping it cuts the link (and thus the
-  floor) substantially. Keep LTO only on the artifact that ships.
-- Only-missing-status filtering: never rebuild a commit that already has a
-  current `rcc=success`.
+(Only-missing-status filtering — never rebuild a commit that already has a
+current `rcc=success` — is assumed baseline throughout, not an optimization: it
+is already how the §3.2 B plan step enumerates work.)
 
 > Implementation choices deferred to §8: ccache backend (`actions/cache` vs
 > self-hosted vs S3 secondary), shard count policy, and whether the smoke build
