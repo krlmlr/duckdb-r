@@ -1,6 +1,20 @@
 # Changelog
 
+## duckdb 1.5.4.9000
+
+### Chore
+
+- Fix tests when dplyr is missing
+  ([\#29](https://github.com/duckdb/duckdb-r/issues/29)).
+
+### fledge
+
+- CRAN release v1.5.4
+  ([\#2362](https://github.com/duckdb/duckdb-r/issues/2362)).
+
 ## duckdb 1.5.4
+
+CRAN release: 2026-06-19
 
 ### Features
 
