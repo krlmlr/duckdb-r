@@ -452,18 +452,25 @@ They compose: archive hit for recurring trees (replay / R-only), ccache for the
 
 **Adaptations required:**
 
-- **Strip debug info / build `-g0` for the smoke build** — the highest-value
-  change for cache feasibility (measured, Appendix A.3). As built today (`-g`),
-  `duckdb.tar` is **2.5 GB raw / ~457 MB zstd**, so only ~20 trees fit the 10 GB
-  budget and per-commit archiving of a bulk replay is impossible. Stripping
-  (`--strip-debug`, or compiling `-g0`) drops it to **97 MB raw / ~19 MB zstd
-  (26×)** → **~500 trees fit**, making per-commit archive caching cheap (no need
-  to restrict it to the green tip). Debug info is useless for a pass/fail smoke
-  build, and the same drop shrinks ccache storage by the same factor. Pairs with
-  the LTO-off lever (§4.4).
-- **Raise the ccache `max-size` (currently `200M`)** — it was sized against `-g`
-  objects; even after the `-g` drop, size it to ~1–2 GB so a shard building many
-  commits doesn't thrash (well within the 10 GB/repo budget).
+- **Build with `-g`, strip the *archived* objects only** (validated end-to-end,
+  Appendix A.3). Keep `-g` on the live build so a failing test yields a real C++
+  stack trace, but `strip --strip-debug` the `.o` *just before they are tarred*
+  for the cache. As built today the archive is **2.5 GB raw / ~457 MB zstd** (only
+  ~20 trees fit the 10 GB budget — bulk replay impossible); stripped it is
+  **97 MB raw / ~19 MB zstd (26×)** → **~500 trees fit**, so per-commit archive
+  caching is cheap (no green-tip restriction needed). Use `--strip-debug`, not a
+  full `strip` (the symbol table must survive for linking). Order the
+  `to-tar.mk` rule *after* the `.so` link so the live `.so` keeps its debug info.
+  Caveat: on a cache *hit* the engine objects come from the stripped archive, so
+  the relinked `.so`'s DuckDB frames lack debug info (only the freshly-compiled
+  glue has it) — acceptable, since a novel failure is on the *miss* path with a
+  full `-g` engine. Verified: a cache-hit install from the stripped archive
+  rebuilt only the ~15 glue files (6 s), linked cleanly, and passed the
+  connect/insert/query smoke test.
+- **Raise the ccache `max-size` (currently `200M`)** — size it to ~1–2 GB so a
+  shard building many commits doesn't thrash (well within the 10 GB/repo budget).
+  (ccache stores `-g` outputs, so it benefits less from the archive strip; the
+  cap is the lever there.)
 - **Matrix legs reuse the existing `install` + `custom/after-install` composite**
   rather than reinventing, so both caches and the `DUCKDB_R_USE_SYSTEM_LIB`
   gating stay intact. (The new build path must keep system-lib *off* — the whole
@@ -513,10 +520,11 @@ cheap/R-only commits packed densely, header-cascade commits isolated.
 the rest carry a **~70–90 s fixed floor** that is mostly **LTO link of the big
 `.so` + R install + smoke test**, *not* compilation. So 65 C++ commits × ~90 s
 ≈ 100 min is irreducible overhead if every commit is tested. The lever that
-actually moves this is **stripping the smoke build of `-g` (debug info) and LTO**:
-neither is relevant to verifying a commit compiles and tests pass. Dropping LTO
-cuts the link (hence the floor); dropping `-g` cuts compile time *and* shrinks
-the cached objects 26× (§4.2 / A.3). Keep both only on the shipped artifact.
+actually moves this is **dropping LTO for the smoke build**: it is irrelevant to
+verifying a commit compiles and tests pass, and it dominates the link (hence the
+floor); keep LTO only on the shipped artifact. Note `-g` is *kept* on the live
+build (for debuggable failures) and stripped only from the *archived* objects
+(§4.2) — that addresses cache size without touching the floor or trace quality.
 
 (Only-missing-status filtering — never rebuild a commit that already has a
 current `rcc=success` — is assumed baseline throughout, not an optimization: it
@@ -524,7 +532,7 @@ is already how the §3.2 B plan step enumerates work.)
 
 > Implementation choices deferred to §8: ccache backend (`actions/cache` vs
 > self-hosted vs S3 secondary), shard count policy, and whether the smoke build
-> drops LTO and `-g`.
+> drops LTO.
 
 ---
 
@@ -583,7 +591,7 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | ccache cold after a force-push → slow recovery | persistent content-addressed ccache (§4.2); a force-push keeps file *content*, so it is nearly all hits |
 | Fine-grained sharding explodes compute (cold floor) | persistent ccache removes the per-shard cold build; balance by predicted cost into a *small* `S` (§4.2–4.3) |
 | Per-commit floor dominated by LTO link | drop LTO for the smoke build; keep it only on the shipped artifact (§4.4) |
-| Cached `duckdb.tar` too large for the 10 GB budget (2.5 GB raw / ~457 MB zstd with `-g`) | strip `-g`/`--strip-debug` → 97 MB raw / ~19 MB zstd, ~500 trees fit (measured, A.3) |
+| Cached `duckdb.tar` too large for the 10 GB budget (2.5 GB raw / ~457 MB zstd with `-g`) | keep `-g` on the live build, `--strip-debug` only the archived `.o` → 97 MB raw / ~19 MB zstd, ~500 trees fit; validated end-to-end (A.3) |
 | Matrix > 256 jobs | cost-balanced shards + multi-run continuation (§4.3) |
 | In-place force-push on `*-dev` races with hourly vendor | single concurrency group across A/D per line; vendor guard refuses while a repair is open |
 | r-universe build of `*-green` still fails despite green `rcc` | `rcc` smoke test must be a faithful subset of the r-universe build env; add an r-universe-parity check to the smoke job before cut-over |
@@ -720,5 +728,18 @@ The cached object archive (`$(SOURCES)` = 341 unity `.o`, one v1.5 tree):
 - At ~457 MB zstd (current `-g`), only ~20 trees fit the 10 GB `actions/cache`
   budget ⇒ per-commit archiving of a bulk replay is infeasible. At ~19 MB zstd
   (stripped), **~500 trees fit** ⇒ per-commit archive caching is cheap (§4.2).
-- ⇒ build the smoke path `-g0`/stripped (also helps the §4.4 floor and shrinks
-  ccache storage by the same factor).
+
+**End-to-end validation of "build `-g`, strip only the archive":**
+
+1. *Live build* (`-g`, archive absent → `to-tar.mk`): rc=0, both the `.o` and the
+   installed `.so` carry `.debug_info` ⇒ real traces on a failing test.
+2. *Strip* the extracted `.o` with `--strip-debug`, re-tar → 97 MB / 19 MB zstd.
+3. *Cache-hit build* (stripped archive present → `from-tar.mk`): rc=0 in **6 s**,
+   engine objects extracted from the archive, only the ~15 glue `.cpp`
+   recompiled; the `.so` **linked cleanly from the stripped objects** and the
+   connect/insert/`SELECT sum` smoke test passed (loaded strictly from the
+   cache-hit library).
+
+Caveats confirmed: use `--strip-debug` (a full `strip` removes the symbol table
+and breaks linking); on a cache hit the engine frames are debug-less (only glue
+has `-g`), which is acceptable since novel failures occur on the `-g` miss path.
