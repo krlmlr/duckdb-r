@@ -66,10 +66,10 @@ three repair skills in `.claude/skills/`.
 - **Every glue tweak is auditable after the fact.** Any change Claude folds into
   the history (glue `src/*.cpp` / `src/include/`, `R/`, snapshots, `patch/`)
   must be recoverable and reviewable as an isolated delta — without trusting a
-  commit message. Because vendoring is deterministic, the *residual* between the
-  re-vendored pristine tree and what was committed *is* exactly the tweak; an
-  agentic review surface (primitive **E**, §3.4) turns that into a sign-off
-  workflow with tool assistance.
+  commit message. This falls out **for free from path filtering**: the vendored
+  content lives under a fixed, known path set, so the R-side delta is just the
+  diff *outside* those paths. An agentic review surface (primitive **E**, §3.4)
+  turns that path-filtered delta into a sign-off workflow with tool assistance.
 
 ---
 
@@ -210,23 +210,17 @@ This is the "fix by amending/squashing the failing run and **not replaying the
 rest**" model. See §6 for the hybrid transition away from `broken-<sha>-dev`.
 
 **Reviewability of the fold.** Amending keeps history bisectable and the vendor
-markers intact, but it must not hide the R-side edit. Two guarantees make every
-folded tweak auditable after the fact:
+markers intact, and it does *not* hide the R-side edit: the vendored content is
+confined to a fixed path set, so the tweak is recoverable by **path filter**
+(see primitive **E**, §3.4) — the diff outside the vendored paths *is* the
+R-side delta, whether it sits in its own commit or is folded into a vendor
+commit. An optional `Glue-tweak:` trailer (classifying the change, e.g.
+`api-rename`, `snapshot`, `warning-fix`, `patch-refresh`) aids discovery and
+records intent, but the path-filtered diff is the source of truth.
 
-1. **Structured trailer.** The amended commit keeps the upstream vendor message
-   verbatim and appends a machine-greppable trailer block — at minimum a
-   `Glue-tweak:` line classifying the change (e.g. `api-rename`, `snapshot`,
-   `warning-fix`, `patch-refresh`) plus the short rationale already required by
-   `rcc-smoke-fix.md`. This lets the review surface enumerate touched commits in
-   one pass.
-2. **Deterministic residual.** The review surface (primitive **E**) recomputes
-   the pristine vendor tree for the commit and diffs it against what was
-   committed; the residual is the tweak, independent of the trailer. The trailer
-   is for discovery and intent; the residual is the source of truth.
-
-C++ core fixes belong in `patch/` (already discrete, reviewable files); only
-glue/`R/`/snapshot edits live as residuals — and those are exactly what the
-review surface isolates.
+C++ core fixes belong in `patch/` (already discrete, reviewable files); their
+expansion into `src/duckdb/` is filtered out as mechanical, so you review the
+`patch/*.patch` file, not its expansion — exactly as today.
 
 ### 3.3 The loop / orchestration
 
@@ -254,25 +248,35 @@ A standing requirement: **every tweak Claude folds into the glue code must be
 reviewable after the fact**, agentically and with tool assistance — not by
 re-reading giant vendor diffs by hand. This primitive is the review surface.
 
-**Extraction (deterministic, tool-assisted).** For any commit (or range) on
-`*-dev`, `scripts/glue-tweaks.sh`:
+**Extraction (path filter — no re-vendoring needed).** Vendored content lives
+under a fixed, known path set:
 
-1. Reads the commit's `duckdb/duckdb@<sha>` marker and the patch stack as of
-   that commit.
-2. Re-runs the vendor (`vendor-one.sh` against that exact upstream `<sha>` +
-   `patch/`) into a scratch tree to reconstruct the **pristine** vendored state
-   the commit *should* have, mechanically.
-3. Diffs pristine vs. committed. The **residual** — confined to glue
-   (`src/*.cpp`, `src/include/`), `R/`, `tests/`, snapshots, and any
-   non-mechanical `patch/` change — is *exactly* the human/agent tweak.
-4. Emits per-commit tweak patches and an aggregate "all glue tweaks since
-   `<ref>`" diff. `patch/` changes are already discrete files and are listed
-   alongside.
+```
+src/duckdb/                 # vendored DuckDB C++ core
+inst/include/cpp11/         # vendored cpp11
+inst/include/cpp11.hpp      # vendored cpp11 single header
+```
 
-Because step 2 is deterministic, this needs **zero extra bookkeeping**: a clean
-vendor commit yields an empty residual; a repaired one yields precisely its
-fix. The `Glue-tweak:` trailer (§3.2 D) is only an index to find candidates
-fast — the residual is authoritative.
+(Flavor files managed by `scripts/lts.sh` — `DESCRIPTION` `Package:`,
+`src/include/rapi.hpp`'s `DUCKDB_PACKAGE_NAME`, etc. — are likewise mechanical
+and can be excluded or reported in their own bucket.)
+
+Everything *else* a commit touches is, by construction, a glue/R/test/`patch/`
+tweak. So `scripts/glue-tweaks.sh` is a thin path-filtered `git` wrapper:
+
+```bash
+# All R-side tweaks folded into a range, vendored paths excluded:
+git log -p --first-parent <green-tip>..<dev-tip> -- \
+  ':(exclude)src/duckdb' \
+  ':(exclude)inst/include/cpp11' ':(exclude)inst/include/cpp11.hpp'
+```
+
+It emits per-commit tweak patches and an aggregate "all glue tweaks since
+`<ref>`" diff. A clean vendor commit contributes nothing under these filters; a
+repaired one contributes exactly its fix. **No scratch build, no pristine
+reconstruction** — the filter alone isolates the delta. The optional
+`Glue-tweak:` trailer (§3.2 D) is just an index to find candidates fast; the
+filtered diff is authoritative.
 
 **Agentic review loop.** `glue-review.yaml` runs the extraction over the range
 since the last reviewed point (a `*-reviewed` marker ref, advanced on sign-off),
@@ -395,8 +399,8 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | r-universe build of `*-green` still fails despite green `rcc` | `rcc` smoke test must be a faithful subset of the r-universe build env; add an r-universe-parity check to the smoke job before cut-over |
 | Promotion advances over a *transiently* green commit | promote only on `success`; self-heal handling (squash/transient) runs in repair before promotion |
 | Bound (≤25) too tight/loose | make it a workflow input / repo variable; default 25 |
-| Folding a fix into a vendor commit hides the R-side tweak from review | deterministic residual extraction (primitive E) reconstructs the pristine vendor tree and isolates the tweak; `Glue-tweak:` trailer indexes candidates |
-| Residual extraction drifts if the patch stack changed between commits | extraction always uses the patch stack *as of that commit*; CI asserts a clean vendor commit produces an empty residual (regression guard) |
+| Folding a fix into a vendor commit hides the R-side tweak from review | path-filtered diff (primitive E) isolates everything outside the vendored path set; `Glue-tweak:` trailer indexes candidates |
+| A stray edit slips *into* a vendored path (`src/duckdb/` by hand) | forbidden by the skills; add a CI guard that a vendor commit's diff is confined to the vendored path set (anything else must be an intentional, trailer-tagged tweak) |
 
 ---
 
@@ -420,8 +424,10 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
    `*-reviewed` marker lag arbitrarily behind `*-green`, or should a maximum
    review backlog raise an alert?
 8. **Tweak-trailer schema:** exact `Glue-tweak:` field set and whether to also
-   emit the residual into a tracked ledger (e.g. `review/tweaks/<sha>.patch`)
-   for offline/diff-tool review, or compute it on demand only.
+   materialise the path-filtered delta into a tracked ledger (e.g.
+   `review/tweaks/<sha>.patch`) for offline/diff-tool review, or compute it on
+   demand only. Also: is the `Glue-tweak:` trailer worth requiring at all, given
+   the path filter already isolates the delta without it?
 
 ---
 
@@ -438,10 +444,11 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 5. Create `*-green` branches; document the model in `BRANCHES.md` and
    `scripts/VENDORING.md`.
 6. Parallel-run validation harness comparing new vs old markers byte-for-byte.
-7. `scripts/glue-tweaks.sh` — deterministic residual extractor (re-vendor +
-   diff), with a CI assertion that pristine vendor commits yield empty
-   residuals. Pairs with `glue-review.yaml` and the `*-reviewed` marker for the
-   agentic glue-tweak audit (primitive E).
+7. `scripts/glue-tweaks.sh` — path-filtered tweak extractor (a thin
+   `git log -p`/`git diff` wrapper excluding the vendored path set), plus a CI
+   guard that vendor commits stay confined to the vendored paths. Pairs with
+   `glue-review.yaml` and the `*-reviewed` marker for the agentic glue-tweak
+   audit (primitive E).
 
 Items (1)–(2) are the smallest useful slice and have no dependency on the matrix
 work, so they can land first and be exercised against today's `rcc` markers.
