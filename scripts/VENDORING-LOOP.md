@@ -419,18 +419,54 @@ on a warm restored ccache: one warm start + a few ~90 s incrementals = a few
 minutes, **one runner, near-zero Actions pressure**. This is the common case;
 the matrix below is reserved for bulk replay.
 
-### 4.2 Persistent content-addressed ccache is the linchpin
+### 4.2 Persistent caching — reuse the bespoke caches already in CI
 
 The enemy is the **per-shard cold build**: if every shard paid 841 s cold,
 fine-grained sharding is a compute disaster (a 900 s/shard target over 101
 commits → 84 shards, ~20 core-hours — exactly the saturation that hurts other
-projects). The fix is a **persistent, content-addressed ccache shared across
-shards *and* runs** — `actions/cache` and/or a ccache **secondary storage**
-(`--secondary-storage`, e.g. HTTP/S3). Because ccache keys on *content*, a
-force-push (which changes commit SHAs but **not** file contents) is then nearly
-**all hits** — the expensive cold case is rare and essentially one-time. This
-turns "rebuild 255 commits after a force-push" from a cold disaster into mostly
-cache hits.
+projects). The fix is persistent caching — and **it already exists** in
+`custom/after-install/action.yml`, active on the `krlmlr` fork (both caches are
+gated `if DUCKDB_R_USE_SYSTEM_LIB != '1'`, which the fork always forces). Reuse
+it rather than inventing S3 storage:
+
+1. **`duckdb.tar` prebuilt-object archive** (`from-tar.mk` / `to-tar.mk` +
+   `configure`): a tarball of the compiled unity `.o` files, cached via
+   `actions/cache` keyed on **`hashFiles('src/duckdb/**')`** (+ R/OS/CXX).
+   `configure` extracts it to skip compilation when present, else compiles and
+   re-tars. This is a **content-addressed, whole-tree object cache**: an
+   identical vendored tree → extract → *zero compilation*. It is **strictly
+   better than ccache for force-push replays and R-only commits** — same
+   `src/duckdb/` content ⇒ same key ⇒ one untar, no per-TU work.
+2. **`hendrikmuhs/ccache-action`** — persistent ccache (content-addressed per
+   TU). Covers the *novel* adjacent commit (archive miss, but ~98% of unity
+   objects unchanged ⇒ ~90 s; Appendix A).
+
+They compose: archive hit for recurring trees (replay / R-only), ccache for the
+~2-file delta of a genuinely new commit.
+
+| Case | `src/duckdb/` tree | Cache that fires | Cost |
+|---|---|---|---|
+| R-only commit | unchanged vs parent | archive hit | untar only |
+| Force-push / re-run | content recurs | archive hit | untar only |
+| Novel vendor commit | changed (~2 files) | archive miss → ccache | ~98% TU hits, ~90 s |
+
+**Adaptations required:**
+
+- **Raise the ccache `max-size` (currently `200M`)** — the single
+  highest-value change. 200 M thrashes once a shard builds more than a couple of
+  commits; size it to a few GB within the 10 GB/repo `actions/cache` budget.
+- **Do not archive every commit's `duckdb.tar` in bulk mode** — each is large;
+  100 commits would exceed the 10 GB budget and churn LRU. Snapshot the archive
+  only at the **green tip** (the warm-start baseline for the next batch) and rely
+  on the enlarged ccache for per-commit deltas.
+- **Matrix legs reuse the existing `install` + `custom/after-install` composite**
+  rather than reinventing, so both caches and the `DUCKDB_R_USE_SYSTEM_LIB`
+  gating stay intact. (The new build path must keep system-lib *off* — the whole
+  point is a from-source build.)
+- Parallel-shard hygiene: `ccache-action` already uses a prefix `key` +
+  timestamped saves (restore-latest, save-new), so concurrent shards accumulate
+  without collision; the archive keys are per-tree-hash, so distinct commits
+  never collide.
 
 ### 4.3 Header-aware (cost-balanced) sharding for bulk replay
 
@@ -555,9 +591,11 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 
 ## 8. Open questions (for implementation)
 
-1. **ccache backend:** `actions/cache` (simple, 10 GB/repo limit, eviction) vs a
-   self-hosted ccache server vs S3 secondary storage (durable, no eviction, more
-   setup). Which fits the krlmlr Actions budget?
+1. **Cache backend — largely settled:** reuse the existing CI caches
+   (`duckdb.tar` tree-archive + `ccache-action`, §4.2). Open: the new ccache
+   `max-size` (a few GB?), and whether the 10 GB/repo `actions/cache` budget
+   suffices for bulk replay or warrants a self-hosted / S3 ccache secondary
+   store as overflow.
 2. **Shard policy:** cost-balanced by predicted reach (§4.3) is settled; open is
    the *number* of shards — a fixed good-neighbour cap (e.g. ≤4–8 concurrent
    runners) vs a wall-clock target. And: drop LTO for the smoke build (§4.4)?
@@ -592,9 +630,11 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 2. `.github/workflows/promote-green.yaml` — wraps (1); `schedule` +
    `workflow_call` + `workflow_dispatch`.
 3. `.github/workflows/rcc-matrix.yaml` — plan (cost-balanced shards) + matrix
-   build (warm persistent ccache, per-leg status + log artifact) + `if: always()`
-   fan-in that runs `rcc-logs.sh` scoped to the run. Needs the reverse-include
-   cost-estimator and a persistent ccache backend.
+   build (legs reuse the existing `install` + `custom/after-install` composite,
+   so the `duckdb.tar` archive + ccache caches and the `DUCKDB_R_USE_SYSTEM_LIB`
+   gating are inherited; per-leg status + log artifact) + `if: always()` fan-in
+   that runs `rcc-logs.sh` scoped to the run. Also: raise the ccache `max-size`
+   from 200 M (§4.2) and add the reverse-include cost-estimator.
 4. Vendor guard: add the ≤25-ahead-of-frontier check to `vendor-one.sh` /
    `vendor.yaml`.
 5. Create `*-green` branches; document the model in `BRANCHES.md` and
