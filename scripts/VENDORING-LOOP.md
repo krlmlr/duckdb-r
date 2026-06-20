@@ -452,13 +452,18 @@ They compose: archive hit for recurring trees (replay / R-only), ccache for the
 
 **Adaptations required:**
 
-- **Raise the ccache `max-size` (currently `200M`)** — the single
-  highest-value change. 200 M thrashes once a shard builds more than a couple of
-  commits; size it to a few GB within the 10 GB/repo `actions/cache` budget.
-- **Do not archive every commit's `duckdb.tar` in bulk mode** — each is large;
-  100 commits would exceed the 10 GB budget and churn LRU. Snapshot the archive
-  only at the **green tip** (the warm-start baseline for the next batch) and rely
-  on the enlarged ccache for per-commit deltas.
+- **Strip debug info / build `-g0` for the smoke build** — the highest-value
+  change for cache feasibility (measured, Appendix A.3). As built today (`-g`),
+  `duckdb.tar` is **2.5 GB raw / ~457 MB zstd**, so only ~20 trees fit the 10 GB
+  budget and per-commit archiving of a bulk replay is impossible. Stripping
+  (`--strip-debug`, or compiling `-g0`) drops it to **97 MB raw / ~19 MB zstd
+  (26×)** → **~500 trees fit**, making per-commit archive caching cheap (no need
+  to restrict it to the green tip). Debug info is useless for a pass/fail smoke
+  build, and the same drop shrinks ccache storage by the same factor. Pairs with
+  the LTO-off lever (§4.4).
+- **Raise the ccache `max-size` (currently `200M`)** — it was sized against `-g`
+  objects; even after the `-g` drop, size it to ~1–2 GB so a shard building many
+  commits doesn't thrash (well within the 10 GB/repo budget).
 - **Matrix legs reuse the existing `install` + `custom/after-install` composite**
   rather than reinventing, so both caches and the `DUCKDB_R_USE_SYSTEM_LIB`
   gating stay intact. (The new build path must keep system-lib *off* — the whole
@@ -508,10 +513,10 @@ cheap/R-only commits packed densely, header-cascade commits isolated.
 the rest carry a **~70–90 s fixed floor** that is mostly **LTO link of the big
 `.so` + R install + smoke test**, *not* compilation. So 65 C++ commits × ~90 s
 ≈ 100 min is irreducible overhead if every commit is tested. The lever that
-actually moves this is **dropping LTO for the per-commit smoke build**: LTO is
-irrelevant to verifying that a commit compiles and tests pass, and dropping it
-cuts the link (hence the floor) substantially — keep LTO only on the shipped
-artifact.
+actually moves this is **stripping the smoke build of `-g` (debug info) and LTO**:
+neither is relevant to verifying a commit compiles and tests pass. Dropping LTO
+cuts the link (hence the floor); dropping `-g` cuts compile time *and* shrinks
+the cached objects 26× (§4.2 / A.3). Keep both only on the shipped artifact.
 
 (Only-missing-status filtering — never rebuild a commit that already has a
 current `rcc=success` — is assumed baseline throughout, not an optimization: it
@@ -519,7 +524,7 @@ is already how the §3.2 B plan step enumerates work.)
 
 > Implementation choices deferred to §8: ccache backend (`actions/cache` vs
 > self-hosted vs S3 secondary), shard count policy, and whether the smoke build
-> drops LTO.
+> drops LTO and `-g`.
 
 ---
 
@@ -578,6 +583,7 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | ccache cold after a force-push → slow recovery | persistent content-addressed ccache (§4.2); a force-push keeps file *content*, so it is nearly all hits |
 | Fine-grained sharding explodes compute (cold floor) | persistent ccache removes the per-shard cold build; balance by predicted cost into a *small* `S` (§4.2–4.3) |
 | Per-commit floor dominated by LTO link | drop LTO for the smoke build; keep it only on the shipped artifact (§4.4) |
+| Cached `duckdb.tar` too large for the 10 GB budget (2.5 GB raw / ~457 MB zstd with `-g`) | strip `-g`/`--strip-debug` → 97 MB raw / ~19 MB zstd, ~500 trees fit (measured, A.3) |
 | Matrix > 256 jobs | cost-balanced shards + multi-run continuation (§4.3) |
 | In-place force-push on `*-dev` races with hourly vendor | single concurrency group across A/D per line; vendor guard refuses while a repair is open |
 | r-universe build of `*-green` still fails despite green `rcc` | `rcc` smoke test must be a faithful subset of the r-universe build env; add an r-universe-parity check to the smoke job before cut-over |
@@ -653,7 +659,7 @@ work, so they can land first and be exercised against today's `rcc` markers.
 
 ## Appendix A — Empirical validation (measured, not assumed)
 
-Two measurements underpin §3.4 and §4. Both were run in a local session against
+Three measurements underpin §3.4 and §4, all run in a local session against
 real `v1.5-variegata-dev` history (~2 weeks+ old, R 4.3.3, ccache 4.9.1, `-j4`).
 
 ### A.1 Churn / path-filter validation (163 vendor commits, Mar–May 2026)
@@ -698,3 +704,21 @@ Takeaways:
 - A.1 (66% zero-header) + A.2 (zero-header ⇒ 98%) ⇒ **most of the pipeline is
   near-free with a warm ccache**; the persistent cache (§4.2) is what guarantees
   "warm".
+
+### A.3 `duckdb.tar` archive size — debug info dominates
+
+The cached object archive (`$(SOURCES)` = 341 unity `.o`, one v1.5 tree):
+
+| variant | total `.o` | tar (raw) | gzip -6 | zstd -3 | zstd -19 |
+|---|---|---|---|---|---|
+| **unstripped (`-g`, current CI)** | 2.5 GB | 2.5 GB | 489 MB | 457 MB | — |
+| **stripped (`--strip-debug`)** | 97 MB | 97 MB | 20 MB | 19 MB | 14 MB |
+
+(Context: the shipped `duckdb.so`, stripped via `_R_SHLIB_STRIP_`, is ~46 MB.)
+
+- **Debug info is ~96% of the archive** — stripping is a **26×** reduction.
+- At ~457 MB zstd (current `-g`), only ~20 trees fit the 10 GB `actions/cache`
+  budget ⇒ per-commit archiving of a bulk replay is infeasible. At ~19 MB zstd
+  (stripped), **~500 trees fit** ⇒ per-commit archive caching is cheap (§4.2).
+- ⇒ build the smoke path `-g0`/stripped (also helps the §4.4 floor and shrinks
+  ccache storage by the same factor).
