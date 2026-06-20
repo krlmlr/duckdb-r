@@ -62,16 +62,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/duckdb/duckdb-r/blob/v1.4-andium-dev/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/duckdb/duckdb-r/blob/v1.4-andium-dev-base/DESCRIPTION)
 
-Mühleisen H, Raasveldt M (2026). *duckdb.1.4.dev: DBI Package for the
-DuckDB Database Management System*. R package version 1.4.4.9000.25,
+Mühleisen H, Raasveldt M (2026). *duckdb: DBI Package for the DuckDB
+Database Management System*. R package version 1.4.4,
 <https://r.duckdb.org/>.
 
     @Manual{,
-      title = {duckdb.1.4.dev: DBI Package for the DuckDB Database Management System},
+      title = {duckdb: DBI Package for the DuckDB Database Management System},
       author = {Hannes Mühleisen and Mark Raasveldt},
       year = {2026},
-      note = {R package version 1.4.4.9000.25},
+      note = {R package version 1.4.4},
       url = {https://r.duckdb.org/},
     }
