@@ -519,7 +519,7 @@ async workflows; the branch model and markers are unchanged, so no data is lost.
 | Matrix > 256 jobs | cost-balanced shards + multi-run continuation (§4.3) |
 | In-place force-push on `*-dev` races with hourly vendor | single concurrency group across A/D per line; vendor guard refuses while a repair is open |
 | r-universe build of `*-green` still fails despite green `rcc` | `rcc` smoke test must be a faithful subset of the r-universe build env; add an r-universe-parity check to the smoke job before cut-over |
-| Promotion advances over a *transiently* green commit | promote only on `success`; self-heal handling (squash/transient) runs in repair before promotion |
+| Promotion advances over a *transiently* green commit | ruled out by construction: promotion only fast-forwards the **contiguous** green prefix and stops at the first red (§3.2 C). A transiently-green commit lies *beyond* a red one, so it is unreachable — promotion can never cross the frontier to reach it |
 | Bound (≤25) too tight/loose | make it a workflow input / repo variable; default 25 |
 | Folding a fix into a vendor commit hides the R-side tweak from review | path-filtered diff (primitive E) isolates everything outside the vendored path set; `Glue-tweak:` trailer indexes candidates |
 | A stray edit slips *into* a vendored path (`src/duckdb/` by hand) | forbidden by the skills; add a CI guard that a vendor commit's diff is confined to the vendored path set (anything else must be an intentional, trailer-tagged tweak) |
