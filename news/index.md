@@ -2,68 +2,36 @@
 
 ## duckdb 1.5.4.1
 
-### Bug fixes
-
-- Fix messaging logic.
-
 ### Features
 
-- CRAN-safe, configurable storage locations for extensions and secrets
+- DuckDB’s on-disk storage locations now follow a unified, CRAN-safe
+  policy. By default nothing is written outside the R session’s
+  temporary directory, with one exception: the extension cache is placed
+  in the package library when it is writable and falls back to the
+  temporary directory otherwise (for example on CRAN). Each location can
+  be redirected through the `config` argument of
+  [`duckdb()`](https://r.duckdb.org/reference/duckdb.md), an R option,
+  or an environment variable. Configure extensions and secrets with the
+  new
+  [`duckdb_extension_storage()`](https://r.duckdb.org/reference/duckdb_storage_config.md)
+  and
+  [`duckdb_secret_storage()`](https://r.duckdb.org/reference/duckdb_storage_config.md),
+  inspect the resolved locations with
+  [`duckdb_storage_status()`](https://r.duckdb.org/reference/duckdb_storage_config.md),
+  and see
+  [`?duckdb_storage`](https://r.duckdb.org/reference/duckdb_storage.md)
+  for the full resolution policy
   ([\#2370](https://github.com/duckdb/duckdb-r/issues/2370),
+  [\#2372](https://github.com/duckdb/duckdb-r/issues/2372),
   [\#2377](https://github.com/duckdb/duckdb-r/issues/2377)).
 
-- Update vendored code to v0.9.1
-  ([\#26](https://github.com/duckdb/duckdb-r/issues/26)).
+  These functions replace the experimental
+  `duckdb_consolidate_secrets()` introduced in 1.5.4.
 
-### Chore
+### Bug fixes
 
-- Move code ([\#2378](https://github.com/duckdb/duckdb-r/issues/2378)).
-
-- Move rlang shims to `rlang.R`, add `inform()`/`arg_match()`.
-
-- Tweak LTS to also apply to v1.4.
-
-- Add opt-in system libduckdb linking for faster development builds
-  ([\#2345](https://github.com/duckdb/duckdb-r/issues/2345)).
-
-- Skip DBItest tests if not installed
-  ([\#30](https://github.com/duckdb/duckdb-r/issues/30)).
-
-- Fix tests when dplyr is missing
-  ([\#29](https://github.com/duckdb/duckdb-r/issues/29)).
-
-### Documentation
-
-- Refactor
-  [`?duckdb_storage`](https://r.duckdb.org/reference/duckdb_storage.md)
-  terminology and reference table.
-
-- Use
-  [`rlang::args_dots_empty()`](https://rlang.r-lib.org/reference/args_dots_empty.html)
-  for dots; drop `local_interactive()` shim
-  ([\#2376](https://github.com/duckdb/duckdb-r/issues/2376)).
-
-- Add descriptions to every pkgdown reference section.
-
-- CRAN-safe storage-location policy + behavior-neutral scaffolding
-  (Phase 0) ([\#2372](https://github.com/duckdb/duckdb-r/issues/2372)).
-
-- Minor spelling consistency
-  ([\#2373](https://github.com/duckdb/duckdb-r/issues/2373)).
-
-- Document prebuilt-libduckdb fast path for testing; fix glue
-  `-Wsign-compare` warnings
-  ([\#2371](https://github.com/duckdb/duckdb-r/issues/2371)).
-
-### Testing
-
-- Derive package name dynamically in tests instead of hard-coding, to
-  support flavors
-  ([\#34](https://github.com/duckdb/duckdb-r/issues/34)).
-
-- Add vctrs dependency checks to map tests using
-  [`vctrs::list_of()`](https://vctrs.r-lib.org/reference/list_of.html)
-  ([\#2369](https://github.com/duckdb/duckdb-r/issues/2369)).
+- The notice that downloaded extensions will not persist is now shown
+  whenever the extension cache resolves to a temporary location.
 
 ## duckdb 1.5.4
 

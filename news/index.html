@@ -34,36 +34,15 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.5.4.1" id="duckdb-1541">duckdb 1.5.4.1<a class="anchor" aria-label="anchor" href="#duckdb-1541"></a></h2>
 <div class="section level3">
-<h3 id="bug-fixes-1-5-4-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-5-4-1"></a></h3>
-<ul><li>Fix messaging logic.</li>
-</ul></div>
-<div class="section level3">
 <h3 id="features-1-5-4-1">Features<a class="anchor" aria-label="anchor" href="#features-1-5-4-1"></a></h3>
-<ul><li><p>CRAN-safe, configurable storage locations for extensions and secrets (<a href="https://github.com/duckdb/duckdb-r/issues/2370" class="external-link">#2370</a>, <a href="https://github.com/duckdb/duckdb-r/issues/2377" class="external-link">#2377</a>).</p></li>
-<li><p>Update vendored code to v0.9.1 (<a href="https://github.com/duckdb/duckdb-r/issues/26" class="external-link">#26</a>).</p></li>
+<ul><li>
+<p>DuckDB’s on-disk storage locations now follow a unified, CRAN-safe policy. By default nothing is written outside the R session’s temporary directory, with one exception: the extension cache is placed in the package library when it is writable and falls back to the temporary directory otherwise (for example on CRAN). Each location can be redirected through the <code>config</code> argument of <code><a href="../reference/duckdb.html">duckdb()</a></code>, an R option, or an environment variable. Configure extensions and secrets with the new <code><a href="../reference/duckdb_storage_config.html">duckdb_extension_storage()</a></code> and <code><a href="../reference/duckdb_storage_config.html">duckdb_secret_storage()</a></code>, inspect the resolved locations with <code><a href="../reference/duckdb_storage_config.html">duckdb_storage_status()</a></code>, and see <code><a href="../reference/duckdb_storage.html">?duckdb_storage</a></code> for the full resolution policy (<a href="https://github.com/duckdb/duckdb-r/issues/2370" class="external-link">#2370</a>, <a href="https://github.com/duckdb/duckdb-r/issues/2372" class="external-link">#2372</a>, <a href="https://github.com/duckdb/duckdb-r/issues/2377" class="external-link">#2377</a>).</p>
+<p>These functions replace the experimental <code>duckdb_consolidate_secrets()</code> introduced in 1.5.4.</p>
+</li>
 </ul></div>
 <div class="section level3">
-<h3 id="chore-1-5-4-1">Chore<a class="anchor" aria-label="anchor" href="#chore-1-5-4-1"></a></h3>
-<ul><li><p>Move code (<a href="https://github.com/duckdb/duckdb-r/issues/2378" class="external-link">#2378</a>).</p></li>
-<li><p>Move rlang shims to <code>rlang.R</code>, add <code>inform()</code>/<code>arg_match()</code>.</p></li>
-<li><p>Tweak LTS to also apply to v1.4.</p></li>
-<li><p>Add opt-in system libduckdb linking for faster development builds (<a href="https://github.com/duckdb/duckdb-r/issues/2345" class="external-link">#2345</a>).</p></li>
-<li><p>Skip DBItest tests if not installed (<a href="https://github.com/duckdb/duckdb-r/issues/30" class="external-link">#30</a>).</p></li>
-<li><p>Fix tests when dplyr is missing (<a href="https://github.com/duckdb/duckdb-r/issues/29" class="external-link">#29</a>).</p></li>
-</ul></div>
-<div class="section level3">
-<h3 id="documentation-1-5-4-1">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-5-4-1"></a></h3>
-<ul><li><p>Refactor <code><a href="../reference/duckdb_storage.html">?duckdb_storage</a></code> terminology and reference table.</p></li>
-<li><p>Use <code><a href="https://rlang.r-lib.org/reference/args_dots_empty.html" class="external-link">rlang::args_dots_empty()</a></code> for dots; drop <code>local_interactive()</code> shim (<a href="https://github.com/duckdb/duckdb-r/issues/2376" class="external-link">#2376</a>).</p></li>
-<li><p>Add descriptions to every pkgdown reference section.</p></li>
-<li><p>CRAN-safe storage-location policy + behavior-neutral scaffolding (Phase 0) (<a href="https://github.com/duckdb/duckdb-r/issues/2372" class="external-link">#2372</a>).</p></li>
-<li><p>Minor spelling consistency (<a href="https://github.com/duckdb/duckdb-r/issues/2373" class="external-link">#2373</a>).</p></li>
-<li><p>Document prebuilt-libduckdb fast path for testing; fix glue <code>-Wsign-compare</code> warnings (<a href="https://github.com/duckdb/duckdb-r/issues/2371" class="external-link">#2371</a>).</p></li>
-</ul></div>
-<div class="section level3">
-<h3 id="testing-1-5-4-1">Testing<a class="anchor" aria-label="anchor" href="#testing-1-5-4-1"></a></h3>
-<ul><li><p>Derive package name dynamically in tests instead of hard-coding, to support flavors (<a href="https://github.com/duckdb/duckdb-r/issues/34" class="external-link">#34</a>).</p></li>
-<li><p>Add vctrs dependency checks to map tests using <code><a href="https://vctrs.r-lib.org/reference/list_of.html" class="external-link">vctrs::list_of()</a></code> (<a href="https://github.com/duckdb/duckdb-r/issues/2369" class="external-link">#2369</a>).</p></li>
+<h3 id="bug-fixes-1-5-4-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-5-4-1"></a></h3>
+<ul><li>The notice that downloaded extensions will not persist is now shown whenever the extension cache resolves to a temporary location.</li>
 </ul></div>
 </div>
     <div class="section level2">
