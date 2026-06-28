@@ -30,7 +30,8 @@ duckdb_read_csv(
 
 - conn:
 
-  A DuckDB connection, created by `dbConnect()`.
+  A DuckDB connection, created by
+  [`dbConnect()`](https://dbi.r-dbi.org/reference/dbConnect.html).
 
 - name:
 
@@ -42,7 +43,7 @@ duckdb_read_csv(
 
 - ...:
 
-  Reserved for future extensions, must be empty.
+  These dots are for future extensions and must be empty.
 
 - header:
 
