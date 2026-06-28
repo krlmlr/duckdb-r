@@ -70,6 +70,9 @@ simulate_duckdb(...)
 ``` r
 library(dplyr, warn.conflicts = FALSE)
 con <- DBI::dbConnect(duckdb(), path = ":memory:")
+#> duckdb: caching downloaded extensions in the package library:
+#> ℹ /home/runner/work/_temp/Library/duckdb/extensions
+#> ℹ This is removed when the package is re-installed; see `?duckdb_storage` to choose a different location.
 
 db <- copy_to(con, data.frame(a = 1:3, b = letters[2:4]))
 
@@ -92,10 +95,10 @@ write.csv(data.frame(a = 1:3, b = letters[2:4]))
 
 db_csv <- tbl_file(con, path)
 #> Error in dbplyr_query_fields(con, source): Can't query fields.
-#> ℹ Using SQL: SELECT * FROM (FROM '/tmp/Rtmp56uwWq/file57dd3c238b28.csv') AS q01
+#> ℹ Using SQL: SELECT * FROM (FROM '/tmp/RtmpYk9pYr/file3ac02bb80e5e.csv') AS q01
 #>   WHERE (0 = 1)
 #> Caused by error in `dbSendQuery()`:
-#> ! IO Error: No files found that match the pattern "/tmp/Rtmp56uwWq/file57dd3c238b28.csv"
+#> ! IO Error: No files found that match the pattern "/tmp/RtmpYk9pYr/file3ac02bb80e5e.csv"
 #> ℹ Context: rapi_prepare
 #> ℹ Error type: IO
 db_csv %>%
@@ -105,11 +108,11 @@ db_csv %>%
 db_csv_fun <- tbl_function(con, paste0("read_csv_auto('", path, "')"))
 #> Error in dbplyr_query_fields(con, source): Can't query fields.
 #> ℹ Using SQL: SELECT * FROM (FROM
-#>   read_csv_auto('/tmp/Rtmp56uwWq/file57dd3c238b28.csv')) AS q02 WHERE (0 = 1)
+#>   read_csv_auto('/tmp/RtmpYk9pYr/file3ac02bb80e5e.csv')) AS q02 WHERE (0 = 1)
 #> Caused by error in `dbSendQuery()`:
-#> ! IO Error: No files found that match the pattern "/tmp/Rtmp56uwWq/file57dd3c238b28.csv"
+#> ! IO Error: No files found that match the pattern "/tmp/RtmpYk9pYr/file3ac02bb80e5e.csv"
 #> 
-#> LINE 2: FROM (FROM read_csv_auto('/tmp/Rtmp56uwWq/file57dd3c238b28.csv')) AS...
+#> LINE 2: FROM (FROM read_csv_auto('/tmp/RtmpYk9pYr/file3ac02bb80e5e.csv')) AS...
 #>                    ^
 #> ℹ Context: rapi_prepare
 #> ℹ Error type: IO
