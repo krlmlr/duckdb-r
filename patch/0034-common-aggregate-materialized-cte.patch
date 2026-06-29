@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Skip common aggregate optimizer for materialized CTEs
+
+Backport of duckdb/duckdb#23409 (vendored in
+5e66b2126c864bc1ca6f64df5cf82d6fab5c0da5). Drop this patch once the fix
+arrives via the regular vendor run.
+
+---
+ src/duckdb/src/optimizer/common_aggregate_optimizer.cpp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/duckdb/src/optimizer/common_aggregate_optimizer.cpp b/src/duckdb/src/optimizer/common_aggregate_optimizer.cpp
+index 991c12d..71fc1b6 100644
+--- a/src/duckdb/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/duckdb/src/optimizer/common_aggregate_optimizer.cpp
+@@ -18,7 +18,6 @@ void CommonAggregateOptimizer::VisitOperator(LogicalOperator &op) {
+ 	case LogicalOperatorType::LOGICAL_UNION:
+ 	case LogicalOperatorType::LOGICAL_EXCEPT:
+ 	case LogicalOperatorType::LOGICAL_INTERSECT:
+-	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
+ 	case LogicalOperatorType::LOGICAL_PROJECTION: {
+ 		CommonAggregateOptimizer common_aggregate;
+ 		common_aggregate.StandardVisitOperator(op);
