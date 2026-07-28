@@ -11,7 +11,6 @@
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/parser/parsed_data/parse_info.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
-#include "duckdb/catalog/dependency_list.hpp"
 
 namespace duckdb {
 
@@ -61,8 +60,6 @@ public:
 	string name;
 	//! Allow altering internal entries
 	bool allow_internal;
-	//! New dependencies for the altered entry (set during binding)
-	unique_ptr<LogicalDependencyList> new_dependencies;
 
 public:
 	virtual CatalogType GetCatalogType() const = 0;
