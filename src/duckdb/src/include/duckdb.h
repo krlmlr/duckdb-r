@@ -138,10 +138,6 @@ typedef enum DUCKDB_TYPE {
 	DUCKDB_TYPE_INTEGER_LITERAL = 38,
 	// duckdb_time_ns (nanoseconds)
 	DUCKDB_TYPE_TIME_NS = 39,
-	// GEOMETRY type, WKB blob
-	DUCKDB_TYPE_GEOMETRY = 40,
-	// VARIANT type
-	DUCKDB_TYPE_VARIANT = 41,
 } duckdb_type;
 
 //! An enum over the returned state of different functions.
@@ -193,9 +189,6 @@ typedef enum duckdb_statement_type {
 	DUCKDB_STATEMENT_TYPE_ATTACH = 25,
 	DUCKDB_STATEMENT_TYPE_DETACH = 26,
 	DUCKDB_STATEMENT_TYPE_MULTI = 27,
-	DUCKDB_STATEMENT_TYPE_COPY_DATABASE = 28,
-	DUCKDB_STATEMENT_TYPE_UPDATE_EXTENSIONS = 29,
-	DUCKDB_STATEMENT_TYPE_MERGE_INTO = 30,
 } duckdb_statement_type;
 
 //! An enum over DuckDB's different error types.
@@ -505,7 +498,7 @@ typedef struct {
 } duckdb_bit;
 
 //! BIGNUMs are composed of a byte pointer, a size, and an `is_negative` bool.
-//! The absolute value of the number is stored in `data` in big endian format.
+//! The absolute value of the number is stored in `data` in little endian format.
 //! You must free `data` with `duckdb_free`.
 typedef struct {
 	uint8_t *data;
@@ -910,7 +903,7 @@ struct duckdb_extension_access {
 	//! Indicate that an error has occurred.
 	void (*set_error)(duckdb_extension_info info, const char *error);
 	//! Fetch the database on which to register the extension.
-	duckdb_database *(*get_database)(duckdb_extension_info info);
+	duckdb_database (*get_database)(duckdb_extension_info info);
 	//! Fetch the API struct pointer.
 	const void *(*get_api)(duckdb_extension_info info, const char *version);
 };
@@ -1679,16 +1672,6 @@ Get a pointer to the string data of a string_t
 */
 DUCKDB_C_API const char *duckdb_string_t_data(duckdb_string_t *string);
 
-/*!
-Checks if a string is valid UTF-8.
-
-* @param str The string to check
-* @param len The length of the string (in bytes)
-* @return nullptr if the string is valid UTF-8. Otherwise, a duckdb_error_data containing error information. Must be
-destroyed with `duckdb_destroy_error_data`.
-*/
-DUCKDB_C_API duckdb_error_data duckdb_valid_utf8_check(const char *str, idx_t len);
-
 //----------------------------------------------------------------------------------------------------------------------
 // Date Time Timestamp Helpers
 //----------------------------------------------------------------------------------------------------------------------
@@ -2034,8 +2017,6 @@ DUCKDB_C_API duckdb_type duckdb_prepared_statement_column_type(duckdb_prepared_s
 
 /*!
 Binds a value to the prepared statement at the specified index.
-
-Supersedes all type-specific bind functions (e.g., `duckdb_bind_varchar`, `duckdb_bind_int64`, etc.).
 */
 DUCKDB_C_API duckdb_state duckdb_bind_value(duckdb_prepared_statement prepared_statement, idx_t param_idx,
                                             duckdb_value val);
@@ -2154,16 +2135,12 @@ DUCKDB_C_API duckdb_state duckdb_bind_interval(duckdb_prepared_statement prepare
 
 /*!
 Binds a null-terminated varchar value to the prepared statement at the specified index.
-
-Superseded by `duckdb_bind_value`.
 */
 DUCKDB_C_API duckdb_state duckdb_bind_varchar(duckdb_prepared_statement prepared_statement, idx_t param_idx,
                                               const char *val);
 
 /*!
 Binds a varchar value to the prepared statement at the specified index.
-
-Superseded by `duckdb_bind_value`.
 */
 DUCKDB_C_API duckdb_state duckdb_bind_varchar_length(duckdb_prepared_statement prepared_statement, idx_t param_idx,
                                                      const char *val, idx_t length);
@@ -2403,9 +2380,7 @@ Destroys the value and de-allocates all memory allocated for that type.
 DUCKDB_C_API void duckdb_destroy_value(duckdb_value *value);
 
 /*!
-Creates a value from a null-terminated string. Returns nullptr if the string is not valid UTF-8 or other invalid input.
-
-Superseded by `duckdb_create_varchar_length`.
+Creates a value from a null-terminated string
 
 * @param text The null-terminated string
 * @return The value. This must be destroyed with `duckdb_destroy_value`.
@@ -2413,7 +2388,7 @@ Superseded by `duckdb_create_varchar_length`.
 DUCKDB_C_API duckdb_value duckdb_create_varchar(const char *text);
 
 /*!
-Creates a value from a string. Returns nullptr if the string is not valid UTF-8 or other invalid input.
+Creates a value from a string
 
 * @param text The text
 * @param length The length of the text
@@ -2519,11 +2494,8 @@ DUCKDB_C_API duckdb_value duckdb_create_bignum(duckdb_bignum input);
 /*!
 Creates a DECIMAL value from a duckdb_decimal
 
-The width must be between 1 and 38, and the scale must not exceed the width.
-
 * @param input The duckdb_decimal value
-* @return The value, or `nullptr` if the width or scale are out of range. This must be destroyed with
-`duckdb_destroy_value`.
+* @return The value. This must be destroyed with `duckdb_destroy_value`.
 */
 DUCKDB_C_API duckdb_value duckdb_create_decimal(duckdb_decimal input);
 
@@ -3144,9 +3116,9 @@ DUCKDB_C_API duckdb_logical_type duckdb_create_enum_type(const char **member_nam
 Creates a DECIMAL type with the specified width and scale.
 The resulting type should be destroyed with `duckdb_destroy_logical_type`.
 
-* @param width The width of the decimal type. Must be between 1 and 38.
-* @param scale The scale of the decimal type. Must not exceed the width.
-* @return The logical type, or `nullptr` if the width or scale are out of range.
+* @param width The width of the decimal type
+* @param scale The scale of the decimal type
+* @return The logical type.
 */
 DUCKDB_C_API duckdb_logical_type duckdb_create_decimal_type(uint8_t width, uint8_t scale);
 
@@ -3485,10 +3457,7 @@ This allows NULL values to be written to the vector, regardless of whether a val
 DUCKDB_C_API void duckdb_vector_ensure_validity_writable(duckdb_vector vector);
 
 /*!
-Assigns a string element in the vector at the specified location. For VARCHAR vectors, the input is validated as UTF-8;
-if invalid, a NULL value is assigned at that index.
-
-Superseded by `duckdb_unsafe_vector_assign_string_element_len`, optionally combined with `duckdb_valid_utf8_check`.
+Assigns a string element in the vector at the specified location.
 
 * @param vector The vector to alter
 * @param index The row position in the vector to assign the string to
@@ -3497,10 +3466,7 @@ Superseded by `duckdb_unsafe_vector_assign_string_element_len`, optionally combi
 DUCKDB_C_API void duckdb_vector_assign_string_element(duckdb_vector vector, idx_t index, const char *str);
 
 /*!
-Assigns a string element in the vector at the specified location. For VARCHAR vectors, the input is validated as UTF-8;
-if invalid, a NULL value is assigned at that index. For BLOB vectors, no validation is performed.
-
-Superseded by `duckdb_unsafe_vector_assign_string_element_len`, optionally combined with `duckdb_valid_utf8_check`.
+Assigns a string element in the vector at the specified location. You may also use this function to assign BLOBs.
 
 * @param vector The vector to alter
 * @param index The row position in the vector to assign the string to
@@ -3509,20 +3475,6 @@ Superseded by `duckdb_unsafe_vector_assign_string_element_len`, optionally combi
 */
 DUCKDB_C_API void duckdb_vector_assign_string_element_len(duckdb_vector vector, idx_t index, const char *str,
                                                           idx_t str_len);
-
-/*!
-Assigns a string element in the vector at the specified location without UTF-8 validation. The caller is responsible for
-ensuring the input is valid UTF-8. Use `duckdb_valid_utf8_check` to validate strings before calling this function if
-needed. If the input is known to be valid UTF-8, this function can be called directly for better performance, avoiding
-the overhead of redundant validation.
-
-* @param vector The vector to alter
-* @param index The row position in the vector to assign the string to
-* @param str The string
-* @param str_len The length of the string (in bytes)
-*/
-DUCKDB_C_API void duckdb_unsafe_vector_assign_string_element_len(duckdb_vector vector, idx_t index, const char *str,
-                                                                 idx_t str_len);
 
 /*!
 Retrieves the child vector of a list vector.
@@ -6263,29 +6215,6 @@ Registers a custom log storage for the logger.
 * @return Whether the registration was successful.
 */
 DUCKDB_C_API duckdb_state duckdb_register_log_storage(duckdb_database database, duckdb_log_storage log_storage);
-
-//----------------------------------------------------------------------------------------------------------------------
-// Geometry Helpers
-//----------------------------------------------------------------------------------------------------------------------
-// DESCRIPTION:
-// Functions to operate on GEOMETRY types`.
-//----------------------------------------------------------------------------------------------------------------------
-
-/*!
-Gets the CRS (Coordinate Reference System) of a GEOMETRY type.
-Result must be freed with `duckdb_free`.
-
-* @param type The GEOMETRY type.
-* @return The CRS of the GEOMETRY type, or NULL if the type is not a GEOMETRY type.
-*/
-DUCKDB_C_API char *duckdb_geometry_type_get_crs(duckdb_logical_type type);
-
-//----------------------------------------------------------------------------------------------------------------------
-// Variant Helpers
-//----------------------------------------------------------------------------------------------------------------------
-// DESCRIPTION:
-// Functions to operate on VARIANT types.
-//----------------------------------------------------------------------------------------------------------------------
 
 #endif
 
