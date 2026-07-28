@@ -168,7 +168,7 @@ struct DedupPointerEnumType {
 template <class SRC, class DST, class RTYPE>
 static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &result, idx_t count) {
 	source_data += sexp_offset;
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto val = source_data[i];
 		if (RTYPE::IsNull(val)) {
@@ -183,7 +183,7 @@ static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &res
 static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t sexp_offset, Vector &result,
                                     idx_t count) {
 	source_data += sexp_offset;
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	auto child_rtype = rtype.GetListChildType();
 	auto result_data = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
@@ -208,7 +208,7 @@ static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t
 static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_data, idx_t sexp_offset, Vector &result,
                                               idx_t count) {
 	source_data += sexp_offset;
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	auto child_rtype = rtype.GetListChildType();
 	D_ASSERT(child_rtype.id() == RTypeId::STRUCT);
 	auto result_data = FlatVector::GetDataMutable<list_entry_t>(result);
@@ -257,7 +257,7 @@ template <class SRC, class DST, class RTYPE>
 static inline void AppendMatrixSegmentAtomic(const SRC *src_ptr, int nrows, int ncols, idx_t sexp_offset,
                                              Vector &child_vector, idx_t count) {
 	auto child_data = FlatVector::GetDataMutable<DST>(child_vector);
-	auto &child_mask = FlatVector::ValidityMutable(child_vector);
+	auto &child_mask = FlatVector::Validity(child_vector);
 	idx_t vector_idx = 0;
 	for (idx_t i = 0; i < count; i++) {
 		auto matrix_elt_idx = sexp_offset + i;
@@ -278,7 +278,7 @@ static void AppendMatrixColumnSegment(const RType &rtype, bool experimental, SEX
 	auto element_rtype = rtype.GetMatrixElementType();
 	auto nrows = Rf_nrows(source_data);
 	auto ncols = Rf_ncols(source_data);
-	auto &child_vector = ArrayVector::GetChildMutable(result);
+	auto &child_vector = ArrayVector::GetEntry(result);
 
 	switch (element_rtype.id()) {
 	case RType::LOGICAL: // LGLSXP
@@ -490,9 +490,9 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 }
 
-identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
+case_insensitive_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 	const bool integer64 = false, experimental = false;
-	identifier_map_t<vector<Value>> output;
+	case_insensitive_map_t<vector<Value>> output;
 
 	auto names = input_sexps.names();
 	if (names.size() != input_sexps.size()) {
@@ -512,7 +512,7 @@ identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 			vv.push_back(v.GetValue(i));
 		}
 
-		output[Identifier(string(names[input_idx]))] = vv;
+		output[names[input_idx]] = vv;
 		input_idx++;
 	}
 
@@ -644,8 +644,7 @@ struct DataFrameLocalState : public LocalTableFunctionState {
 };
 
 static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types,
-                                                          vector<Identifier> &names) {
+                                                          vector<LogicalType> &return_types, vector<string> &names) {
 	data_frame df((SEXP)input.inputs[0].GetPointer());
 
 	auto integer64 = get_integer64_param(input.named_parameters);
@@ -660,7 +659,7 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	TouchColumnsOrThrow(df);
 
 	for (R_xlen_t col_idx = 0; col_idx < df.size(); col_idx++) {
-		names.push_back(Identifier(string(df_names[col_idx])));
+		names.push_back(df_names[col_idx]);
 
 		auto coldata = df[col_idx];
 		auto rtype = RApiTypes::DetectRType(coldata, integer64);
@@ -742,7 +741,7 @@ static void DataFrameScanFunc(ClientContext &context, TableFunctionInput &data, 
 		}
 	}
 	idx_t this_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, operator_data.count - operator_data.position);
-	output.SetChildCardinality(this_count);
+	output.SetCardinality(this_count);
 
 	auto sexp_offset = operator_data.offset + operator_data.position;
 	D_ASSERT(sexp_offset + this_count <= bind_data.row_count);
@@ -754,7 +753,7 @@ static void DataFrameScanFunc(ClientContext &context, TableFunctionInput &data, 
 		// Hannes: I love the reference, but would you mind adding a bit of context why this is necessary?
 		if (src_df_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
 			Value constant_42 = Value::BIGINT(42);
-			output.data[out_col_idx].Reference(constant_42, count_t(this_count));
+			output.data[out_col_idx].Reference(constant_42);
 			continue;
 		}
 
