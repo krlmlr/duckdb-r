@@ -1,4 +1,5 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/common/enum_util.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
@@ -194,6 +195,10 @@ private:
 
 	// Translate the bound expression of an EXPRESSION_FILTER. Such a filter always
 	// applies to a single column, which is bound as reference index 0.
+	static string FilterDescription(const TableFilter &filter, const string &column_name) {
+		return EnumUtil::ToString(filter.filter_type) + " on " + column_name;
+	}
+
 	static SEXP TransformExpression(const Expression &expr, SEXP column_name_expr, SEXP functions) {
 		if (BoundComparisonExpression::IsComparison(expr)) {
 			auto &comp = expr.Cast<BoundFunctionExpression>();
@@ -253,8 +258,8 @@ private:
 			auto &expr_filter = filter.Cast<ExpressionFilter>();
 			return TransformExpression(*expr_filter.expr, column_name_expr, functions);
 		}
-		case TableFilterType::CONSTANT_COMPARISON: {
-			auto &constant_filter = (ConstantFilter &)filter;
+		case TableFilterType::LEGACY_CONSTANT_COMPARISON: {
+			auto &constant_filter = (LegacyConstantFilter &)filter;
 			cpp11::sexp constant_expr = CreateConstantExpression(functions, constant_filter.constant);
 			switch (constant_filter.comparison_type) {
 			case ExpressionType::COMPARE_EQUAL: {
@@ -277,26 +282,26 @@ private:
 			}
 			default:
 				throw NotImplementedException("%s can't be transformed to Arrow Scan Pushdown Filter",
-				                              filter.ToString(column_name));
+				                              FilterDescription(filter, column_name));
 			}
 		}
-		case TableFilterType::IS_NULL: {
+		case TableFilterType::LEGACY_IS_NULL: {
 			return CreateExpression(functions, "is_null", column_name_expr);
 		}
-		case TableFilterType::IS_NOT_NULL: {
+		case TableFilterType::LEGACY_IS_NOT_NULL: {
 			cpp11::sexp is_null_expr = CreateExpression(functions, "is_null", column_name_expr);
 			return CreateExpression(functions, "invert", is_null_expr);
 		}
-		case TableFilterType::CONJUNCTION_AND: {
-			auto &and_filter = (ConjunctionAndFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_AND: {
+			auto &and_filter = (LegacyConjunctionAndFilter &)filter;
 			return TransformChildFilters(functions, column_name, "and_kleene", and_filter.child_filters);
 		}
-		case TableFilterType::CONJUNCTION_OR: {
-			auto &or_filter = (ConjunctionOrFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_OR: {
+			auto &or_filter = (LegacyConjunctionOrFilter &)filter;
 			return TransformChildFilters(functions, column_name, "or_kleene", or_filter.child_filters);
 		}
-		case TableFilterType::IN_FILTER: {
-			auto &in_filter = (InFilter &)filter;
+		case TableFilterType::LEGACY_IN_FILTER: {
+			auto &in_filter = (LegacyInFilter &)filter;
 			if (in_filter.values.empty()) {
 				// col IN () matches no rows
 				return CreateScalar(functions, cpp11::sexp(Rf_ScalarLogical(false)));
@@ -306,7 +311,7 @@ private:
 				// optional filter this degrades to pushing TRUE.
 				static_assert(MAX_PUSHDOWN_IN_VALUES == 100, "update the message below");
 				throw NotImplementedException("IN filter with more than 100 values is not pushed down (%s)",
-				                              filter.ToString(column_name));
+				                              FilterDescription(filter, column_name));
 			}
 			// col IN (v1, v2, ...) as a balanced tree of equality comparisons.
 			vector<cpp11::sexp> equal_exprs;
@@ -317,11 +322,11 @@ private:
 			}
 			return FoldBalanced(functions, "or_kleene", equal_exprs, 0, equal_exprs.size());
 		}
-		case TableFilterType::OPTIONAL_FILTER: {
+		case TableFilterType::LEGACY_OPTIONAL_FILTER: {
 			// Optional filters only prune; DuckDB still applies the actual
 			// predicate. Push the child filter if it is expressible, and a
 			// TRUE literal otherwise, instead of failing the whole query.
-			auto &optional_filter = (OptionalFilter &)filter;
+			auto &optional_filter = (LegacyOptionalFilter &)filter;
 			if (optional_filter.child_filter) {
 				try {
 					return TransformFilterExpression(*optional_filter.child_filter, column_name, functions);
@@ -333,7 +338,7 @@ private:
 
 		default:
 			throw NotImplementedException("Arrow table filter pushdown %s not supported yet",
-			                              filter.ToString(column_name));
+			                              FilterDescription(filter, column_name));
 		}
 	}
 
