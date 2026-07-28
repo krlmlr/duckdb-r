@@ -295,7 +295,7 @@ struct AltrepVectorWrapper {
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
 		}
 
-		return StructType::GetChildName(child_type, column_index);
+		return StructType::GetChildName(child_type, column_index).GetIdentifierName();
 	}
 
 	string FullName() {
@@ -640,7 +640,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 
 	for (size_t col_idx = 0; col_idx < ncols; col_idx++) {
 		auto &col_name = types[col_idx].first;
-		names.push_back(col_name);
+		names.push_back(col_name.GetIdentifierName());
 
 		auto &col_type = types[col_idx].second;
 		cpp11::external_pointer<AltrepVectorWrapper> ptr(
@@ -658,7 +658,8 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 			vector_sexp =
 			    rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, child_types, convert_opts, child_col_idx);
 		} else {
-			vector_sexp = R_new_altrep(LogicalTypeToAltrepType(col_type, col_name), ptr, R_NilValue);
+			vector_sexp =
+			    R_new_altrep(LogicalTypeToAltrepType(col_type, col_name.GetIdentifierName()), ptr, R_NilValue);
 			duckdb_r_decorate(col_type, vector_sexp, convert_opts);
 		}
 
