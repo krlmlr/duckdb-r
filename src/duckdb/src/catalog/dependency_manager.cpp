@@ -219,18 +219,7 @@ void DependencyManager::CreateDependent(CatalogTransaction transaction, const De
 	set.CreateEntry(transaction, entry_name, std::move(dep));
 }
 
-static string CatalogEntryInfoToString(const CatalogEntryInfo &entry) {
-	return KeywordHelper::WriteOptionallyQuoted(entry.schema) + "." + KeywordHelper::WriteOptionallyQuoted(entry.name) +
-	       StringUtil::Format("(%s)", CatalogTypeToString(entry.type));
-}
-
 void DependencyManager::CreateDependency(CatalogTransaction transaction, DependencyInfo &info) {
-	auto subject_entry = LookupEntry(transaction, info.subject.entry);
-	info.subject.oid = subject_entry ? subject_entry->oid : optional_idx();
-	if (!subject_entry) {
-		throw InternalException("Couldn't locate entry: '%s'", CatalogEntryInfoToString(info.subject.entry));
-	}
-
 	DependencyCatalogSet subjects(Subjects(), info.dependent.entry);
 	DependencyCatalogSet dependents(Dependents(), info.subject.entry);
 
@@ -326,8 +315,12 @@ CatalogEntryInfo DependencyManager::GetLookupProperties(const CatalogEntry &entr
 	}
 }
 
-optional_ptr<CatalogEntry> DependencyManager::LookupEntry(CatalogTransaction transaction,
-                                                          const CatalogEntryInfo &info) {
+optional_ptr<CatalogEntry> DependencyManager::LookupEntry(CatalogTransaction transaction, CatalogEntry &dependency) {
+	if (dependency.type != CatalogType::DEPENDENCY_ENTRY) {
+		return &dependency;
+	}
+	auto info = GetLookupProperties(dependency);
+
 	auto &type = info.type;
 	auto &schema = info.schema;
 	auto &name = info.name;
@@ -338,14 +331,8 @@ optional_ptr<CatalogEntry> DependencyManager::LookupEntry(CatalogTransaction tra
 		// This is a schema entry, perform the callback only providing the schema
 		return reinterpret_cast<CatalogEntry *>(schema_entry.get());
 	}
-	return schema_entry->GetEntry(transaction, type, name);
-}
-
-optional_ptr<CatalogEntry> DependencyManager::LookupEntry(CatalogTransaction transaction, CatalogEntry &dependency) {
-	if (dependency.type != CatalogType::DEPENDENCY_ENTRY) {
-		return &dependency;
-	}
-	return LookupEntry(transaction, GetLookupProperties(dependency));
+	auto entry = schema_entry->GetEntry(transaction, type, name);
+	return entry;
 }
 
 void DependencyManager::CleanupDependencies(CatalogTransaction transaction, CatalogEntry &object) {
@@ -384,9 +371,6 @@ static string EntryToString(CatalogEntryInfo &info) {
 	}
 	case CatalogType::COLLATION_ENTRY: {
 		return StringUtil::Format("collation \"%s\"", info.name);
-	}
-	case CatalogType::COORDINATE_SYSTEM_ENTRY: {
-		return StringUtil::Format("coordinate system \"%s\"", info.name);
 	}
 	case CatalogType::TYPE_ENTRY: {
 		return StringUtil::Format("type \"%s\"", info.name);
@@ -480,13 +464,6 @@ void DependencyManager::VerifyExistence(CatalogTransaction transaction, Dependen
 	if (lookup_result.reason == CatalogSet::EntryLookup::FailureReason::DELETED) {
 		throw DependencyException("Could not commit creation of dependency, subject \"%s\" has been deleted",
 		                          object.SourceInfo().name);
-	}
-	// The subject still exists by name - check if it is the same object the dependency was created against
-	if (!subject.flags.IsOwnership() && subject.oid.IsValid() && lookup_result.result &&
-	    lookup_result.result->oid != subject.oid.GetIndex()) {
-		throw DependencyException(
-		    "Could not commit creation of dependency, subject \"%s\" was dropped and re-created by another transaction",
-		    object.EntryInfo().name);
 	}
 }
 
@@ -667,8 +644,7 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 				disallow_alter = false;
 				break;
 			}
-			case AlterTableType::ADD_COLUMN:
-			case AlterTableType::SET_DEFAULT: {
+			case AlterTableType::ADD_COLUMN: {
 				disallow_alter = false;
 				break;
 			}
@@ -697,13 +673,8 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 	});
 
 	// Keep old dependencies
-	bool has_new_dependencies = alter_info.new_dependencies.get();
+	dependency_set_t dependents;
 	ScanSubjects(transaction, old_info, [&](DependencyEntry &dep) {
-		if (has_new_dependencies && !dep.Subject().flags.IsOwnership()) {
-			// The alter provided updated dependencies - skip old non-ownership subject dependencies
-			// as they will be replaced by the new dependencies
-			return;
-		}
 		auto entry = LookupEntry(transaction, dep);
 		if (!entry) {
 			return;
@@ -714,18 +685,15 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 		dependencies.emplace_back(dep_info);
 	});
 
-	if (has_new_dependencies || !StringUtil::CIEquals(old_obj.name, new_obj.name)) {
-		// The dependencies have changed (e.g. SET DEFAULT) or the name has changed
-		// We need to recreate the dependency links
+	// FIXME: we should update dependencies in the future
+	// some alters could cause dependencies to change (imagine types of table columns)
+	// or DEFAULT depending on a sequence
+	if (!StringUtil::CIEquals(old_obj.name, new_obj.name)) {
+		// The name has been changed, we need to recreate the dependency links
 		CleanupDependencies(transaction, old_obj);
 	}
 
-	if (has_new_dependencies) {
-		// Add the new dependencies
-		CreateDependencies(transaction, new_obj, *alter_info.new_dependencies);
-	}
-
-	// Reinstate any old dependencies
+	// Reinstate the old dependencies
 	for (auto &dep : dependencies) {
 		CreateDependency(transaction, dep);
 	}

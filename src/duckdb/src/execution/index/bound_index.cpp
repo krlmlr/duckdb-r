@@ -58,10 +58,10 @@ void BoundIndex::VerifyConstraint(DataChunk &chunk, IndexAppendInfo &info, Confl
 	throw NotImplementedException("this implementation of VerifyConstraint does not exist.");
 }
 
-void BoundIndex::ResetStorage() {
+void BoundIndex::CommitDrop() {
 	IndexLock index_lock;
 	InitializeLock(index_lock);
-	ResetStorage(index_lock);
+	CommitDrop(index_lock);
 }
 
 idx_t BoundIndex::TryDelete(DataChunk &entries, Vector &row_identifiers, optional_ptr<SelectionVector> deleted_sel,
@@ -83,11 +83,12 @@ void BoundIndex::Delete(DataChunk &entries, Vector &row_identifiers) {
 }
 
 void BoundIndex::Delete(IndexLock &state, DataChunk &entries, Vector &row_identifiers) {
-	auto deleted_rows = TryDelete(state, entries, row_identifiers);
-	if (deleted_rows != entries.size()) {
-		throw InvalidInputException("Failed to delete all rows from index. Only deleted %d out of %d rows.\nChunk: %s",
-		                            deleted_rows, entries.size(), entries.ToString());
-	}
+	TryDelete(state, entries, row_identifiers);
+	// FIXME: enable this
+	// if (deleted_rows != entries.size()) {
+	// 	throw InvalidInputException("Failed to delete all rows from index. Only deleted %d out of %d rows.\nChunk: %s",
+	// deleted_rows, entries.size(), entries.ToString());
+	// }
 }
 
 ErrorData BoundIndex::Insert(IndexLock &l, DataChunk &chunk, Vector &row_ids, IndexAppendInfo &info) {
