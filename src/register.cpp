@@ -218,7 +218,7 @@ private:
 				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
 			}
 			cpp11::sexp constant_expr =
-			    CreateConstantExpression(functions, const_side->Cast<BoundConstantExpression>().value);
+			    CreateConstantExpression(functions, const_side->Cast<BoundConstantExpression>().GetValue());
 			switch (comparison_type) {
 			case ExpressionType::COMPARE_EQUAL:
 				return CreateExpression(functions, "equal", column_name_expr, constant_expr);
@@ -240,8 +240,8 @@ private:
 			auto &conj = expr.Cast<BoundConjunctionExpression>();
 			const string op = expr.GetExpressionType() == ExpressionType::CONJUNCTION_AND ? "and_kleene" : "or_kleene";
 			vector<cpp11::sexp> child_exprs;
-			child_exprs.reserve(conj.children.size());
-			for (auto &child : conj.children) {
+			child_exprs.reserve(conj.GetChildren().size());
+			for (auto &child : conj.GetChildren()) {
 				child_exprs.push_back(cpp11::sexp(TransformExpression(*child, column_name_expr, functions)));
 			}
 			return FoldBalanced(functions, op, child_exprs, 0, child_exprs.size());
