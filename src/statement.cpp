@@ -5,6 +5,8 @@
 #include "duckdb/common/arrow/result_arrow_wrapper.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/chunk_scan_state/query_result.hpp"
+#include "duckdb/main/query_profiler.hpp"
+#include "duckdb/parser/statement/explain_statement.hpp"
 #include "duckdb/parser/statement/relation_statement.hpp"
 #include "httplib.hpp"
 #include "rapi.hpp"
@@ -20,6 +22,55 @@
 using namespace duckdb;
 using namespace cpp11::literals;
 
+namespace {
+
+// Depth rather than a flag: a callback may run R code that starts another query
+// over another registered table, and only the outermost return is safe.
+idx_t callback_depth = 0;
+vector<duckdb::unique_ptr<PreparedStatement>> deferred_statements;
+
+} // namespace
+
+namespace duckdb {
+
+RCallbackScope::RCallbackScope() {
+	callback_depth++;
+}
+
+RCallbackScope::~RCallbackScope() {
+	callback_depth--;
+}
+
+bool RCallbackScope::Active() {
+	return callback_depth > 0;
+}
+
+void RCallbackScope::Defer(duckdb::unique_ptr<PreparedStatement> stmt) {
+	deferred_statements.push_back(std::move(stmt));
+}
+
+// Deliberately not called from the scope's own destructor: that returns into the
+// duckdb call that made the callback, which still holds the lock. Draining has
+// to wait for an entry point, where R is the caller and nothing is held.
+void RCallbackScope::Drain() {
+	if (Active()) {
+		return;
+	}
+	// Swap first: destroying a statement runs duckdb code, which may register
+	// another callback, and appending to a vector we are iterating would be UB.
+	vector<duckdb::unique_ptr<PreparedStatement>> to_destroy;
+	to_destroy.swap(deferred_statements);
+	to_destroy.clear();
+}
+
+RStatement::~RStatement() {
+	if (stmt && RCallbackScope::Active()) {
+		RCallbackScope::Defer(std::move(stmt));
+	}
+}
+
+} // namespace duckdb
+
 [[cpp11::register]] void rapi_release(duckdb::stmt_eptr_t stmt) {
 	auto stmt_ptr = stmt.release();
 	if (stmt_ptr) {
@@ -27,13 +78,20 @@ using namespace cpp11::literals;
 	}
 }
 
+static bool IsExplainAnalyze(const SQLStatement &statement) {
+	if (statement.type != StatementType::EXPLAIN_STATEMENT) {
+		return false;
+	}
+	return statement.Cast<ExplainStatement>().explain_type == ExplainType::EXPLAIN_ANALYZE;
+}
+
 static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt, const string &query, idx_t n_param,
-                                     SEXP registered_dfs = R_NilValue) {
+                                     SEXP registered_dfs = R_NilValue, bool explain_analyze = false) {
 	cpp11::writable::list retlist;
 	retlist.reserve(8);
 	retlist.push_back({"str"_nm = query});
 
-	auto stmtholder = make_uniq<RStatement>(std::move(stmt));
+	auto stmtholder = make_uniq<RStatement>(std::move(stmt), explain_analyze);
 
 	retlist.push_back({"type"_nm = StatementTypeToString(stmtholder->stmt->GetStatementType())});
 	retlist.push_back({"names"_nm = cpp11::as_sexp(IdentifiersToStrings(stmtholder->stmt->GetNames()))});
@@ -57,6 +115,8 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 }
 
 [[cpp11::register]] cpp11::list rapi_prepare(duckdb::conn_eptr_t conn, std::string query, cpp11::environment env) {
+	RCallbackScope::Drain();
+
 	if (!conn || !conn.get() || !conn->conn) {
 		rapi_error_with_context("rapi_prepare", "Invalid connection");
 	}
@@ -120,6 +180,7 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 			rapi_error_with_context("rapi_prepare", error);
 		}
 	}
+	bool explain_analyze = IsExplainAnalyze(*statements.back());
 	auto stmt = conn->conn->Prepare(std::move(statements.back()));
 
 	signal_handler.HandleInterrupt();
@@ -130,19 +191,21 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 		ErrorData error(stmt->error);
 		rapi_error_with_context("rapi_prepare", error);
 	}
-	auto n_param = stmt->named_param_map.size();
-	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs);
+	auto n_param = stmt->GetParameterCount();
+	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs, explain_analyze);
 }
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result);
 
 [[cpp11::register]] cpp11::list rapi_bind(duckdb::stmt_eptr_t stmt, cpp11::list params,
                                           duckdb::ConvertOpts convert_opts) {
+	RCallbackScope::Drain();
+
 	if (!stmt || !stmt.get() || !stmt->stmt) {
 		rapi_error_with_context("rapi_bind", "Invalid statement");
 	}
 
-	auto n_param = stmt->stmt->named_param_map.size();
+	auto n_param = stmt->stmt->GetParameterCount();
 
 	if (n_param == 0) {
 		rapi_error_with_context("rapi_bind", "`dbBind()` called but query takes no parameters");
@@ -431,7 +494,16 @@ bool FetchArrowChunk(ChunkScanState &scan_state, ClientProperties options, Appen
 }
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result) {
-	ScopedInterruptHandler signal_handler(stmt->stmt->context);
+	auto context = stmt->stmt->TryGetContext();
+	ScopedInterruptHandler signal_handler(context);
+
+	// EXPLAIN ANALYZE renders the query profiler's output, and the profiler only
+	// arms itself when the statement the engine plans is the EXPLAIN itself. The
+	// prepared-statement API plans an EXECUTE, so arm it here; the profiler
+	// disarms itself at the end of the query.
+	if (stmt->explain_analyze && context) {
+		QueryProfiler::Get(*context).StartExplainAnalyze();
+	}
 
 	auto generic_result = stmt->stmt->Execute(stmt->parameters, allow_stream_result);
 
@@ -460,6 +532,8 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 }
 
 [[cpp11::register]] SEXP rapi_execute(duckdb::stmt_eptr_t stmt, duckdb::ConvertOpts convert_opts) {
+	RCallbackScope::Drain();
+
 	if (!stmt || !stmt.get() || !stmt->stmt) {
 		rapi_error_with_context("rapi_execute", "Invalid statement");
 	}
