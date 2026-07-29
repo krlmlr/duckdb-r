@@ -130,7 +130,7 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 		ErrorData error(stmt->error);
 		rapi_error_with_context("rapi_prepare", error);
 	}
-	auto n_param = stmt->named_param_map.size();
+	auto n_param = stmt->GetParameterCount();
 	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs);
 }
 
@@ -142,7 +142,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		rapi_error_with_context("rapi_bind", "Invalid statement");
 	}
 
-	auto n_param = stmt->stmt->named_param_map.size();
+	auto n_param = stmt->stmt->GetParameterCount();
 
 	if (n_param == 0) {
 		rapi_error_with_context("rapi_bind", "`dbBind()` called but query takes no parameters");
@@ -431,7 +431,7 @@ bool FetchArrowChunk(ChunkScanState &scan_state, ClientProperties options, Appen
 }
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result) {
-	ScopedInterruptHandler signal_handler(stmt->stmt->context);
+	ScopedInterruptHandler signal_handler(stmt->stmt->TryGetContext());
 
 	auto generic_result = stmt->stmt->Execute(stmt->parameters, allow_stream_result);
 
