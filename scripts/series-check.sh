@@ -20,6 +20,12 @@
 # pointing anywhere else is a spent retry of some earlier commit, and says
 # nothing about this one.
 #
+# The ledger only decides once the rerun has reported. The retry pair rewrites
+# nothing, so the pre-retry `failure` record survives on the same SHA until the
+# rerun's own record replaces it; reading the ref alone turns a rerun that is
+# still building into REPAIR, and invites amending a commit that is about to go
+# green. The harvested run's `head_branch` is what tells the two apart.
+#
 # Usage: series-check.sh [<series>...]     # default: discover all from refs
 
 set -euo pipefail
@@ -28,6 +34,24 @@ remote=origin
 git fetch -q "$remote"
 
 rcc_tip() { git rev-parse -q --verify "refs/remotes/$remote/rcc" 2>/dev/null; }
+
+# See scripts/series-advance.sh: the pathspec narrows the walk, the subject
+# decides, and an empty answer explains itself on stderr.
+vendored_sha() {
+  local subjects sha n
+  subjects=$(git log -n 20 --format=%s "$1" -- src/duckdb || true)
+  sha=$(sed -nr 's/^.*duckdb.duckdb@([0-9a-f]+)( .*)?$/\1/p' <<<"$subjects" | head -n 1)
+  if [ -z "$sha" ]; then
+    n=$(grep -c . <<<"$subjects" || true)
+    if [ "$n" -ge 20 ]; then
+      echo "vendored_sha: 20 src/duckdb commits on $1, none of them vendoring;" >&2
+      echo "  if that is genuine, raise the bound in this helper" >&2
+    else
+      echo "vendored_sha: no vendor commit among $n src/duckdb commits on $1" >&2
+    fi
+  fi
+  echo "$sha"
+}
 
 state_of() { # <sha> -> success|failure|pending|missing
   local rec
@@ -40,6 +64,22 @@ state_of() { # <sha> -> success|failure|pending|missing
     rec=$(git show "$remote/rcc:runs2.ndjson" 2>/dev/null | grep -m 1 "\"commit\": *\"$1\"" || true)
   [ -z "$rec" ] && { echo missing; return; }
   echo "$rec" | sed -nr 's/.*"status":[^}]*"state": *"([a-z]+)".*/\1/p' | head -n 1
+}
+
+# The branch the harvested record's run was triggered on. This is what tells a
+# spent rerun from one still in flight: the retry pair rewrites nothing, so the
+# pre-retry record survives on the same SHA until the rerun's replaces it.
+# Reads the per-commit record first, exactly as state_of does — the leg
+# publishes it within seconds, while runs2.ndjson catches up on the next merge,
+# and a state read from one source with a branch read from the other would
+# disagree for as long as that gap lasts.
+run_branch_of() { # <sha> -> head_branch of the harvested run, empty if none
+  local rec
+  rec=$(git show "$remote/rcc:runs2.d/${1:0:2}/$1.ndjson" 2>/dev/null || true)
+  [ -z "$rec" ] &&
+    rec=$(git show "$remote/rcc:runs2.ndjson" 2>/dev/null | grep -m 1 "\"commit\": *\"$1\"" || true)
+  [ -z "$rec" ] && return
+  echo "$rec" | sed -nr 's/.*"head_branch": *"([^"]*)".*/\1/p' | head -n 1
 }
 
 # Positive evidence that a gate reached out over the network and was refused.
@@ -103,13 +143,15 @@ for S in "${series[@]}"; do
 
   inflight=$(git rev-list --count "$green..$dev")
   # the buffer counts from -dev's consumption anchor on -build: the -dev tip
-  # while it sits on -build's line, its vendored-SHA equivalent after a repair
+  # while it sits on -build's line, otherwise the -build commit equivalent to
+  # -dev's newest vendor commit — the identical rule, and the identical reasons,
+  # as the anchor in scripts/series-advance.sh.
   mb=$(git merge-base "$dev" "$build")
   if [ "$mb" = "$(git rev-parse "$dev")" ]; then
     buffered=$(git rev-list --count "$dev..$build")
   else
-    dev_up=$(git log -1 --format=%s "$dev" | sed -nr 's/^.*duckdb.duckdb@([0-9a-f]+)( .*)?$/\1/p')
-    anchor=$(git log --format='%H %s' "$mb..$build" | grep -m 1 "duckdb@${dev_up:-NONE}" | cut -d' ' -f1 || true)
+    dev_up=$(vendored_sha "$dev")
+    anchor=$(git log --format='%H %s' "$build" | grep -m 1 "duckdb@${dev_up:-NONE}" | cut -d' ' -f1 || true)
     if [ -n "$anchor" ]; then
       buffered=$(git rev-list --count "$anchor..$build")
     else
@@ -132,9 +174,15 @@ for S in "${series[@]}"; do
     kind=${why%%|*}; desc=${why#*|}
     retried=$(git rev-parse -q --verify "refs/remotes/$remote/retry-$S-dev" || true)
     if [ "$retried" = "$oldest" ]; then
-      echo "  REPAIR $oldest"
-      echo "         $desc"
-      echo "         retry-$S-dev is on this commit: the rerun was spent, this failure is real"
+      if [ "$(run_branch_of "$oldest")" = "retry-$S-dev" ]; then
+        echo "  REPAIR $oldest"
+        echo "         $desc"
+        echo "         retry-$S-dev reported on this commit: the rerun was spent, this failure is real"
+      else
+        echo "  WAIT   retry-$S-dev is on this commit, rerun not harvested yet"
+        echo "         the record below is the pre-retry one; do not repair on it"
+        echo "         $desc"
+      fi
     elif [ "$kind" = transient ]; then
       echo "  RETRY  $oldest"
       echo "         $desc"

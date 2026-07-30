@@ -10,13 +10,14 @@ name: sync
 
 jobs:
   sync:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.repository == 'krlmlr/duckdb-r'
 
     name: "Fast-forward main from duckdb/duckdb-r"
 
     permissions:
       contents: write
+      workflows: write
 
     steps:
       - uses: actions/checkout@v6
