@@ -39,6 +39,22 @@ Installing the package from GitHub may take up to an hour.
 
 See the [R API in the DuckDB documentation](https://duckdb.org/docs/api/r).
 
+## Documentation
+
+Documentation is organized as a tree;
+this section is its root for users,
+and [`AGENTS.md`](AGENTS.md) is the root for maintainers
+and coding agents.
+
+* [`AGENTS.md`](AGENTS.md) — working on the package:
+  build, test, and where to look for everything else
+* [`BRANCHES.md`](BRANCHES.md) — branch model, package flavors,
+  series invariants
+* [`RELEASE.md`](RELEASE.md) — the release process
+* [`scripts/VENDORING.md`](scripts/VENDORING.md) — vendoring mechanics
+* [`plan/README.md`](plan/README.md) — designs, plans, and historical
+  documents, each named there by path
+
 ## Building
 
 To build the R package, you first need to clone this repository and install the dependencies:
