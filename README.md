@@ -35,6 +35,28 @@ pak::pak("duckdb/duckdb-r")
 
 Installing the package from GitHub may take up to an hour.
 
+## Flavors
+
+The sources in this repository are published under several names —
+`duckdb` on CRAN,
+and every flavor on [r-universe](https://duckdb.r-universe.dev/builds).
+The `.dev` flavors are created by an automated vendoring process;
+the CRAN and LTS flavors always point at a stable upstream release.
+
+| Flavor | Series | Kind | Progress |
+|---|---|---|---|
+| `duckdb` | [`v1.5-variegata`](https://github.com/duckdb/duckdb/tree/v1.5-variegata) | CRAN | [![CRAN version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fpackagemanager.posit.co%2F__api__%2Frepos%2Fcran%2Fpackages%2Fduckdb&query=%24.version&label=version&color=green)](https://cran.r-project.org/package=duckdb) |
+| `duckdb.1.4` | [`v1.4-andium`](https://github.com/duckdb/duckdb/tree/v1.4-andium) | LTS | [![r-universe version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fduckdb.r-universe.dev%2Fapi%2Fpackages%2Fduckdb.1.4&query=%24.Version&label=version&color=green)](https://duckdb.r-universe.dev/duckdb.1.4) |
+| `duckdb.dev` | [`main`](https://github.com/duckdb/duckdb/tree/main) | dev | [![ahead](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=main&head=main-green&label=ahead&color=green)](https://github.com/krlmlr/duckdb-r/compare/main...main-green) [![in flight](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=main-green&head=main-dev&label=in%20flight&color=yellow)](https://github.com/krlmlr/duckdb-r/compare/main-green...main-dev) [![buffered](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=main-build-base&head=main-build&label=buffered&color=blue)](https://github.com/krlmlr/duckdb-r/compare/main-build-base...main-build) |
+| `duckdb.1.5.dev` | [`v1.5-variegata`](https://github.com/duckdb/duckdb/tree/v1.5-variegata) | dev | [![ahead](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=main&head=v1.5-variegata-green&label=ahead&color=green)](https://github.com/krlmlr/duckdb-r/compare/main...v1.5-variegata-green) [![in flight](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=v1.5-variegata-green&head=v1.5-variegata-dev&label=in%20flight&color=yellow)](https://github.com/krlmlr/duckdb-r/compare/v1.5-variegata-green...v1.5-variegata-dev) [![buffered](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=v1.5-variegata-build-base&head=v1.5-variegata-build&label=buffered&color=blue)](https://github.com/krlmlr/duckdb-r/compare/v1.5-variegata-build-base...v1.5-variegata-build) |
+| `duckdb.1.4.dev` | [`v1.4-andium`](https://github.com/duckdb/duckdb/tree/v1.4-andium) | dev | [![ahead](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=v1.4-andium&head=v1.4-andium-dev&label=ahead&color=green)](https://github.com/krlmlr/duckdb-r/compare/v1.4-andium...v1.4-andium-green) [![in flight](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=v1.4-andium-green&head=v1.4-andium-green&label=in%20flight&color=yellow)](https://github.com/krlmlr/duckdb-r/compare/v1.4-andium-green...v1.4-andium-dev) [![buffered](https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=v1.4-andium-build-base&head=v1.4-andium-build&label=buffered&color=blue)](https://github.com/krlmlr/duckdb-r/compare/v1.4-andium-build-base...v1.4-andium-build) |
+
+The badges track each `.dev` series:
+*ahead* counts commits ahead of the branch the series releases from,
+*in flight* counts commits in CI but not yet trusted,
+*buffered* counts commits vendored but not yet verified.
+See [`BRANCHES.md`](BRANCHES.md) for the full model.
+
 ## User Guide
 
 See the [R API in the DuckDB documentation](https://duckdb.org/docs/api/r).
