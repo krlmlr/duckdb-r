@@ -479,9 +479,31 @@ a `patch/` entry whose whole diff sits inside `#if defined(_WIN32)`,
 a test skip keyed on a runtime value the engine itself reports,
 a pragma scoped to the compiler that warns.
 Anything broader waits for evidence,
-and the evidence is another universe build — an hour, not a guess.
+and a local reproduction is evidence:
+the compiler a warning names is usually installed here.
+Reproduce it, fix it, confirm the diagnostic is gone,
+then compile the same translation unit under `g++ -Wall`
+and confirm the output is unchanged —
+which is what costs-Linux-nothing means as a check
+rather than as a claim.
+A fix carrying both halves does not wait for r-universe;
+the next universe build confirms it in passing.
+
+**A fix belongs where its code lives, which is not always `main`.**
 A fix that is not series-specific belongs on `main`,
-where stage 4 spreads it to every series by itself.
+where stage 4 spreads it to every series by itself —
+but a `patch/` entry is only portable when the tree it patches is.
+`main` carries the engine `main` has vendored,
+and a series buffer runs ahead of it,
+so a patch written against the newer engine
+applies in neither direction on `main`'s tree —
+`vendor-one.sh`'s `PATCH BROKEN` exit.
+Landing it there breaks the next vendor run
+instead of helping any series.
+Check that the code exists on `main` before routing a fix through it;
+where it does not, the fix is series-specific by engine version,
+belongs on `<S>-dev` and `<S>-build`,
+and reaches `main` when `main`'s engine reaches the code.
 
 **A `patch/` entry has to reach the buffer too.**
 Stage 4 ports `main` onto `<S>-dev` and stops there;
@@ -556,6 +578,43 @@ and treat anything it reverts that the series genuinely needs
 as a finding for `main`:
 make it conditional there;
 a series never keeps its own fork of the tooling.
+
+**A frozen series takes no ports by default.**
+A series seeded from a release branch keeps the R code it was seeded with —
+glue, tests, docs and version alike —
+so `main`'s development line,
+which belongs to another engine's R side,
+is not a backlog it is behind on.
+`scripts/series-port.sh` reads that off the lineage under the seed
+and skips the walk for such a series,
+so the sync commit is their whole default port
+and their tooling still follows `main`:
+a frozen R side is not a frozen CI,
+and the identity goal above holds for every series either way.
+Run the script for a frozen series like any other;
+the default needs no judgement.
+
+**Frozen is not untouchable.**
+A change the r-universe build genuinely needs still lands —
+a `configure` fix, whatever keeps the flavor green —
+and stage 2 reaches for it the same way it mines a base series:
+if the red has already been fixed on `main`,
+port that commit rather than rederive it.
+Name it, one commit at a time:
+
+```sh
+scripts/series-port.sh <S> --list            # walk a frozen series anyway
+scripts/series-port.sh <S> --apply <sha>…    # take the ones the build needs
+```
+
+Explicit SHAs are never second-guessed,
+on a frozen series or any other.
+What the freeze buys is that nobody has to read
+the whole development line every firing
+to find the two commits that matter.
+The bar is what the build needs, not what `main` happens to have:
+a fix that only tidies R code the series is content with
+is not a reason to move the series off its seed.
 
 What stays judgement:
 
