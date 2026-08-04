@@ -802,7 +802,7 @@ public:
 		if constexpr (HasInitialize<STATE_TYPE, OP>::value) {
 			OP::Initialize(state);
 		} else {
-			memset(&state, 0, sizeof(STATE_TYPE));
+			memset(static_cast<void *>(&state), 0, sizeof(STATE_TYPE));
 		}
 	}
 
