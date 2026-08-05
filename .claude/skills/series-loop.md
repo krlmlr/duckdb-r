@@ -592,8 +592,8 @@ scripts/series-port.sh <S> --apply <sha>…   # a chosen subset instead
 
 The script lists **every** commit `main` has that the series lacks,
 oldest first,
-classified TOOLING / MIXED / OTHER / VENDOR by what it touches,
-and applies all but VENDOR by default.
+classified TOOLING / MIXED / OTHER / VENDOR / VERSION by what it touches,
+and applies all but VENDOR and VERSION by default.
 A MIXED or OTHER commit is a *forward-port*
 in `BRANCHES.md`'s sense (invariant S4):
 `-dev` has always been vendor commits
@@ -619,6 +619,21 @@ carrying no upstream SHA;
 excluding them by path made exactly those fixes wait for a forward,
 which is the one thing the port exists to end.
 They are ordinary commits, ported like any other.
+
+VERSION commits are listed and never auto-picked either:
+`main`'s R-client counter is not this series'.
+A `-dev` version says which release line the series was seeded from
+and how far its own vendoring has run,
+and what `main` is at today is read from `main`
+([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
+Here the **content** decides, not the subject:
+the commit moves `Version:` and carries nothing but release paperwork,
+so a bump under a subject other than `fledge:` is held back too,
+and a bump riding on real content is not —
+that one is a forward-port that happens to bump,
+ported whole like any other,
+because a pick is never half a commit.
+
 Port volume threatens nothing either:
 the readers of the strand — `vendored_sha()` in stage 5,
 the base scan in `vendor-one.sh` — look *past* such commits by subject,
@@ -987,14 +1002,14 @@ is what carries the automatic path into a forward series.
   the merge driver's gate then keeps our side verbatim
   and the counter freezes for the whole chain
   ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
-  `main` is in that state, and every firing pays it —
-  40 commits at `1.5.99.9003.1039` on 2026-08-02,
-  five at `…1076` on 2026-08-04.
+  `main` is in that state.
   So after any replay, **restamp before pushing `-dev`**:
   walk the new commits oldest first
   and bump once per vendor commit from the parent's value.
-  Check it, do not assume it —
-  a replay that silently froze the counter
+  [`scripts/series-advance.sh`](/scripts/series-advance.sh) does that
+  and then asserts it;
+  a replay done by hand is checked the same way,
+  because one that silently froze the counter
   looks exactly like one that did not.
 - Git alone is sufficient in principle:
   even a rerun is one pushed ref —
