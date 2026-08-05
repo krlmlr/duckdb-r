@@ -1,0 +1,1026 @@
+﻿2026-05-18T01:19:36.9507722Z Current runner version: '2.334.0'
+2026-05-18T01:19:36.9539932Z ##[group]Runner Image Provisioner
+2026-05-18T01:19:36.9541358Z Hosted Compute Agent
+2026-05-18T01:19:36.9542089Z Version: 20260213.493
+2026-05-18T01:19:36.9543018Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-18T01:19:36.9544054Z Build Date: 2026-02-13T00:28:41Z
+2026-05-18T01:19:36.9545319Z Worker ID: {2d6fc29b-3904-4339-9993-819a52f7e9e7}
+2026-05-18T01:19:36.9546281Z Azure Region: eastus
+2026-05-18T01:19:36.9547124Z ##[endgroup]
+2026-05-18T01:19:36.9549015Z ##[group]Operating System
+2026-05-18T01:19:36.9549876Z Ubuntu
+2026-05-18T01:19:36.9550942Z 24.04.4
+2026-05-18T01:19:36.9551568Z LTS
+2026-05-18T01:19:36.9552239Z ##[endgroup]
+2026-05-18T01:19:36.9552957Z ##[group]Runner Image
+2026-05-18T01:19:36.9553797Z Image: ubuntu-24.04
+2026-05-18T01:19:36.9554492Z Version: 20260513.135.3
+2026-05-18T01:19:36.9556439Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260513.135/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-18T01:19:36.9558678Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260513.135
+2026-05-18T01:19:36.9560392Z ##[endgroup]
+2026-05-18T01:19:36.9562281Z ##[group]GITHUB_TOKEN Permissions
+2026-05-18T01:19:36.9565852Z Actions: write
+2026-05-18T01:19:36.9566662Z Contents: write
+2026-05-18T01:19:36.9567398Z Metadata: read
+2026-05-18T01:19:36.9568190Z PullRequests: write
+2026-05-18T01:19:36.9568947Z Statuses: write
+2026-05-18T01:19:36.9569679Z ##[endgroup]
+2026-05-18T01:19:36.9572825Z Secret source: Actions
+2026-05-18T01:19:36.9574155Z Prepare workflow directory
+2026-05-18T01:19:37.0017508Z Prepare all required actions
+2026-05-18T01:19:37.0071098Z Getting action download info
+2026-05-18T01:19:37.2782217Z Download action repository 'actions/checkout@v6' (SHA:de0fac2e4500dabe0009e67214ff5f5447ce83dd)
+2026-05-18T01:19:37.4282587Z Download action repository 'actions/upload-artifact@v5' (SHA:330a01c490aca151604b8cf639adc76d48f6c5d4)
+2026-05-18T01:19:37.6971749Z Complete job name: Smoke test: stock R
+2026-05-18T01:19:37.7726398Z ##[group]Run actions/checkout@v6
+2026-05-18T01:19:37.7727145Z with:
+2026-05-18T01:19:37.7727560Z   ref: cd276d0cd2ecff297ed30797f6c5d5dd58fc2017
+2026-05-18T01:19:37.7728164Z   repository: krlmlr/duckdb-r
+2026-05-18T01:19:37.7728761Z   token: ***
+2026-05-18T01:19:37.7729129Z   ssh-strict: true
+2026-05-18T01:19:37.7729499Z   ssh-user: git
+2026-05-18T01:19:37.7729887Z   persist-credentials: true
+2026-05-18T01:19:37.7730500Z   clean: true
+2026-05-18T01:19:37.7730875Z   sparse-checkout-cone-mode: true
+2026-05-18T01:19:37.7731332Z   fetch-depth: 1
+2026-05-18T01:19:37.7731691Z   fetch-tags: false
+2026-05-18T01:19:37.7732072Z   show-progress: true
+2026-05-18T01:19:37.7732450Z   lfs: false
+2026-05-18T01:19:37.7732799Z   submodules: false
+2026-05-18T01:19:37.7733171Z   set-safe-directory: true
+2026-05-18T01:19:37.7733781Z ##[endgroup]
+2026-05-18T01:19:37.8697826Z Syncing repository: krlmlr/duckdb-r
+2026-05-18T01:19:37.8699695Z ##[group]Getting Git version info
+2026-05-18T01:19:37.8700766Z Working directory is '/home/runner/work/duckdb-r/duckdb-r'
+2026-05-18T01:19:37.8701841Z [command]/usr/bin/git version
+2026-05-18T01:19:37.8733967Z git version 2.54.0
+2026-05-18T01:19:37.8756229Z ##[endgroup]
+2026-05-18T01:19:37.8770529Z Temporarily overriding HOME='/home/runner/work/_temp/c276b526-4247-4e10-834f-df6f3c6711dc' before making global git config changes
+2026-05-18T01:19:37.8772694Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-18T01:19:37.8775760Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/duckdb-r/duckdb-r
+2026-05-18T01:19:37.8819020Z Deleting the contents of '/home/runner/work/duckdb-r/duckdb-r'
+2026-05-18T01:19:37.8823689Z ##[group]Initializing the repository
+2026-05-18T01:19:37.8827817Z [command]/usr/bin/git init /home/runner/work/duckdb-r/duckdb-r
+2026-05-18T01:19:37.8897066Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-18T01:19:37.8898532Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-18T01:19:37.8900378Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-18T01:19:37.8901686Z hint: call:
+2026-05-18T01:19:37.8902215Z hint:
+2026-05-18T01:19:37.8902902Z hint: 	git config --global init.defaultBranch <name>
+2026-05-18T01:19:37.8903743Z hint:
+2026-05-18T01:19:37.8904553Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-18T01:19:37.8905443Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-18T01:19:37.8906146Z hint:
+2026-05-18T01:19:37.8906518Z hint: 	git branch -m <name>
+2026-05-18T01:19:37.8907044Z hint:
+2026-05-18T01:19:37.8907903Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-18T01:19:37.8908929Z Initialized empty Git repository in /home/runner/work/duckdb-r/duckdb-r/.git/
+2026-05-18T01:19:37.8912892Z [command]/usr/bin/git remote add origin https://github.com/krlmlr/duckdb-r
+2026-05-18T01:19:37.8983606Z ##[endgroup]
+2026-05-18T01:19:37.8984408Z ##[group]Disabling automatic garbage collection
+2026-05-18T01:19:37.8987382Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-18T01:19:37.9017948Z ##[endgroup]
+2026-05-18T01:19:37.9018936Z ##[group]Setting up auth
+2026-05-18T01:19:37.9019695Z Removing SSH command configuration
+2026-05-18T01:19:37.9025666Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-18T01:19:37.9058591Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-18T01:19:37.9383002Z Removing HTTP extra header
+2026-05-18T01:19:37.9390278Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-18T01:19:37.9428412Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-18T01:19:37.9677590Z Removing includeIf entries pointing to credentials config files
+2026-05-18T01:19:37.9684419Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-18T01:19:37.9721061Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-18T01:19:37.9976916Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-18T01:19:38.0013757Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git.path /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:19:38.0046547Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:19:38.0077769Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:19:38.0108508Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:19:38.0134582Z ##[endgroup]
+2026-05-18T01:19:38.0135300Z ##[group]Fetching the repository
+2026-05-18T01:19:38.0145400Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin cd276d0cd2ecff297ed30797f6c5d5dd58fc2017
+2026-05-18T01:19:39.3531504Z From https://github.com/krlmlr/duckdb-r
+2026-05-18T01:19:39.3533095Z  * branch            cd276d0cd2ecff297ed30797f6c5d5dd58fc2017 -> FETCH_HEAD
+2026-05-18T01:19:39.3569458Z [command]/usr/bin/git rev-parse --verify --quiet cd276d0cd2ecff297ed30797f6c5d5dd58fc2017^{object}
+2026-05-18T01:19:39.3603747Z cd276d0cd2ecff297ed30797f6c5d5dd58fc2017
+2026-05-18T01:19:39.3609112Z ##[endgroup]
+2026-05-18T01:19:39.3610925Z ##[group]Determining the checkout info
+2026-05-18T01:19:39.3612206Z ##[endgroup]
+2026-05-18T01:19:39.3615736Z [command]/usr/bin/git sparse-checkout disable
+2026-05-18T01:19:39.3663594Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-18T01:19:39.3693642Z ##[group]Checking out the ref
+2026-05-18T01:19:39.3696433Z [command]/usr/bin/git checkout --progress --force cd276d0cd2ecff297ed30797f6c5d5dd58fc2017
+2026-05-18T01:19:39.6266791Z Note: switching to 'cd276d0cd2ecff297ed30797f6c5d5dd58fc2017'.
+2026-05-18T01:19:39.6268335Z 
+2026-05-18T01:19:39.6269598Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-05-18T01:19:39.6271473Z changes and commit them, and you can discard any commits you make in this
+2026-05-18T01:19:39.6273054Z state without impacting any branches by switching back to a branch.
+2026-05-18T01:19:39.6274060Z 
+2026-05-18T01:19:39.6274686Z If you want to create a new branch to retain commits you create, you may
+2026-05-18T01:19:39.6276033Z do so (now or later) by using -c with the switch command. Example:
+2026-05-18T01:19:39.6276745Z 
+2026-05-18T01:19:39.6277049Z   git switch -c <new-branch-name>
+2026-05-18T01:19:39.6277567Z 
+2026-05-18T01:19:39.6277902Z Or undo this operation with:
+2026-05-18T01:19:39.6278342Z 
+2026-05-18T01:19:39.6278607Z   git switch -
+2026-05-18T01:19:39.6279047Z 
+2026-05-18T01:19:39.6279857Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-05-18T01:19:39.6281274Z 
+2026-05-18T01:19:39.6282292Z HEAD is now at cd276d0 vendor: Update vendored sources to duckdb/duckdb@c5b5b98e4a7eb63e99bb388989a2d597cd14d232
+2026-05-18T01:19:39.6285375Z ##[endgroup]
+2026-05-18T01:19:39.6329465Z [command]/usr/bin/git log -1 --format=%H
+2026-05-18T01:19:39.6357064Z cd276d0cd2ecff297ed30797f6c5d5dd58fc2017
+2026-05-18T01:19:39.6624590Z ##[group]Run echo "Actor: github-actions[bot]"
+2026-05-18T01:19:39.6625567Z [36;1mecho "Actor: github-actions[bot]"[0m
+2026-05-18T01:19:39.6626318Z [36;1m[0m
+2026-05-18T01:19:39.6626961Z [36;1m# Check status of this workflow[0m
+2026-05-18T01:19:39.6627691Z [36;1mstate="pending"[0m
+2026-05-18T01:19:39.6628459Z [36;1msha=cd276d0cd2ecff297ed30797f6c5d5dd58fc2017[0m
+2026-05-18T01:19:39.6629258Z [36;1mif [ -z "${sha}" ]; then[0m
+2026-05-18T01:19:39.6630018Z [36;1m  sha=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c[0m
+2026-05-18T01:19:39.6631084Z [36;1mfi[0m
+2026-05-18T01:19:39.6631727Z [36;1msha=$(git rev-parse ${sha})[0m
+2026-05-18T01:19:39.6632427Z [36;1m[0m
+2026-05-18T01:19:39.6633037Z [36;1mhtml_url=$(gh api \[0m
+2026-05-18T01:19:39.6633788Z [36;1m  -H "Accept: application/vnd.github+json" \[0m
+2026-05-18T01:19:39.6634616Z [36;1m  -H "X-GitHub-Api-Version: 2022-11-28" \[0m
+2026-05-18T01:19:39.6635559Z [36;1m  repos/krlmlr/duckdb-r/actions/runs/26005697733 | jq -r .html_url)[0m
+2026-05-18T01:19:39.6636424Z [36;1m[0m
+2026-05-18T01:19:39.6637068Z [36;1mdescription="rcc / rcc-smoke"[0m
+2026-05-18T01:19:39.6637769Z [36;1m[0m
+2026-05-18T01:19:39.6638370Z [36;1mgh api \[0m
+2026-05-18T01:19:39.6639004Z [36;1m  --method POST \[0m
+2026-05-18T01:19:39.6639741Z [36;1m  -H "Accept: application/vnd.github+json" \[0m
+2026-05-18T01:19:39.6640689Z [36;1m  -H "X-GitHub-Api-Version: 2022-11-28" \[0m
+2026-05-18T01:19:39.6641513Z [36;1m  repos/krlmlr/duckdb-r/statuses/${sha} \[0m
+2026-05-18T01:19:39.6642545Z [36;1m  -f "state=${state}" -f "target_url=${html_url}" -f "description=${description}" -f "context=rcc"[0m
+2026-05-18T01:19:39.6683761Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:39.6684592Z env:
+2026-05-18T01:19:39.6685811Z   GH_TOKEN: ***
+2026-05-18T01:19:39.6686449Z ##[endgroup]
+2026-05-18T01:19:39.6769836Z Actor: github-actions[bot]
+2026-05-18T01:19:40.3078220Z {"url":"https://api.github.com/repos/krlmlr/duckdb-r/statuses/cd276d0cd2ecff297ed30797f6c5d5dd58fc2017","avatar_url":"https://avatars.githubusercontent.com/in/15368?v=4","id":47533308326,"node_id":"SC_kwDOKNSgSc8AAAALETS5pg","state":"pending","description":"rcc / rcc-smoke","target_url":"https://github.com/krlmlr/duckdb-r/actions/runs/26005697733","context":"rcc","created_at":"2026-05-18T01:19:40Z","updated_at":"2026-05-18T01:19:40Z","creator":{"login":"github-actions[bot]","id":41898282,"node_id":"MDM6Qm90NDE4OTgyODI=","avatar_url":"https://avatars.githubusercontent.com/in/15368?v=4","gravatar_id":"","url":"https://api.github.com/users/github-actions%5Bbot%5D","html_url":"https://github.com/apps/github-actions","followers_url":"https://api.github.com/users/github-actions%5Bbot%5D/followers","following_url":"https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}","gists_url":"https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}","starred_url":"https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/github-actions%5Bbot%5D/subscriptions","organizations_url":"https://api.github.com/users/github-actions%5Bbot%5D/orgs","repos_url":"https://api.github.com/users/github-actions%5Bbot%5D/repos","events_url":"https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}","received_events_url":"https://api.github.com/users/github-actions%5Bbot%5D/received_events","type":"Bot","user_view_type":"public","site_admin":false}}
+2026-05-18T01:19:40.3297881Z Prepare all required actions
+2026-05-18T01:19:40.3339636Z ##[group]Run ./.github/workflows/rate-limit
+2026-05-18T01:19:40.3339912Z with:
+2026-05-18T01:19:40.3340559Z   token: ***
+2026-05-18T01:19:40.3340759Z ##[endgroup]
+2026-05-18T01:19:40.3418294Z ##[group]Run curl -s --header "authorization: ***" https://api.github.com/rate_limit
+2026-05-18T01:19:40.3419081Z [36;1mcurl -s --header "authorization: ***" https://api.github.com/rate_limit[0m
+2026-05-18T01:19:40.3457803Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:40.3458155Z ##[endgroup]
+2026-05-18T01:19:40.4872641Z {
+2026-05-18T01:19:40.4873073Z   "resources": {
+2026-05-18T01:19:40.4873383Z     "core": {
+2026-05-18T01:19:40.4873675Z       "limit": 5000,
+2026-05-18T01:19:40.4873968Z       "used": 18,
+2026-05-18T01:19:40.4874277Z       "remaining": 4982,
+2026-05-18T01:19:40.4874585Z       "reset": 1779070762
+2026-05-18T01:19:40.4874882Z     },
+2026-05-18T01:19:40.4875123Z     "search": {
+2026-05-18T01:19:40.4875553Z       "limit": 30,
+2026-05-18T01:19:40.4875830Z       "used": 0,
+2026-05-18T01:19:40.4876109Z       "remaining": 30,
+2026-05-18T01:19:40.4876399Z       "reset": 1779067240
+2026-05-18T01:19:40.4876692Z     },
+2026-05-18T01:19:40.4876937Z     "graphql": {
+2026-05-18T01:19:40.4877137Z       "limit": 5000,
+2026-05-18T01:19:40.4877325Z       "used": 205,
+2026-05-18T01:19:40.4877515Z       "remaining": 4795,
+2026-05-18T01:19:40.4877718Z       "reset": 1779067211
+2026-05-18T01:19:40.4877940Z     },
+2026-05-18T01:19:40.4878176Z     "integration_manifest": {
+2026-05-18T01:19:40.4878405Z       "limit": 5000,
+2026-05-18T01:19:40.4878599Z       "used": 0,
+2026-05-18T01:19:40.4878783Z       "remaining": 5000,
+2026-05-18T01:19:40.4878986Z       "reset": 1779070780
+2026-05-18T01:19:40.4879170Z     },
+2026-05-18T01:19:40.4879344Z     "source_import": {
+2026-05-18T01:19:40.4879550Z       "limit": 100,
+2026-05-18T01:19:40.4879761Z       "used": 0,
+2026-05-18T01:19:40.4879948Z       "remaining": 100,
+2026-05-18T01:19:40.4880439Z       "reset": 1779067240
+2026-05-18T01:19:40.4880652Z     },
+2026-05-18T01:19:40.4880833Z     "code_scanning_upload": {
+2026-05-18T01:19:40.4881059Z       "limit": 5000,
+2026-05-18T01:19:40.4881243Z       "used": 18,
+2026-05-18T01:19:40.4881438Z       "remaining": 4982,
+2026-05-18T01:19:40.4881638Z       "reset": 1779070762
+2026-05-18T01:19:40.4881833Z     },
+2026-05-18T01:19:40.4882003Z     "code_scanning_autofix": {
+2026-05-18T01:19:40.4882220Z       "limit": 10,
+2026-05-18T01:19:40.4882402Z       "used": 0,
+2026-05-18T01:19:40.4882596Z       "remaining": 10,
+2026-05-18T01:19:40.4883309Z       "reset": 1779067240
+2026-05-18T01:19:40.4883607Z     },
+2026-05-18T01:19:40.4883901Z     "actions_runner_registration": {
+2026-05-18T01:19:40.4884283Z       "limit": 10000,
+2026-05-18T01:19:40.4884526Z       "used": 0,
+2026-05-18T01:19:40.4884706Z       "remaining": 10000,
+2026-05-18T01:19:40.4884912Z       "reset": 1779070780
+2026-05-18T01:19:40.4885095Z     },
+2026-05-18T01:19:40.4885275Z     "scim": {
+2026-05-18T01:19:40.4885447Z       "limit": 15000,
+2026-05-18T01:19:40.4885631Z       "used": 0,
+2026-05-18T01:19:40.4885803Z       "remaining": 15000,
+2026-05-18T01:19:40.4886000Z       "reset": 1779070780
+2026-05-18T01:19:40.4886179Z     },
+2026-05-18T01:19:40.4886357Z     "dependency_snapshots": {
+2026-05-18T01:19:40.4886572Z       "limit": 100,
+2026-05-18T01:19:40.4886759Z       "used": 0,
+2026-05-18T01:19:40.4886937Z       "remaining": 100,
+2026-05-18T01:19:40.4887129Z       "reset": 1779067240
+2026-05-18T01:19:40.4887315Z     },
+2026-05-18T01:19:40.4887481Z     "dependency_sbom": {
+2026-05-18T01:19:40.4887707Z       "limit": 100,
+2026-05-18T01:19:40.4887888Z       "used": 0,
+2026-05-18T01:19:40.4888091Z       "remaining": 100,
+2026-05-18T01:19:40.4888389Z       "reset": 1779067240
+2026-05-18T01:19:40.4888583Z     },
+2026-05-18T01:19:40.4888752Z     "audit_log": {
+2026-05-18T01:19:40.4888931Z       "limit": 1750,
+2026-05-18T01:19:40.4889118Z       "used": 0,
+2026-05-18T01:19:40.4889555Z       "remaining": 1750,
+2026-05-18T01:19:40.4889760Z       "reset": 1779070780
+2026-05-18T01:19:40.4889945Z     },
+2026-05-18T01:19:40.4890255Z     "audit_log_streaming": {
+2026-05-18T01:19:40.4890466Z       "limit": 15,
+2026-05-18T01:19:40.4890650Z       "used": 0,
+2026-05-18T01:19:40.4890826Z       "remaining": 15,
+2026-05-18T01:19:40.4891046Z       "reset": 1779070780
+2026-05-18T01:19:40.4891236Z     },
+2026-05-18T01:19:40.4891402Z     "code_search": {
+2026-05-18T01:19:40.4891587Z       "limit": 10,
+2026-05-18T01:19:40.4891823Z       "used": 0,
+2026-05-18T01:19:40.4892092Z       "remaining": 10,
+2026-05-18T01:19:40.4892298Z       "reset": 1779067240
+2026-05-18T01:19:40.4892526Z     }
+2026-05-18T01:19:40.4892687Z   },
+2026-05-18T01:19:40.4892853Z   "rate": {
+2026-05-18T01:19:40.4893036Z     "limit": 5000,
+2026-05-18T01:19:40.4893217Z     "used": 18,
+2026-05-18T01:19:40.4893404Z     "remaining": 4982,
+2026-05-18T01:19:40.4893592Z     "reset": 1779070762
+2026-05-18T01:19:40.4893786Z   }
+2026-05-18T01:19:40.4893950Z }
+2026-05-18T01:19:40.4943806Z Prepare all required actions
+2026-05-18T01:19:40.4969524Z ##[group]Run ./.github/workflows/git-identity
+2026-05-18T01:19:40.4969814Z ##[endgroup]
+2026-05-18T01:19:40.4987534Z ##[group]Run env | sort
+2026-05-18T01:19:40.4987790Z [36;1menv | sort[0m
+2026-05-18T01:19:40.4988051Z [36;1mgit config --local user.name "$GITHUB_ACTOR"[0m
+2026-05-18T01:19:40.4988472Z [36;1mgit config --local user.email "$GITHUB_ACTOR@users.noreply.github.com"[0m
+2026-05-18T01:19:40.5026738Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:40.5027074Z ##[endgroup]
+2026-05-18T01:19:40.5100837Z ACCEPT_EULA=Y
+2026-05-18T01:19:40.5101424Z ACTIONS_ORCHESTRATION_ID=644b48e7-df45-4506-922d-ce15a7f99c06.rcc-smoke.__default
+2026-05-18T01:19:40.5102184Z ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/opt/actionarchivecache
+2026-05-18T01:19:40.5102559Z AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache
+2026-05-18T01:19:40.5102842Z ANDROID_HOME=/usr/local/lib/android/sdk
+2026-05-18T01:19:40.5103195Z ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:40.5103563Z ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:40.5103958Z ANDROID_NDK_LATEST_HOME=/usr/local/lib/android/sdk/ndk/29.0.14206865
+2026-05-18T01:19:40.5104399Z ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:40.5104810Z ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+2026-05-18T01:19:40.5105145Z ANT_HOME=/usr/share/ant
+2026-05-18T01:19:40.5105379Z AZURE_EXTENSION_DIR=/opt/az/azcliextensions
+2026-05-18T01:19:40.5105664Z BOOTSTRAP_HASKELL_NONINTERACTIVE=1
+2026-05-18T01:19:40.5106190Z CHROMEWEBDRIVER=/usr/local/share/chromedriver-linux64
+2026-05-18T01:19:40.5106501Z CHROME_BIN=/usr/bin/google-chrome
+2026-05-18T01:19:40.5106723Z CI=true
+2026-05-18T01:19:40.5106906Z CONDA=/usr/share/miniconda
+2026-05-18T01:19:40.5107125Z DEBIAN_FRONTEND=noninteractive
+2026-05-18T01:19:40.5107363Z DOTNET_MULTILEVEL_LOOKUP=0
+2026-05-18T01:19:40.5107580Z DOTNET_NOLOGO=1
+2026-05-18T01:19:40.5107796Z DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+2026-05-18T01:19:40.5108063Z EDGEWEBDRIVER=/usr/local/share/edge_driver
+2026-05-18T01:19:40.5108323Z ENABLE_RUNNER_TRACING=true
+2026-05-18T01:19:40.5108566Z GECKOWEBDRIVER=/usr/local/share/gecko_driver
+2026-05-18T01:19:40.5108837Z GHCUP_INSTALL_BASE_PREFIX=/usr/local
+2026-05-18T01:19:40.5109075Z GITHUB_ACTION=__self_2
+2026-05-18T01:19:40.5109269Z GITHUB_ACTIONS=true
+2026-05-18T01:19:40.5109623Z GITHUB_ACTION_PATH=/home/runner/work/duckdb-r/duckdb-r/./.github/workflows/git-identity
+2026-05-18T01:19:40.5110027Z GITHUB_ACTION_REF=
+2026-05-18T01:19:40.5110530Z GITHUB_ACTION_REPOSITORY=
+2026-05-18T01:19:40.5110783Z GITHUB_ACTOR=github-actions[bot]
+2026-05-18T01:19:40.5111024Z GITHUB_ACTOR_ID=41898282
+2026-05-18T01:19:40.5111272Z GITHUB_API_URL=https://api.github.com
+2026-05-18T01:19:40.5111533Z GITHUB_BASE_REF=
+2026-05-18T01:19:40.5111934Z GITHUB_ENV=/home/runner/work/_temp/_runner_file_commands/set_env_47beddf8-a7ce-4e89-b45c-63a07f5816fb
+2026-05-18T01:19:40.5112384Z GITHUB_EVENT_NAME=workflow_dispatch
+2026-05-18T01:19:40.5112720Z GITHUB_EVENT_PATH=/home/runner/work/_temp/_github_workflow/event.json
+2026-05-18T01:19:40.5113095Z GITHUB_GRAPHQL_URL=https://api.github.com/graphql
+2026-05-18T01:19:40.5113383Z GITHUB_HEAD_REF=
+2026-05-18T01:19:40.5113636Z GITHUB_JOB=rcc-smoke
+2026-05-18T01:19:40.5114043Z GITHUB_OUTPUT=/home/runner/work/_temp/_runner_file_commands/set_output_47beddf8-a7ce-4e89-b45c-63a07f5816fb
+2026-05-18T01:19:40.5114674Z GITHUB_PATH=/home/runner/work/_temp/_runner_file_commands/add_path_47beddf8-a7ce-4e89-b45c-63a07f5816fb
+2026-05-18T01:19:40.5115231Z GITHUB_REF=refs/heads/broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:40.5115676Z GITHUB_REF_NAME=broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:40.5116021Z GITHUB_REF_PROTECTED=false
+2026-05-18T01:19:40.5116234Z GITHUB_REF_TYPE=branch
+2026-05-18T01:19:40.5116454Z GITHUB_REPOSITORY=krlmlr/duckdb-r
+2026-05-18T01:19:40.5116692Z GITHUB_REPOSITORY_ID=685023305
+2026-05-18T01:19:40.5117142Z GITHUB_REPOSITORY_OWNER=krlmlr
+2026-05-18T01:19:40.5117371Z GITHUB_REPOSITORY_OWNER_ID=1741643
+2026-05-18T01:19:40.5117615Z GITHUB_RETENTION_DAYS=90
+2026-05-18T01:19:40.5117818Z GITHUB_RUN_ATTEMPT=1
+2026-05-18T01:19:40.5118029Z GITHUB_RUN_ID=26005697733
+2026-05-18T01:19:40.5118238Z GITHUB_RUN_NUMBER=6662
+2026-05-18T01:19:40.5118451Z GITHUB_SERVER_URL=https://github.com
+2026-05-18T01:19:40.5118736Z GITHUB_SHA=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c
+2026-05-18T01:19:40.5119223Z GITHUB_STATE=/home/runner/work/_temp/_runner_file_commands/save_state_47beddf8-a7ce-4e89-b45c-63a07f5816fb
+2026-05-18T01:19:40.5119899Z GITHUB_STEP_SUMMARY=/home/runner/work/_temp/_runner_file_commands/step_summary_47beddf8-a7ce-4e89-b45c-63a07f5816fb
+2026-05-18T01:19:40.5120595Z GITHUB_TRIGGERING_ACTOR=github-actions[bot]
+2026-05-18T01:19:40.5120855Z GITHUB_WORKFLOW=rcc
+2026-05-18T01:19:40.5121398Z GITHUB_WORKFLOW_REF=krlmlr/duckdb-r/.github/workflows/R-CMD-check.yaml@refs/heads/broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:40.5122044Z GITHUB_WORKFLOW_SHA=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c
+2026-05-18T01:19:40.5122469Z GITHUB_WORKSPACE=/home/runner/work/duckdb-r/duckdb-r
+2026-05-18T01:19:40.5122880Z GOROOT_1_22_X64=/opt/hostedtoolcache/go/1.22.12/x64
+2026-05-18T01:19:40.5123224Z GOROOT_1_23_X64=/opt/hostedtoolcache/go/1.23.12/x64
+2026-05-18T01:19:40.5123511Z GOROOT_1_24_X64=/opt/hostedtoolcache/go/1.24.13/x64
+2026-05-18T01:19:40.5123792Z GOROOT_1_25_X64=/opt/hostedtoolcache/go/1.25.10/x64
+2026-05-18T01:19:40.5124065Z GRADLE_HOME=/usr/share/gradle-9.5.1
+2026-05-18T01:19:40.5124299Z HOME=/home/runner
+2026-05-18T01:19:40.5124666Z HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3650
+2026-05-18T01:19:40.5124932Z HOMEBREW_NO_AUTO_UPDATE=1
+2026-05-18T01:19:40.5125175Z INVOCATION_ID=573823e336954ca088ba6c9a66e0c3ad
+2026-05-18T01:19:40.5125439Z ImageOS=ubuntu24
+2026-05-18T01:19:40.5125626Z ImageVersion=20260513.135.3
+2026-05-18T01:19:40.5125913Z JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
+2026-05-18T01:19:40.5126211Z JAVA_HOME_11_X64=/usr/lib/jvm/temurin-11-jdk-amd64
+2026-05-18T01:19:40.5126516Z JAVA_HOME_17_X64=/usr/lib/jvm/temurin-17-jdk-amd64
+2026-05-18T01:19:40.5126797Z JAVA_HOME_21_X64=/usr/lib/jvm/temurin-21-jdk-amd64
+2026-05-18T01:19:40.5127085Z JAVA_HOME_25_X64=/usr/lib/jvm/temurin-25-jdk-amd64
+2026-05-18T01:19:40.5127385Z JAVA_HOME_8_X64=/usr/lib/jvm/temurin-8-jdk-amd64
+2026-05-18T01:19:40.5127648Z JOURNAL_STREAM=9:13164
+2026-05-18T01:19:40.5127863Z LANG=C.UTF-8
+2026-05-18T01:19:40.5128037Z LOGNAME=runner
+2026-05-18T01:19:40.5128417Z MEMORY_PRESSURE_WATCH=/sys/fs/cgroup/system.slice/hosted-compute-agent.service/memory.pressure
+2026-05-18T01:19:40.5128901Z MEMORY_PRESSURE_WRITE=c29tZSAyMDAwMDAgMjAwMDAwMAA=
+2026-05-18T01:19:40.5129185Z NVM_DIR=/home/runner/.nvm
+2026-05-18T01:19:40.5130462Z PATH=/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+2026-05-18T01:19:40.5131402Z PIPX_BIN_DIR=/opt/pipx_bin
+2026-05-18T01:19:40.5131629Z PIPX_HOME=/opt/pipx
+2026-05-18T01:19:40.5131879Z POWERSHELL_DISTRIBUTION_CHANNEL=GitHub-Actions-Linux
+2026-05-18T01:19:40.5132550Z PSModulePath=/root/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules:/usr/share/az_14.6.0
+2026-05-18T01:19:40.5133323Z ***
+2026-05-18T01:19:40.5133497Z RUNNER_ARCH=X64
+2026-05-18T01:19:40.5133703Z RUNNER_ENVIRONMENT=github-hosted
+2026-05-18T01:19:40.5133969Z RUNNER_NAME=GitHub Actions 1000156174
+2026-05-18T01:19:40.5134221Z RUNNER_OS=Linux
+2026-05-18T01:19:40.5134423Z RUNNER_TEMP=/home/runner/work/_temp
+2026-05-18T01:19:40.5134675Z RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+2026-05-18T01:19:40.5135000Z RUNNER_TRACKING_ID=github_1da2e4d8-7976-4d6f-9fb1-63e5d78d84c8
+2026-05-18T01:19:40.5135343Z RUNNER_WORKSPACE=/home/runner/work/duckdb-r
+2026-05-18T01:19:40.5135657Z SELENIUM_JAR_PATH=/usr/share/java/selenium-server.jar
+2026-05-18T01:19:40.5136099Z SGX_AESM_ADDR=1
+2026-05-18T01:19:40.5136283Z SHELL=/bin/bash
+2026-05-18T01:19:40.5136458Z SHLVL=1
+2026-05-18T01:19:40.5136636Z SWIFT_PATH=/usr/share/swift/usr/bin
+2026-05-18T01:19:40.5136878Z SYSTEMD_EXEC_PID=2113
+2026-05-18T01:19:40.5137069Z USER=runner
+2026-05-18T01:19:40.5137261Z USE_BAZEL_FALLBACK_VERSION=silent:
+2026-05-18T01:19:40.5137523Z VCPKG_INSTALLATION_ROOT=/usr/local/share/vcpkg
+2026-05-18T01:19:40.5137804Z XDG_CONFIG_HOME=/home/runner/.config
+2026-05-18T01:19:40.5138051Z XDG_RUNTIME_DIR=/run/user/1001
+2026-05-18T01:19:40.5138271Z _=/usr/bin/env
+2026-05-18T01:19:40.5718544Z Prepare all required actions
+2026-05-18T01:19:40.5743864Z ##[group]Run ./.github/workflows/custom/before-install
+2026-05-18T01:19:40.5744164Z ##[endgroup]
+2026-05-18T01:19:40.5761555Z ##[group]Run echo '_R_CHECK_PKG_SIZES_=FALSE' | tee -a $GITHUB_ENV
+2026-05-18T01:19:40.5761995Z [36;1mecho '_R_CHECK_PKG_SIZES_=FALSE' | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:40.5799455Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:40.5799777Z ##[endgroup]
+2026-05-18T01:19:40.5867503Z _R_CHECK_PKG_SIZES_=FALSE
+2026-05-18T01:19:40.6022556Z Prepare all required actions
+2026-05-18T01:19:40.6022887Z Getting action download info
+2026-05-18T01:19:40.7569935Z Download action repository 'r-lib/actions@v2' (SHA:a51a8012b0aab7c32ef9d19bf54da93f3254335e)
+2026-05-18T01:19:40.9917168Z Download action repository 'hendrikmuhs/ccache-action@v1' (SHA:5ebbd400eff9e74630f759d94ddd7b6c26299639)
+2026-05-18T01:19:41.1474923Z Getting action download info
+2026-05-18T01:19:41.3625319Z Download action repository 'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae' (SHA:27d5ce7f107fe9357f9df03efb73ab90386fccae)
+2026-05-18T01:19:41.4775936Z Download action repository 'r-lib/actions@9f58233a78a2a9fd874714be10f8bba627233339' (SHA:9f58233a78a2a9fd874714be10f8bba627233339)
+2026-05-18T01:19:41.6769130Z Download action repository 'quarto-dev/quarto-actions@9e48da27e184aa238fcb49f5db75469626d43adb' (SHA:9e48da27e184aa238fcb49f5db75469626d43adb)
+2026-05-18T01:19:41.8244325Z ##[group]Run ./.github/workflows/install
+2026-05-18T01:19:41.8244629Z with:
+2026-05-18T01:19:41.8245044Z   token: ***
+2026-05-18T01:19:41.8245252Z   cache-version: rcc-smoke-2
+2026-05-18T01:19:41.8245486Z   needs: build, check, website
+2026-05-18T01:19:41.8245850Z   extra-packages: any::rcmdcheck r-lib/roxygen2 any::decor r-lib/pkgdown deps::.
+2026-05-18T01:19:41.8246232Z   r-version: release
+2026-05-18T01:19:41.8246433Z   install-r: true
+2026-05-18T01:19:41.8246635Z   packages: deps::., any::sessioninfo
+2026-05-18T01:19:41.8246873Z env:
+2026-05-18T01:19:41.8247058Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.8247279Z ##[endgroup]
+2026-05-18T01:19:41.8268823Z ##[group]Run echo "R_REMOTES_NO_ERRORS_FROM_WARNINGS=true" | tee -a $GITHUB_ENV
+2026-05-18T01:19:41.8269336Z [36;1mecho "R_REMOTES_NO_ERRORS_FROM_WARNINGS=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8269733Z [36;1mecho "R_KEEP_PKG_SOURCE=yes" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8270272Z [36;1mecho "_R_CHECK_SYSTEM_CLOCK_=false" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8270692Z [36;1mecho "_R_CHECK_FUTURE_FILE_TIMESTAMPS_=false" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8271113Z [36;1m# prevent rgl issues because no X11 display is available[0m
+2026-05-18T01:19:41.8271457Z [36;1mecho "RGL_USE_NULL=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8271968Z [36;1m# from https://github.com/r-devel/r-dev-web/blob/main/CRAN/QA/Kurt/lib/R/Scripts/check_CRAN_incoming.R[0m
+2026-05-18T01:19:41.8272537Z [36;1mecho "_R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8273004Z [36;1mecho "_R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8273501Z [36;1mecho "_R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8273977Z [36;1mecho "_R_CHECK_CODE_CLASS_IS_STRING_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8274411Z [36;1mecho "_R_CHECK_CODOC_VARIABLES_IN_USAGES_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8274845Z [36;1mecho "_R_CHECK_CONNECTIONS_LEFT_OPEN_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8275239Z [36;1mecho "_R_CHECK_DATALIST_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8275608Z [36;1mecho "_R_CHECK_NEWS_IN_PLAIN_TEXT_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8276048Z [36;1mecho "_R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8276504Z [36;1mecho "_R_CHECK_RD_CONTENTS_KEYWORDS_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8276884Z [36;1mecho "_R_CHECK_R_DEPENDS_=warn" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8277334Z [36;1mecho "_R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8277774Z [36;1mecho "_R_CHECK_THINGS_IN_TEMP_DIR_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8278172Z [36;1mecho "_R_CHECK_UNDOC_USE_ALL_NAMES_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8278568Z [36;1mecho "_R_CHECK_URLS_SHOW_301_STATUS_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8279147Z [36;1mecho "_R_CXX_USE_NO_REMAP_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8279617Z [36;1m# There is no way to disable recency and frequency checks when the incoming checks are run[0m
+2026-05-18T01:19:41.8280228Z [36;1m# echo "_R_CHECK_CRAN_INCOMING_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8280656Z [36;1mecho "_R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8281090Z [36;1mecho "_R_CHECK_FORCE_SUGGESTS_=false" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8315586Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:41.8315905Z env:
+2026-05-18T01:19:41.8316101Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.8316318Z ##[endgroup]
+2026-05-18T01:19:41.8410317Z R_REMOTES_NO_ERRORS_FROM_WARNINGS=true
+2026-05-18T01:19:41.8423900Z R_KEEP_PKG_SOURCE=yes
+2026-05-18T01:19:41.8436700Z _R_CHECK_SYSTEM_CLOCK_=false
+2026-05-18T01:19:41.8449490Z _R_CHECK_FUTURE_FILE_TIMESTAMPS_=false
+2026-05-18T01:19:41.8462369Z RGL_USE_NULL=true
+2026-05-18T01:19:41.8475140Z _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_=true
+2026-05-18T01:19:41.8487687Z _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_=true
+2026-05-18T01:19:41.8500663Z _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_=true
+2026-05-18T01:19:41.8513969Z _R_CHECK_CODE_CLASS_IS_STRING_=true
+2026-05-18T01:19:41.8526439Z _R_CHECK_CODOC_VARIABLES_IN_USAGES_=true
+2026-05-18T01:19:41.8538935Z _R_CHECK_CONNECTIONS_LEFT_OPEN_=true
+2026-05-18T01:19:41.8551853Z _R_CHECK_DATALIST_=true
+2026-05-18T01:19:41.8564422Z _R_CHECK_NEWS_IN_PLAIN_TEXT_=true
+2026-05-18T01:19:41.8577041Z _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_=true
+2026-05-18T01:19:41.8589404Z _R_CHECK_RD_CONTENTS_KEYWORDS_=true
+2026-05-18T01:19:41.8602400Z _R_CHECK_R_DEPENDS_=warn
+2026-05-18T01:19:41.8615730Z _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_=true
+2026-05-18T01:19:41.8628156Z _R_CHECK_THINGS_IN_TEMP_DIR_=true
+2026-05-18T01:19:41.8640770Z _R_CHECK_UNDOC_USE_ALL_NAMES_=true
+2026-05-18T01:19:41.8653349Z _R_CHECK_URLS_SHOW_301_STATUS_=true
+2026-05-18T01:19:41.8665859Z _R_CXX_USE_NO_REMAP_=true
+2026-05-18T01:19:41.8678928Z _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_=true
+2026-05-18T01:19:41.8691982Z _R_CHECK_FORCE_SUGGESTS_=false
+2026-05-18T01:19:41.8718109Z ##[group]Run echo "_R_CHECK_THINGS_IN_OTHER_DIRS_=true" | tee -a $GITHUB_ENV
+2026-05-18T01:19:41.8718580Z [36;1mecho "_R_CHECK_THINGS_IN_OTHER_DIRS_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8753485Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:41.8753809Z env:
+2026-05-18T01:19:41.8754001Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.8754252Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:41.8754514Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:41.8754724Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:41.8754971Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:41.8755213Z   RGL_USE_NULL: true
+2026-05-18T01:19:41.8755445Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:41.8755726Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:41.8756043Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:41.8756342Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:41.8756610Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:41.8756874Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:41.8757119Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:41.8757345Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:41.8757616Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:41.8757907Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:41.8758138Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:41.8758386Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:41.8758662Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:41.8758910Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:41.8759164Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:41.8759400Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:41.8759658Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:41.8760319Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:41.8760562Z ##[endgroup]
+2026-05-18T01:19:41.8822551Z _R_CHECK_THINGS_IN_OTHER_DIRS_=true
+2026-05-18T01:19:41.8844844Z ##[group]Run echo "_R_CHECK_BASHISMS_=true" | tee -a $GITHUB_ENV
+2026-05-18T01:19:41.8845240Z [36;1mecho "_R_CHECK_BASHISMS_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.8876352Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:41.8876665Z env:
+2026-05-18T01:19:41.8877000Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.8877251Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:41.8877503Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:41.8877730Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:41.8877970Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:41.8878226Z   RGL_USE_NULL: true
+2026-05-18T01:19:41.8878453Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:41.8878732Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:41.8879048Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:41.8879341Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:41.8879597Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:41.8879850Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:41.8880338Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:41.8880567Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:41.8880844Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:41.8881147Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:41.8881387Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:41.8881637Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:41.8881908Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:41.8882154Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:41.8882392Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:41.8882628Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:41.8882883Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:41.8883159Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:41.8883397Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:19:41.8883620Z ##[endgroup]
+2026-05-18T01:19:41.8945382Z _R_CHECK_BASHISMS_=true
+2026-05-18T01:19:41.8965671Z ##[group]Run set -x
+2026-05-18T01:19:41.8965889Z [36;1mset -x[0m
+2026-05-18T01:19:41.8966083Z [36;1menv | sort[0m
+2026-05-18T01:19:41.8997349Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:41.8997652Z env:
+2026-05-18T01:19:41.8997851Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.8998098Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:41.8998356Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:41.8998571Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:41.8998819Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:41.8999054Z   RGL_USE_NULL: true
+2026-05-18T01:19:41.8999284Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:41.8999577Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:41.8999887Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:41.9000378Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:41.9000636Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:41.9000905Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:41.9001147Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:41.9001371Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:41.9001658Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:41.9001948Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:41.9002199Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:41.9002444Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:41.9002724Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:41.9002968Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:41.9003214Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:41.9003449Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:41.9003702Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:41.9004154Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:41.9004391Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:19:41.9004628Z   _R_CHECK_BASHISMS_: true
+2026-05-18T01:19:41.9004832Z ##[endgroup]
+2026-05-18T01:19:41.9057064Z + env
+2026-05-18T01:19:41.9057601Z + sort
+2026-05-18T01:19:41.9071674Z ACCEPT_EULA=Y
+2026-05-18T01:19:41.9072225Z ACTIONS_ORCHESTRATION_ID=644b48e7-df45-4506-922d-ce15a7f99c06.rcc-smoke.__default
+2026-05-18T01:19:41.9072938Z ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/opt/actionarchivecache
+2026-05-18T01:19:41.9073684Z AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache
+2026-05-18T01:19:41.9074113Z ANDROID_HOME=/usr/local/lib/android/sdk
+2026-05-18T01:19:41.9074546Z ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:41.9075094Z ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:41.9075698Z ANDROID_NDK_LATEST_HOME=/usr/local/lib/android/sdk/ndk/29.0.14206865
+2026-05-18T01:19:41.9076556Z ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
+2026-05-18T01:19:41.9077068Z ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+2026-05-18T01:19:41.9077471Z ANT_HOME=/usr/share/ant
+2026-05-18T01:19:41.9077807Z AZURE_EXTENSION_DIR=/opt/az/azcliextensions
+2026-05-18T01:19:41.9078090Z BOOTSTRAP_HASKELL_NONINTERACTIVE=1
+2026-05-18T01:19:41.9078401Z CHROMEWEBDRIVER=/usr/local/share/chromedriver-linux64
+2026-05-18T01:19:41.9078705Z CHROME_BIN=/usr/bin/google-chrome
+2026-05-18T01:19:41.9078931Z CI=true
+2026-05-18T01:19:41.9079121Z CONDA=/usr/share/miniconda
+2026-05-18T01:19:41.9079363Z DEBIAN_FRONTEND=noninteractive
+2026-05-18T01:19:41.9079592Z DOTNET_MULTILEVEL_LOOKUP=0
+2026-05-18T01:19:41.9079804Z DOTNET_NOLOGO=1
+2026-05-18T01:19:41.9080005Z DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+2026-05-18T01:19:41.9080509Z EDGEWEBDRIVER=/usr/local/share/edge_driver
+2026-05-18T01:19:41.9080787Z ENABLE_RUNNER_TRACING=true
+2026-05-18T01:19:41.9081037Z GECKOWEBDRIVER=/usr/local/share/gecko_driver
+2026-05-18T01:19:41.9081392Z GHCUP_INSTALL_BASE_PREFIX=/usr/local
+2026-05-18T01:19:41.9081647Z GITHUB_ACTION=__self_4
+2026-05-18T01:19:41.9081851Z GITHUB_ACTIONS=true
+2026-05-18T01:19:41.9082231Z GITHUB_ACTION_PATH=/home/runner/work/duckdb-r/duckdb-r/./.github/workflows/install
+2026-05-18T01:19:41.9082621Z GITHUB_ACTION_REF=
+2026-05-18T01:19:41.9082831Z GITHUB_ACTION_REPOSITORY=
+2026-05-18T01:19:41.9083072Z GITHUB_ACTOR=github-actions[bot]
+2026-05-18T01:19:41.9083315Z GITHUB_ACTOR_ID=41898282
+2026-05-18T01:19:41.9083557Z GITHUB_API_URL=https://api.github.com
+2026-05-18T01:19:41.9083822Z GITHUB_BASE_REF=
+2026-05-18T01:19:41.9084211Z GITHUB_ENV=/home/runner/work/_temp/_runner_file_commands/set_env_99f69f2a-4ef1-4c37-bf95-846e8db1b42f
+2026-05-18T01:19:41.9084684Z GITHUB_EVENT_NAME=workflow_dispatch
+2026-05-18T01:19:41.9085027Z GITHUB_EVENT_PATH=/home/runner/work/_temp/_github_workflow/event.json
+2026-05-18T01:19:41.9085404Z GITHUB_GRAPHQL_URL=https://api.github.com/graphql
+2026-05-18T01:19:41.9085682Z GITHUB_HEAD_REF=
+2026-05-18T01:19:41.9085865Z GITHUB_JOB=rcc-smoke
+2026-05-18T01:19:41.9086286Z GITHUB_OUTPUT=/home/runner/work/_temp/_runner_file_commands/set_output_99f69f2a-4ef1-4c37-bf95-846e8db1b42f
+2026-05-18T01:19:41.9086928Z GITHUB_PATH=/home/runner/work/_temp/_runner_file_commands/add_path_99f69f2a-4ef1-4c37-bf95-846e8db1b42f
+2026-05-18T01:19:41.9087483Z GITHUB_REF=refs/heads/broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:41.9087945Z GITHUB_REF_NAME=broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:41.9088291Z GITHUB_REF_PROTECTED=false
+2026-05-18T01:19:41.9088517Z GITHUB_REF_TYPE=branch
+2026-05-18T01:19:41.9088733Z GITHUB_REPOSITORY=krlmlr/duckdb-r
+2026-05-18T01:19:41.9088983Z GITHUB_REPOSITORY_ID=685023305
+2026-05-18T01:19:41.9089207Z GITHUB_REPOSITORY_OWNER=krlmlr
+2026-05-18T01:19:41.9089444Z GITHUB_REPOSITORY_OWNER_ID=1741643
+2026-05-18T01:19:41.9089681Z GITHUB_RETENTION_DAYS=90
+2026-05-18T01:19:41.9089896Z GITHUB_RUN_ATTEMPT=1
+2026-05-18T01:19:41.9090292Z GITHUB_RUN_ID=26005697733
+2026-05-18T01:19:41.9090507Z GITHUB_RUN_NUMBER=6662
+2026-05-18T01:19:41.9090941Z GITHUB_SERVER_URL=https://github.com
+2026-05-18T01:19:41.9091236Z GITHUB_SHA=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c
+2026-05-18T01:19:41.9091733Z GITHUB_STATE=/home/runner/work/_temp/_runner_file_commands/save_state_99f69f2a-4ef1-4c37-bf95-846e8db1b42f
+2026-05-18T01:19:41.9092410Z GITHUB_STEP_SUMMARY=/home/runner/work/_temp/_runner_file_commands/step_summary_99f69f2a-4ef1-4c37-bf95-846e8db1b42f
+2026-05-18T01:19:41.9092920Z GITHUB_TRIGGERING_ACTOR=github-actions[bot]
+2026-05-18T01:19:41.9093292Z GITHUB_WORKFLOW=rcc
+2026-05-18T01:19:41.9093821Z GITHUB_WORKFLOW_REF=krlmlr/duckdb-r/.github/workflows/R-CMD-check.yaml@refs/heads/broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-18T01:19:41.9094443Z GITHUB_WORKFLOW_SHA=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c
+2026-05-18T01:19:41.9094793Z GITHUB_WORKSPACE=/home/runner/work/duckdb-r/duckdb-r
+2026-05-18T01:19:41.9095118Z GOROOT_1_22_X64=/opt/hostedtoolcache/go/1.22.12/x64
+2026-05-18T01:19:41.9095423Z GOROOT_1_23_X64=/opt/hostedtoolcache/go/1.23.12/x64
+2026-05-18T01:19:41.9095720Z GOROOT_1_24_X64=/opt/hostedtoolcache/go/1.24.13/x64
+2026-05-18T01:19:41.9096006Z GOROOT_1_25_X64=/opt/hostedtoolcache/go/1.25.10/x64
+2026-05-18T01:19:41.9096286Z GRADLE_HOME=/usr/share/gradle-9.5.1
+2026-05-18T01:19:41.9096518Z HOME=/home/runner
+2026-05-18T01:19:41.9096738Z HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3650
+2026-05-18T01:19:41.9097003Z HOMEBREW_NO_AUTO_UPDATE=1
+2026-05-18T01:19:41.9097247Z INVOCATION_ID=573823e336954ca088ba6c9a66e0c3ad
+2026-05-18T01:19:41.9097511Z ImageOS=ubuntu24
+2026-05-18T01:19:41.9097703Z ImageVersion=20260513.135.3
+2026-05-18T01:19:41.9097949Z JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
+2026-05-18T01:19:41.9098233Z JAVA_HOME_11_X64=/usr/lib/jvm/temurin-11-jdk-amd64
+2026-05-18T01:19:41.9098542Z JAVA_HOME_17_X64=/usr/lib/jvm/temurin-17-jdk-amd64
+2026-05-18T01:19:41.9098830Z JAVA_HOME_21_X64=/usr/lib/jvm/temurin-21-jdk-amd64
+2026-05-18T01:19:41.9099119Z JAVA_HOME_25_X64=/usr/lib/jvm/temurin-25-jdk-amd64
+2026-05-18T01:19:41.9099419Z JAVA_HOME_8_X64=/usr/lib/jvm/temurin-8-jdk-amd64
+2026-05-18T01:19:41.9099682Z JOURNAL_STREAM=9:13164
+2026-05-18T01:19:41.9099880Z LANG=C.UTF-8
+2026-05-18T01:19:41.9100227Z LOGNAME=runner
+2026-05-18T01:19:41.9100655Z MEMORY_PRESSURE_WATCH=/sys/fs/cgroup/system.slice/hosted-compute-agent.service/memory.pressure
+2026-05-18T01:19:41.9101147Z MEMORY_PRESSURE_WRITE=c29tZSAyMDAwMDAgMjAwMDAwMAA=
+2026-05-18T01:19:41.9101444Z NVM_DIR=/home/runner/.nvm
+2026-05-18T01:19:41.9102363Z PATH=/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+2026-05-18T01:19:41.9103296Z PIPX_BIN_DIR=/opt/pipx_bin
+2026-05-18T01:19:41.9103520Z PIPX_HOME=/opt/pipx
+2026-05-18T01:19:41.9103777Z POWERSHELL_DISTRIBUTION_CHANNEL=GitHub-Actions-Linux
+2026-05-18T01:19:41.9104447Z PSModulePath=/root/.local/share/powershell/Modules:/usr/local/share/powershell/Modules:/opt/microsoft/powershell/7/Modules:/usr/share/az_14.6.0
+2026-05-18T01:19:41.9105190Z ***
+2026-05-18T01:19:41.9105370Z RGL_USE_NULL=true
+2026-05-18T01:19:41.9105567Z RUNNER_ARCH=X64
+2026-05-18T01:19:41.9105770Z RUNNER_ENVIRONMENT=github-hosted
+2026-05-18T01:19:41.9106055Z RUNNER_NAME=GitHub Actions 1000156174
+2026-05-18T01:19:41.9106297Z RUNNER_OS=Linux
+2026-05-18T01:19:41.9106502Z RUNNER_TEMP=/home/runner/work/_temp
+2026-05-18T01:19:41.9106757Z RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+2026-05-18T01:19:41.9107098Z RUNNER_TRACKING_ID=github_1da2e4d8-7976-4d6f-9fb1-63e5d78d84c8
+2026-05-18T01:19:41.9107439Z RUNNER_WORKSPACE=/home/runner/work/duckdb-r
+2026-05-18T01:19:41.9107720Z R_KEEP_PKG_SOURCE=yes
+2026-05-18T01:19:41.9107948Z R_REMOTES_NO_ERRORS_FROM_WARNINGS=true
+2026-05-18T01:19:41.9108242Z SELENIUM_JAR_PATH=/usr/share/java/selenium-server.jar
+2026-05-18T01:19:41.9108532Z SGX_AESM_ADDR=1
+2026-05-18T01:19:41.9108708Z SHELL=/bin/bash
+2026-05-18T01:19:41.9108885Z SHLVL=1
+2026-05-18T01:19:41.9109229Z SWIFT_PATH=/usr/share/swift/usr/bin
+2026-05-18T01:19:41.9109474Z SYSTEMD_EXEC_PID=2113
+2026-05-18T01:19:41.9109665Z USER=runner
+2026-05-18T01:19:41.9109861Z USE_BAZEL_FALLBACK_VERSION=silent:
+2026-05-18T01:19:41.9110299Z VCPKG_INSTALLATION_ROOT=/usr/local/share/vcpkg
+2026-05-18T01:19:41.9110596Z XDG_CONFIG_HOME=/home/runner/.config
+2026-05-18T01:19:41.9110857Z XDG_RUNTIME_DIR=/run/user/1001
+2026-05-18T01:19:41.9111074Z _=/usr/bin/env
+2026-05-18T01:19:41.9111265Z _R_CHECK_BASHISMS_=true
+2026-05-18T01:19:41.9111607Z _R_CHECK_CODE_CLASS_IS_STRING_=true
+2026-05-18T01:19:41.9111869Z _R_CHECK_CODOC_VARIABLES_IN_USAGES_=true
+2026-05-18T01:19:41.9112135Z _R_CHECK_CONNECTIONS_LEFT_OPEN_=true
+2026-05-18T01:19:41.9112406Z _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_=true
+2026-05-18T01:19:41.9112684Z _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_=true
+2026-05-18T01:19:41.9112974Z _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_=true
+2026-05-18T01:19:41.9113239Z _R_CHECK_DATALIST_=true
+2026-05-18T01:19:41.9113455Z _R_CHECK_FORCE_SUGGESTS_=false
+2026-05-18T01:19:41.9113706Z _R_CHECK_FUTURE_FILE_TIMESTAMPS_=false
+2026-05-18T01:19:41.9113956Z _R_CHECK_NEWS_IN_PLAIN_TEXT_=true
+2026-05-18T01:19:41.9114231Z _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_=true
+2026-05-18T01:19:41.9114550Z _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_=true
+2026-05-18T01:19:41.9114845Z _R_CHECK_PKG_SIZES_=FALSE
+2026-05-18T01:19:41.9115070Z _R_CHECK_RD_CONTENTS_KEYWORDS_=true
+2026-05-18T01:19:41.9115312Z _R_CHECK_R_DEPENDS_=warn
+2026-05-18T01:19:41.9115554Z _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_=true
+2026-05-18T01:19:41.9115829Z _R_CHECK_SYSTEM_CLOCK_=false
+2026-05-18T01:19:41.9116056Z _R_CHECK_THINGS_IN_OTHER_DIRS_=true
+2026-05-18T01:19:41.9116303Z _R_CHECK_THINGS_IN_TEMP_DIR_=true
+2026-05-18T01:19:41.9116545Z _R_CHECK_UNDOC_USE_ALL_NAMES_=true
+2026-05-18T01:19:41.9116780Z _R_CHECK_URLS_SHOW_301_STATUS_=true
+2026-05-18T01:19:41.9117016Z _R_CXX_USE_NO_REMAP_=true
+2026-05-18T01:19:41.9138768Z ##[group]Run sudo apt-get update
+2026-05-18T01:19:41.9139049Z [36;1msudo apt-get update[0m
+2026-05-18T01:19:41.9139303Z [36;1msudo apt-get install -y aspell[0m
+2026-05-18T01:19:41.9139664Z [36;1mecho "_R_CHECK_CRAN_INCOMING_USE_ASPELL_=true" | tee -a $GITHUB_ENV[0m
+2026-05-18T01:19:41.9171604Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:19:41.9171931Z env:
+2026-05-18T01:19:41.9172117Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:41.9172370Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:41.9172626Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:41.9172856Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:41.9173104Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:41.9173345Z   RGL_USE_NULL: true
+2026-05-18T01:19:41.9173580Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:41.9173878Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:41.9174201Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:41.9174502Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:41.9174773Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:41.9175040Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:41.9175284Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:41.9175511Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:41.9175781Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:41.9176070Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:41.9176306Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:41.9176556Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:41.9176834Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:41.9177080Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:41.9177326Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:41.9177567Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:41.9177835Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:41.9178121Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:41.9178372Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:19:41.9178786Z   _R_CHECK_BASHISMS_: true
+2026-05-18T01:19:41.9179010Z ##[endgroup]
+2026-05-18T01:19:41.9986503Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-05-18T01:19:42.0371267Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-05-18T01:19:42.0372924Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-05-18T01:19:42.0421846Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-05-18T01:19:42.0453395Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-05-18T01:19:42.0455751Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+2026-05-18T01:19:42.0490566Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-05-18T01:19:42.0613644Z Get:8 https://dl.google.com/linux/chrome-stable/deb stable InRelease [1825 B]
+2026-05-18T01:19:42.1676987Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [2003 kB]
+2026-05-18T01:19:42.1925201Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [354 kB]
+2026-05-18T01:19:42.1945629Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [177 kB]
+2026-05-18T01:19:42.1969436Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1689 kB]
+2026-05-18T01:19:42.2068797Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [386 kB]
+2026-05-18T01:19:42.2132026Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [3187 kB]
+2026-05-18T01:19:42.2335434Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [738 kB]
+2026-05-18T01:19:42.2340782Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+2026-05-18T01:19:42.2357674Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [5760 B]
+2026-05-18T01:19:42.2371394Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.5 kB]
+2026-05-18T01:19:42.4072220Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1668 kB]
+2026-05-18T01:19:42.4223406Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.9 kB]
+2026-05-18T01:19:42.4301104Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1187 kB]
+2026-05-18T01:19:42.4349500Z Get:23 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [147 kB]
+2026-05-18T01:19:42.4407517Z Get:24 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [120 kB]
+2026-05-18T01:19:42.4416319Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [74.1 kB]
+2026-05-18T01:19:42.5034772Z Get:25 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages [1208 B]
+2026-05-18T01:19:46.6965033Z Fetched 12.2 MB in 1s (8258 kB/s)
+2026-05-18T01:19:47.4789742Z Reading package lists...
+2026-05-18T01:19:47.5121839Z Reading package lists...
+2026-05-18T01:19:47.7100435Z Building dependency tree...
+2026-05-18T01:19:47.7107934Z Reading state information...
+2026-05-18T01:19:47.8801476Z The following additional packages will be installed:
+2026-05-18T01:19:47.8808875Z   aspell-en
+2026-05-18T01:19:47.8814028Z Suggested packages:
+2026-05-18T01:19:47.8814452Z   aspell-doc spellutils
+2026-05-18T01:19:47.8974161Z The following NEW packages will be installed:
+2026-05-18T01:19:47.8981131Z   aspell aspell-en
+2026-05-18T01:19:47.9166164Z 0 upgraded, 2 newly installed, 0 to remove and 7 not upgraded.
+2026-05-18T01:19:47.9166561Z Need to get 391 kB of archives.
+2026-05-18T01:19:47.9166881Z After this operation, 783 kB of additional disk space will be used.
+2026-05-18T01:19:47.9167337Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-05-18T01:19:47.9408827Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 aspell amd64 0.60.8.1-1build1 [88.1 kB]
+2026-05-18T01:19:47.9505030Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 aspell-en all 2020.12.07-0-1 [303 kB]
+2026-05-18T01:19:48.2161106Z Fetched 391 kB in 0s (7248 kB/s)
+2026-05-18T01:19:48.2367448Z Selecting previously unselected package aspell.
+2026-05-18T01:19:48.2584022Z (Reading database ... 
+2026-05-18T01:19:48.2584397Z (Reading database ... 5%
+2026-05-18T01:19:48.2584729Z (Reading database ... 10%
+2026-05-18T01:19:48.2585377Z (Reading database ... 15%
+2026-05-18T01:19:48.2585673Z (Reading database ... 20%
+2026-05-18T01:19:48.2630523Z (Reading database ... 25%
+2026-05-18T01:19:48.2630871Z (Reading database ... 30%
+2026-05-18T01:19:48.2631195Z (Reading database ... 35%
+2026-05-18T01:19:48.2631470Z (Reading database ... 40%
+2026-05-18T01:19:48.2631660Z (Reading database ... 45%
+2026-05-18T01:19:48.2631852Z (Reading database ... 50%
+2026-05-18T01:19:48.2632040Z (Reading database ... 55%
+2026-05-18T01:19:48.4370563Z (Reading database ... 60%
+2026-05-18T01:19:48.5391677Z (Reading database ... 65%
+2026-05-18T01:19:48.7258988Z (Reading database ... 70%
+2026-05-18T01:19:48.8835105Z (Reading database ... 75%
+2026-05-18T01:19:49.0759948Z (Reading database ... 80%
+2026-05-18T01:19:49.2807051Z (Reading database ... 85%
+2026-05-18T01:19:49.4343409Z (Reading database ... 90%
+2026-05-18T01:19:49.5811067Z (Reading database ... 95%
+2026-05-18T01:19:49.5812617Z (Reading database ... 100%
+2026-05-18T01:19:49.5813138Z (Reading database ... 202288 files and directories currently installed.)
+2026-05-18T01:19:49.5858377Z Preparing to unpack .../aspell_0.60.8.1-1build1_amd64.deb ...
+2026-05-18T01:19:49.5885979Z Unpacking aspell (0.60.8.1-1build1) ...
+2026-05-18T01:19:49.6178419Z Selecting previously unselected package aspell-en.
+2026-05-18T01:19:49.6307788Z Preparing to unpack .../aspell-en_2020.12.07-0-1_all.deb ...
+2026-05-18T01:19:49.6318345Z Unpacking aspell-en (2020.12.07-0-1) ...
+2026-05-18T01:19:49.6891463Z Setting up aspell (0.60.8.1-1build1) ...
+2026-05-18T01:19:49.7352650Z Setting up aspell-en (2020.12.07-0-1) ...
+2026-05-18T01:19:49.7938649Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-05-18T01:19:49.7959505Z Not building database; man-db/auto-update is not 'true'.
+2026-05-18T01:19:49.7975378Z Processing triggers for dictionaries-common (1.29.7) ...
+2026-05-18T01:19:49.9155146Z aspell-autobuildhash: processing: en [en-common].
+2026-05-18T01:19:50.0608422Z aspell-autobuildhash: processing: en [en-variant_0].
+2026-05-18T01:19:50.0666686Z aspell-autobuildhash: processing: en [en-variant_1].
+2026-05-18T01:19:50.0738669Z aspell-autobuildhash: processing: en [en-variant_2].
+2026-05-18T01:19:50.0813711Z aspell-autobuildhash: processing: en [en-w_accents-only].
+2026-05-18T01:19:50.0913892Z aspell-autobuildhash: processing: en [en-wo_accents-only].
+2026-05-18T01:19:50.1013996Z aspell-autobuildhash: processing: en [en_AU-variant_0].
+2026-05-18T01:19:50.1063954Z aspell-autobuildhash: processing: en [en_AU-variant_1].
+2026-05-18T01:19:50.1131254Z aspell-autobuildhash: processing: en [en_AU-w_accents-only].
+2026-05-18T01:19:50.1204411Z aspell-autobuildhash: processing: en [en_AU-wo_accents-only].
+2026-05-18T01:19:50.1278502Z aspell-autobuildhash: processing: en [en_CA-variant_0].
+2026-05-18T01:19:50.1330762Z aspell-autobuildhash: processing: en [en_CA-variant_1].
+2026-05-18T01:19:50.1395864Z aspell-autobuildhash: processing: en [en_CA-w_accents-only].
+2026-05-18T01:19:50.1465099Z aspell-autobuildhash: processing: en [en_CA-wo_accents-only].
+2026-05-18T01:19:50.1534363Z aspell-autobuildhash: processing: en [en_GB-ise-w_accents-only].
+2026-05-18T01:19:50.1603553Z aspell-autobuildhash: processing: en [en_GB-ise-wo_accents-only].
+2026-05-18T01:19:50.1672683Z aspell-autobuildhash: processing: en [en_GB-ize-w_accents-only].
+2026-05-18T01:19:50.1742326Z aspell-autobuildhash: processing: en [en_GB-ize-wo_accents-only].
+2026-05-18T01:19:50.1811954Z aspell-autobuildhash: processing: en [en_GB-variant_0].
+2026-05-18T01:19:50.1861380Z aspell-autobuildhash: processing: en [en_GB-variant_1].
+2026-05-18T01:19:50.1922571Z aspell-autobuildhash: processing: en [en_US-w_accents-only].
+2026-05-18T01:19:50.1997161Z aspell-autobuildhash: processing: en [en_US-wo_accents-only].
+2026-05-18T01:19:50.8132848Z 
+2026-05-18T01:19:50.8133964Z Running kernel seems to be up-to-date.
+2026-05-18T01:19:50.8134329Z 
+2026-05-18T01:19:50.8134625Z No services need to be restarted.
+2026-05-18T01:19:50.8134872Z 
+2026-05-18T01:19:50.8135093Z No containers need to be restarted.
+2026-05-18T01:19:50.8135505Z 
+2026-05-18T01:19:50.8135787Z No user sessions are running outdated binaries.
+2026-05-18T01:19:50.8136521Z 
+2026-05-18T01:19:50.8136808Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-05-18T01:19:51.8234108Z _R_CHECK_CRAN_INCOMING_USE_ASPELL_=true
+2026-05-18T01:19:51.8289925Z ##[group]Run r-lib/actions/setup-pandoc@v2
+2026-05-18T01:19:51.8290514Z with:
+2026-05-18T01:19:51.8290708Z   pandoc-version: 3.8.3
+2026-05-18T01:19:51.8290912Z env:
+2026-05-18T01:19:51.8291092Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:51.8291331Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:51.8291614Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:51.8291826Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:51.8292075Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:51.8292312Z   RGL_USE_NULL: true
+2026-05-18T01:19:51.8292549Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:51.8292844Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:51.8293153Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:51.8293468Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:51.8293723Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:51.8293988Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:51.8294228Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:51.8294451Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:51.8294727Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:51.8295006Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:51.8295250Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:51.8295499Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:51.8295774Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:51.8296007Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:51.8296250Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:51.8296484Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:51.8296743Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:51.8297016Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:51.8297258Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:19:51.8297501Z   _R_CHECK_BASHISMS_: true
+2026-05-18T01:19:51.8297720Z   _R_CHECK_CRAN_INCOMING_USE_ASPELL_: true
+2026-05-18T01:19:51.8297967Z ##[endgroup]
+2026-05-18T01:19:51.9114728Z ##[group]Download pandoc
+2026-05-18T01:19:52.1650618Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/e03eb346-549d-44be-b96f-936ce1b077e0 -f /home/runner/work/_temp/afc89c03-935a-4433-a869-8552cbd77e8b
+2026-05-18T01:19:53.1731788Z ##[group]Run r-lib/actions/setup-r@v2
+2026-05-18T01:19:53.1732055Z with:
+2026-05-18T01:19:53.1732235Z   r-version: release
+2026-05-18T01:19:53.1732433Z   install-r: true
+2026-05-18T01:19:53.1732633Z   use-public-rspm: true
+2026-05-18T01:19:53.1732831Z   Ncpus: 1
+2026-05-18T01:19:53.1733017Z   remove-openmp-macos: true
+2026-05-18T01:19:53.1733249Z   windows-path-include-rtools: true
+2026-05-18T01:19:53.1733510Z   windows-path-include-mingw: true
+2026-05-18T01:19:53.1733755Z   update-rtools: false
+2026-05-18T01:19:53.1733974Z   working-directory: .
+2026-05-18T01:19:53.1734155Z env:
+2026-05-18T01:19:53.1734334Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:19:53.1734574Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:19:53.1734827Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:19:53.1735046Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:19:53.1735282Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:19:53.1735526Z   RGL_USE_NULL: true
+2026-05-18T01:19:53.1735747Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:19:53.1736251Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:19:53.1736559Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:19:53.1736864Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:19:53.1737127Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:19:53.1737385Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:19:53.1737633Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:19:53.1737850Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:19:53.1738256Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:19:53.1738539Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:19:53.1738784Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:19:53.1739023Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:19:53.1739303Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:19:53.1739547Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:19:53.1739785Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:19:53.1740024Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:19:53.1740474Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:19:53.1740754Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:19:53.1740984Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:19:53.1741219Z   _R_CHECK_BASHISMS_: true
+2026-05-18T01:19:53.1741445Z   _R_CHECK_CRAN_INCOMING_USE_ASPELL_: true
+2026-05-18T01:19:53.1741689Z ##[endgroup]
+2026-05-18T01:19:53.2759835Z (node:3083) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-05-18T01:19:53.2761303Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-18T01:19:58.2824712Z ##[error]Error: Request timeout: /rversions/resolve/release/linux-ubuntu-24.04/x86_64
+2026-05-18T01:20:08.3186029Z ##[group]Run # Check status of this workflow
+2026-05-18T01:20:08.3186383Z [36;1m# Check status of this workflow[0m
+2026-05-18T01:20:08.3186662Z [36;1mif [ "failure" == "success" ]; then[0m
+2026-05-18T01:20:08.3186924Z [36;1m  state="success"[0m
+2026-05-18T01:20:08.3187133Z [36;1melse[0m
+2026-05-18T01:20:08.3187317Z [36;1m  state="failure"[0m
+2026-05-18T01:20:08.3187514Z [36;1mfi[0m
+2026-05-18T01:20:08.3187686Z [36;1m[0m
+2026-05-18T01:20:08.3187850Z [36;1msha=[0m
+2026-05-18T01:20:08.3188030Z [36;1mif [ -z "${sha}" ]; then[0m
+2026-05-18T01:20:08.3188325Z [36;1m  sha=cd276d0cd2ecff297ed30797f6c5d5dd58fc2017[0m
+2026-05-18T01:20:08.3188618Z [36;1mfi[0m
+2026-05-18T01:20:08.3188795Z [36;1mif [ -z "${sha}" ]; then[0m
+2026-05-18T01:20:08.3189056Z [36;1m  sha=e57a48e059ccc9b06d3e702a9b76b2fc5440d91c[0m
+2026-05-18T01:20:08.3189319Z [36;1mfi[0m
+2026-05-18T01:20:08.3189495Z [36;1m  sha=$(git rev-parse ${sha})[0m
+2026-05-18T01:20:08.3189727Z [36;1m[0m
+2026-05-18T01:20:08.3189939Z [36;1mhtml_url=$(gh api \[0m
+2026-05-18T01:20:08.3190441Z [36;1m  -H "Accept: application/vnd.github+json" \[0m
+2026-05-18T01:20:08.3190772Z [36;1m  -H "X-GitHub-Api-Version: 2022-11-28" \[0m
+2026-05-18T01:20:08.3191149Z [36;1m  repos/krlmlr/duckdb-r/actions/runs/26005697733 | jq -r .html_url)[0m
+2026-05-18T01:20:08.3191478Z [36;1m[0m
+2026-05-18T01:20:08.3191666Z [36;1mdescription="rcc / rcc-smoke"[0m
+2026-05-18T01:20:08.3191893Z [36;1m[0m
+2026-05-18T01:20:08.3192059Z [36;1mgh api \[0m
+2026-05-18T01:20:08.3192253Z [36;1m  --method POST \[0m
+2026-05-18T01:20:08.3192512Z [36;1m  -H "Accept: application/vnd.github+json" \[0m
+2026-05-18T01:20:08.3192811Z [36;1m  -H "X-GitHub-Api-Version: 2022-11-28" \[0m
+2026-05-18T01:20:08.3193098Z [36;1m  repos/krlmlr/duckdb-r/statuses/${sha} \[0m
+2026-05-18T01:20:08.3193548Z [36;1m  -f "state=${state}" -f "target_url=${html_url}" -f "description=${description}" -f "context=rcc"[0m
+2026-05-18T01:20:08.3229383Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-05-18T01:20:08.3229693Z env:
+2026-05-18T01:20:08.3229889Z   _R_CHECK_PKG_SIZES_: FALSE
+2026-05-18T01:20:08.3230246Z   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+2026-05-18T01:20:08.3230507Z   R_KEEP_PKG_SOURCE: yes
+2026-05-18T01:20:08.3230719Z   _R_CHECK_SYSTEM_CLOCK_: false
+2026-05-18T01:20:08.3230963Z   _R_CHECK_FUTURE_FILE_TIMESTAMPS_: false
+2026-05-18T01:20:08.3231205Z   RGL_USE_NULL: true
+2026-05-18T01:20:08.3231435Z   _R_CHECK_CRAN_INCOMING_CHECK_FILE_URIS_: true
+2026-05-18T01:20:08.3231734Z   _R_CHECK_CRAN_INCOMING_NOTE_GNU_MAKE_: true
+2026-05-18T01:20:08.3232040Z   _R_CHECK_PACKAGE_DEPENDS_IGNORE_MISSING_ENHANCES_: true
+2026-05-18T01:20:08.3232539Z   _R_CHECK_CODE_CLASS_IS_STRING_: true
+2026-05-18T01:20:08.3232799Z   _R_CHECK_CODOC_VARIABLES_IN_USAGES_: true
+2026-05-18T01:20:08.3233074Z   _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+2026-05-18T01:20:08.3233323Z   _R_CHECK_DATALIST_: true
+2026-05-18T01:20:08.3233549Z   _R_CHECK_NEWS_IN_PLAIN_TEXT_: true
+2026-05-18T01:20:08.3233831Z   _R_CHECK_PACKAGES_USED_CRAN_INCOMING_NOTES_: true
+2026-05-18T01:20:08.3234114Z   _R_CHECK_RD_CONTENTS_KEYWORDS_: true
+2026-05-18T01:20:08.3234359Z   _R_CHECK_R_DEPENDS_: warn
+2026-05-18T01:20:08.3234599Z   _R_CHECK_S3_METHODS_SHOW_POSSIBLE_ISSUES_: true
+2026-05-18T01:20:08.3234874Z   _R_CHECK_THINGS_IN_TEMP_DIR_: true
+2026-05-18T01:20:08.3235117Z   _R_CHECK_UNDOC_USE_ALL_NAMES_: true
+2026-05-18T01:20:08.3235364Z   _R_CHECK_URLS_SHOW_301_STATUS_: true
+2026-05-18T01:20:08.3235601Z   _R_CXX_USE_NO_REMAP_: true
+2026-05-18T01:20:08.3235864Z   _R_CHECK_CRAN_INCOMING_SKIP_LARGE_VERSION_: true
+2026-05-18T01:20:08.3236145Z   _R_CHECK_FORCE_SUGGESTS_: false
+2026-05-18T01:20:08.3236383Z   _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+2026-05-18T01:20:08.3236621Z   _R_CHECK_BASHISMS_: true
+2026-05-18T01:20:08.3236849Z   _R_CHECK_CRAN_INCOMING_USE_ASPELL_: true
+2026-05-18T01:20:08.3237585Z   GH_TOKEN: ***
+2026-05-18T01:20:08.3237780Z ##[endgroup]
+2026-05-18T01:20:08.8730945Z {"url":"https://api.github.com/repos/krlmlr/duckdb-r/statuses/cd276d0cd2ecff297ed30797f6c5d5dd58fc2017","avatar_url":"https://avatars.githubusercontent.com/in/15368?v=4","id":47533317779,"node_id":"SC_kwDOKNSgSc8AAAALETTekw","state":"failure","description":"rcc / rcc-smoke","target_url":"https://github.com/krlmlr/duckdb-r/actions/runs/26005697733","context":"rcc","created_at":"2026-05-18T01:20:08Z","updated_at":"2026-05-18T01:20:08Z","creator":{"login":"github-actions[bot]","id":41898282,"node_id":"MDM6Qm90NDE4OTgyODI=","avatar_url":"https://avatars.githubusercontent.com/in/15368?v=4","gravatar_id":"","url":"https://api.github.com/users/github-actions%5Bbot%5D","html_url":"https://github.com/apps/github-actions","followers_url":"https://api.github.com/users/github-actions%5Bbot%5D/followers","following_url":"https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}","gists_url":"https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}","starred_url":"https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/github-actions%5Bbot%5D/subscriptions","organizations_url":"https://api.github.com/users/github-actions%5Bbot%5D/orgs","repos_url":"https://api.github.com/users/github-actions%5Bbot%5D/repos","events_url":"https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}","received_events_url":"https://api.github.com/users/github-actions%5Bbot%5D/received_events","type":"Bot","user_view_type":"public","site_admin":false}}
+2026-05-18T01:20:08.8866424Z Post job cleanup.
+2026-05-18T01:20:08.8919764Z Post job cleanup.
+2026-05-18T01:20:08.9767017Z [command]/usr/bin/git version
+2026-05-18T01:20:08.9803636Z git version 2.54.0
+2026-05-18T01:20:08.9839454Z Temporarily overriding HOME='/home/runner/work/_temp/51535ac3-38a4-43cf-8d28-5d46b1e8b0cc' before making global git config changes
+2026-05-18T01:20:08.9840805Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-18T01:20:08.9844900Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/duckdb-r/duckdb-r
+2026-05-18T01:20:08.9875743Z Removing SSH command configuration
+2026-05-18T01:20:08.9882827Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-18T01:20:08.9917542Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-18T01:20:09.0158544Z Removing HTTP extra header
+2026-05-18T01:20:09.0164565Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-18T01:20:09.0198905Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-18T01:20:09.0434795Z Removing includeIf entries pointing to credentials config files
+2026-05-18T01:20:09.0441844Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-18T01:20:09.0469063Z includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git.path
+2026-05-18T01:20:09.0469762Z includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git/worktrees/*.path
+2026-05-18T01:20:09.0470542Z includeif.gitdir:/github/workspace/.git.path
+2026-05-18T01:20:09.0471047Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-05-18T01:20:09.0479771Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git.path
+2026-05-18T01:20:09.0503215Z /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0514688Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git.path /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0550727Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git/worktrees/*.path
+2026-05-18T01:20:09.0573211Z /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0582716Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/duckdb-r/duckdb-r/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0616162Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-05-18T01:20:09.0639025Z /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0647513Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0679411Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-05-18T01:20:09.0701399Z /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0711471Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config
+2026-05-18T01:20:09.0746990Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-18T01:20:09.0997099Z Removing credentials config '/home/runner/work/_temp/git-credentials-d905896c-9a24-414f-931f-02f13c8f8834.config'
+2026-05-18T01:20:09.1125132Z Evaluate and set job outputs
+2026-05-18T01:20:09.1131842Z Cleaning up orphan processes
+2026-05-17T23:21:37.9910000Z Requested labels: ubuntu-24.04
+2026-05-17T23:21:37.9910000Z Job defined at: krlmlr/duckdb-r/.github/workflows/R-CMD-check.yaml@refs/heads/broken-8ed27dac053c20b1012b1f614efa1c213bb20699-dev
+2026-05-17T23:21:37.9910000Z Waiting for a runner to pick up this job...
+2026-05-17T23:21:37.9860000Z Evaluating rcc-smoke.if
+2026-05-17T23:21:37.9860000Z Evaluating: success()
+2026-05-17T23:21:37.9860000Z Result: true
+2026-05-18T01:19:34.4350000Z Job is about to start running on the hosted runner: GitHub Actions 1000156174
+2026-05-18T01:19:34.4360000Z Job is waiting for a hosted runner to come online.

@@ -1,0 +1,129 @@
+::group::install
+* installing to library ‘/home/runner/work/_temp/Library’
+* installing *source* package ‘duckdb.dev’ ...
+** this is package ‘duckdb.dev’ version ‘1.5.5.9002.605’
+** using staged installation
++ dirname ./configure
++ cd .
++ [ -z  ]
++ Rscript scripts/setup-makeflags.R
++ makeflags_value=-j4
++ [ -n -j4 ]
++ export MAKEFLAGS=-j4
++ echo Setting MAKEFLAGS=-j4 for parallel compilation
+Setting MAKEFLAGS=-j4 for parallel compilation
++ echo Set NOT_CRAN or MAKEFLAGS to override
+Set NOT_CRAN or MAKEFLAGS to override
++ dirname ./configure
++ PKG_ROOT=.
++ cd ./src
++ echo DUCKDB_RSTRTMGR=1
++ echo DUCKDB_RSTRTMGR_LIB=
++ [  = 1 ]
++ [  = true ]
++ [ -f  ]
++ cp include/to-tar.mk Makevars.duckdb
++ [ -f duckdb.tar.xz ]
+** libs
+specified C++17
+using C++ compiler: ‘g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0’
+using C++17
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c rfuns.cpp -o rfuns.o
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c database.cpp -o database.o
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c connection.cpp -o connection.o
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c statement.cpp -o statement.o
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c register.cpp -o register.o
+ccache g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -I../inst/include -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -I../inst/include -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c relational.cpp -o relational.o
+register.cpp: In static member function ‘static duckdb::optional_ptr<const duckdb::Expression> RArrowTabularStreamFactory::OptionalFilterChild(const duckdb::BoundFunctionExpression&)’:
+register.cpp:209:27: error: ‘duckdb::unique_ptr<duckdb::FunctionData> duckdb::BoundFunctionExpression::bind_info’ is private within this context
+  209 |                 if (!func.bind_info) {
+      |                           ^~~~~~~~~
+In file included from duckdb/src/include/duckdb/planner/expression/bound_comparison_expression.hpp:11,
+                 from duckdb/src/include/duckdb/planner/filter/expression_filter.hpp:13,
+                 from duckdb/src/include/duckdb/optimizer/join_order/relation_statistics_helper.hpp:10,
+                 from duckdb/src/include/duckdb/optimizer/join_order/cardinality_estimator.hpp:12,
+                 from duckdb/src/include/duckdb/optimizer/join_order/relation_manager.hpp:13,
+                 from duckdb/src/include/duckdb/optimizer/join_order/query_graph.hpp:15,
+                 from duckdb/src/include/duckdb/optimizer/join_order/join_node.hpp:11,
+                 from duckdb/src/include/duckdb/execution/physical_operator_states.hpp:17,
+                 from duckdb/src/include/duckdb/function/table_function.hpp:14,
+                 from duckdb/src/include/duckdb/function/table/arrow.hpp:11,
+                 from register.cpp:3:
+duckdb/src/include/duckdb/planner/expression/bound_function_expression.hpp:78:34: note: declared private here
+   78 |         unique_ptr<FunctionData> bind_info;
+      |                                  ^~~~~~~~~
+register.cpp:212:26: error: ‘duckdb::BoundScalarFunction duckdb::BoundFunctionExpression::function’ is private within this context
+  212 |                 if (func.function.GetName() == OptionalFilterScalarFun::NAME) {
+      |                          ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_function_expression.hpp:74:29: note: declared private here
+   74 |         BoundScalarFunction function;
+      |                             ^~~~~~~~
+register.cpp:213:37: error: ‘duckdb::unique_ptr<duckdb::FunctionData> duckdb::BoundFunctionExpression::bind_info’ is private within this context
+  213 |                         return func.bind_info->Cast<OptionalFilterFunctionData>().child_filter_expr.get();
+      |                                     ^~~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_function_expression.hpp:78:34: note: declared private here
+   78 |         unique_ptr<FunctionData> bind_info;
+      |                                  ^~~~~~~~~
+register.cpp:215:26: error: ‘duckdb::BoundScalarFunction duckdb::BoundFunctionExpression::function’ is private within this context
+  215 |                 if (func.function.GetName() == SelectivityOptionalFilterScalarFun::NAME) {
+      |                          ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_function_expression.hpp:74:29: note: declared private here
+   74 |         BoundScalarFunction function;
+      |                             ^~~~~~~~
+register.cpp:216:37: error: ‘duckdb::unique_ptr<duckdb::FunctionData> duckdb::BoundFunctionExpression::bind_info’ is private within this context
+  216 |                         return func.bind_info->Cast<SelectivityOptionalFilterFunctionData>().child_filter_expr.get();
+      |                                     ^~~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_function_expression.hpp:78:34: note: declared private here
+   78 |         unique_ptr<FunctionData> bind_info;
+      |                                  ^~~~~~~~~
+register.cpp: In static member function ‘static SEXPREC* RArrowTabularStreamFactory::TransformInExpression(const duckdb::BoundOperatorExpression&, SEXP, SEXP)’:
+register.cpp:223:29: error: ‘duckdb::vector<duckdb::unique_ptr<duckdb::Expression> > duckdb::BoundOperatorExpression::children’ is private within this context
+  223 |                 if (op_expr.children.empty() || op_expr.children[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
+      |                             ^~~~~~~~
+In file included from register.cpp:11:
+duckdb/src/include/duckdb/planner/expression/bound_operator_expression.hpp:39:40: note: declared private here
+   39 |         vector<unique_ptr<Expression>> children;
+      |                                        ^~~~~~~~
+register.cpp:223:57: error: ‘duckdb::vector<duckdb::unique_ptr<duckdb::Expression> > duckdb::BoundOperatorExpression::children’ is private within this context
+  223 |                 if (op_expr.children.empty() || op_expr.children[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
+      |                                                         ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_operator_expression.hpp:39:40: note: declared private here
+   39 |         vector<unique_ptr<Expression>> children;
+      |                                        ^~~~~~~~
+register.cpp:226:50: error: ‘duckdb::vector<duckdb::unique_ptr<duckdb::Expression> > duckdb::BoundOperatorExpression::children’ is private within this context
+  226 |                 const idx_t num_values = op_expr.children.size() - 1;
+      |                                                  ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_operator_expression.hpp:39:40: note: declared private here
+   39 |         vector<unique_ptr<Expression>> children;
+      |                                        ^~~~~~~~
+register.cpp:240:47: error: ‘duckdb::vector<duckdb::unique_ptr<duckdb::Expression> > duckdb::BoundOperatorExpression::children’ is private within this context
+  240 |                 for (idx_t i = 1; i < op_expr.children.size(); i++) {
+      |                                               ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_operator_expression.hpp:39:40: note: declared private here
+   39 |         vector<unique_ptr<Expression>> children;
+      |                                        ^~~~~~~~
+register.cpp:241:53: error: ‘duckdb::vector<duckdb::unique_ptr<duckdb::Expression> > duckdb::BoundOperatorExpression::children’ is private within this context
+  241 |                         auto &value_expr = *op_expr.children[i];
+      |                                                     ^~~~~~~~
+duckdb/src/include/duckdb/planner/expression/bound_operator_expression.hpp:39:40: note: declared private here
+   39 |         vector<unique_ptr<Expression>> children;
+      |                                        ^~~~~~~~
+register.cpp:245:82: error: ‘duckdb::Value duckdb::BoundConstantExpression::value’ is private within this context
+  245 |                         auto &value = value_expr.Cast<BoundConstantExpression>().value;
+      |                                                                                  ^~~~~
+In file included from duckdb/src/include/duckdb/planner/filter/expression_filter.hpp:14:
+duckdb/src/include/duckdb/planner/expression/bound_constant_expression.hpp:41:15: note: declared private here
+   41 |         Value value;
+      |               ^~~~~
+register.cpp:245:82: note: field ‘duckdb::Value duckdb::BoundConstantExpression::value’ can be accessed via ‘duckdb::Value& duckdb::BoundConstantExpression::GetValueMutable()’
+  245 |                         auto &value = value_expr.Cast<BoundConstantExpression>().value;
+      |                                                                                  ^~~~~
+      |                                                                                  GetValueMutable()
+make: *** [/opt/R/4.6.1/lib/R/etc/Makeconf:199: register.o] Error 1
+make: *** Waiting for unfinished jobs....
+ERROR: compilation failed for package ‘duckdb.dev’
+* removing ‘/home/runner/work/_temp/Library/duckdb.dev’
+* restoring previous ‘/home/runner/work/_temp/Library/duckdb.dev’
+::endgroup::
+install: failure -- skipping the remaining gates
+| install | failure |
