@@ -38,6 +38,12 @@ on:
         description: "Run rcc-suggests job"
         type: boolean
         default: false
+  # SECURITY: a merge-queue run executes the queued pull request's code with
+  # the base repository's token and secrets, unlike `pull_request`, where a
+  # fork only ever gets a read-only token and no secrets. Adding a fork's pull
+  # request to the queue is therefore as much of a trust decision as merging
+  # it; keep "Require merge queue" paired with a branch rule that only lets
+  # maintainers enqueue.
   merge_group:
     types:
       - checks_requested
@@ -79,9 +85,6 @@ jobs:
       statuses: write
       pull-requests: write
       actions: write
-
-    # Begin custom: services
-    # End custom: services
 
     steps:
       - uses: actions/checkout@v6
@@ -391,9 +394,6 @@ jobs:
       contents: write
       pull-requests: write
 
-    # Begin custom: services
-    # End custom: services
-
     strategy:
       fail-fast: false
       matrix: ${{fromJson(needs.rcc-smoke.outputs.versions-matrix)}}
@@ -480,9 +480,6 @@ jobs:
 
     permissions:
       contents: read
-
-    # Begin custom: services
-    # End custom: services
 
     strategy:
       fail-fast: false
