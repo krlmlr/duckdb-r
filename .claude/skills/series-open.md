@@ -1,5 +1,8 @@
 # Opening a new series
 
+*Handbook: [`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md) —
+what this routine is, and when it runs.*
+
 When upstream cuts a release branch —
 v2.0 is released, upstream `main` becomes the 2.1 line —
 the release gets a series of its own.
@@ -38,15 +41,18 @@ This skill is the release branch's birth certificate.
    `flavor.sh` never stamps it,
    because regular LTS flavors keep their four-component version.
 
-   **Check the generated cpp11 files before trusting a fresh seed.**
+   **Install `krlmlr/cpp11` before running `flavor.sh`**, from GitHub —
+   `remotes::install_github("krlmlr/cpp11")`, beside `decor`.
    `flavor.sh` runs `cpp11::cpp_register()`,
-   whose symbol names depend on the cpp11 that happens to be installed:
-   0.5.5 replaces only the *first* dot of the package name,
-   so a `1.5.dev` flavor comes out as `_duckdb_1.5.dev_rapi_connect`,
-   which is not a valid C identifier.
-   Compare `R/cpp11.R` against an existing series' seed;
-   this is also why a forward series is rebased rather than reseeded
-   (`series-rebase.md`).
+   whose symbol names come from the installed cpp11 rather than from the
+   vendored headers
+   ([`architecture/glue/`](/handbook/architecture/glue/README.md)).
+   The script refuses the result when it is wrong
+   and restores the tree, so a missing fork costs a rerun and nothing
+   else — but it costs the whole run, and `cpp_register()` is the last
+   step.
+   That the two cpp11s differ at all is also why a forward series is
+   rebased rather than reseeded (`series-rebase.md`).
 
 3. **Create all four refs at the seed tip**
    (day-one rule, no exceptions):
@@ -67,9 +73,50 @@ This skill is the release branch's birth certificate.
    with the gated `scripts/vendor-one.sh --commits 100 <upstream-clone>`,
    fixing glue breaks in place as the gate stops on them.
 
-6. The routine discovers every series from its refs
+6. **Add the series to the README's `Flavors` table** — see below.
+
+7. The routine discovers every series from its refs
    and serves them all in one firing;
    a new series needs no configuration, only its refs.
+
+## Patching the README
+
+The `Flavors` table in `README.md` is the only place
+a new series has to be announced by hand;
+everything else is discovered from refs.
+Add one row for `<F>`, in the table's order —
+CRAN, then LTS, then the `.dev` flavors newest series first:
+
+* **Series** — `<U>` linked to
+  `https://github.com/duckdb/duckdb/tree/<U>`.
+* **Kind** — `dev`.
+* **Progress** — three badges, outward from the released state:
+  *ahead* (green) over `<release-branch>..<S>-dev`,
+  *in flight* (yellow) over `<S>-green..<S>-dev`,
+  *buffered* (blue) over `<S>-build-base..<S>-build`.
+  Copy an existing row and substitute the refs;
+  the shields.io endpoint is
+  `github/commits-difference/krlmlr/duckdb-r?base=…&head=…`.
+
+When the series later releases,
+add its stable row too,
+with a version badge instead of the lag badges.
+
+Two things to check before pushing:
+
+* **Every ref a badge names must live in `krlmlr/duckdb-r`.**
+  A base that exists only in the canonical repo
+  renders as an error, not a count.
+  Push the release branch into the fork,
+  and keep the mirror fresh
+  ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+* **The table must stay clear of `scripts/flavor.patch`.**
+  `README.md` is a flavored file;
+  the patch rewrites the installation hunks near the top.
+  `git apply --check --include=README.md scripts/flavor.patch`
+  passes as long as the edit stays below them.
+
+The edit lands on `main` and is forward-ported like any other R-side change.
 
 ## The other half of a release cut
 

@@ -1,5 +1,8 @@
 # Rebasing a forward series onto a newer mainline
 
+*Handbook: [`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md) —
+what this routine is, and when it runs.*
+
 Two different moves put a series on a newer base,
 and only one of them is a rebase.
 
@@ -35,6 +38,13 @@ the `ours-version` driver keeps `DESCRIPTION` off the conflict list
 and `rerere` replays a resolution onto the second series
 once it has been made for the first.
 
+Then `scripts/series-glue.sh <S>-fwd`, before starting the replay.
+A rebase conflicts where the glue does,
+and `rerere` only replays a resolution that has already been made once —
+so the pass that decides them is the first one,
+and it decides better having seen all of them
+(`series-forward.md`, "Read the whole glue set before the first pick").
+
 ```sh
 # `<old-seed>` is the branch's `chore: Add fifth version component` commit.
 git checkout -B seed <old-dev-seed>
@@ -50,6 +60,16 @@ Push all four in one `git push --atomic`
 with a per-ref `--force-with-lease`,
 so a half-moved series is never observable.
 
+Ported commits (stage 4 of the loop)
+whose content `main` has meanwhile absorbed
+are dropped by the rebase itself —
+the merge backend omits patch-id equivalents,
+and a stage-4 sync commit whose delta `main` caught up with
+rebases to empty and is dropped too —
+which is the intended end of their lives.
+One that survives is one `main` does not carry;
+it rides on, and the next forward retires it.
+
 ## One seed for all four
 
 The two `git rebase --onto seed` lines take **one** seed,
@@ -60,7 +80,7 @@ even when `-build` and `-dev` were seeded on different `main` commits
 Split bases are the state to get out of, not to preserve.
 The loop reads the `-build`↔`-dev` delta
 as the R-side fixes folded in during repair,
-and stage 4 replays buffer commits onto the `-dev` tip;
+and stage 5 replays buffer commits onto the `-dev` tip;
 with two bases that delta also carries `main`-side drift,
 and every replay drags it along.
 Measured on `main-fwd`: twelve files before the rebase,

@@ -3,9 +3,8 @@
 #
 # Walks its slice of `plan.json` oldest-first, and for every commit resets the
 # workspace to it, runs `scripts/rcc-one.sh`, and writes the `rcc` commit-status
-# -- the same marker `scripts/each-rcc.sh` produces indirectly by dispatching an
-# `rcc` run per commit. Downstream consumers (`scripts/vendor-gate.sh`,
-# `scripts/rcc-logs.sh`, the repair skills) see no difference.
+# -- which is a display surface: `scripts/rcc-logs.sh` and the repair skills read
+# the record on the `rcc2` branch, and nothing decides from the status.
 #
 # Why the reuse works even though every commit starts from a clean tree:
 # `R CMD build` copies the package and `R CMD check` compiles from the copy, so
@@ -13,7 +12,7 @@
 # survive is **ccache**, which is content-addressed and lives on the runner's
 # local disk for the whole job. A typical adjacent vendor commit recompiles only
 # the handful of unity objects it invalidates -- ~98% hits, measured in
-# scripts/VENDORING-LOOP.md, Appendix A.2. That is the whole point of putting
+# plan/superseded/vendoring-loop.md, Appendix A.2. That is the whole point of putting
 # consecutive commits in one job.
 #
 # Stopping is graceful, not fatal. The leg stops at its own deadline and reports
@@ -26,16 +25,18 @@
 #
 #   * The leg *resumes*. Re-running a failed job replays its whole shard from
 #     plan.json, so without a check it would rebuild the commits it had already
-#     decided -- up to five hours of work to redo, on a cold cache. A commit that
-#     already carries a decided `rcc` status is therefore skipped here, which
-#     makes "Re-run failed jobs" cost only what was actually lost.
+#     decided -- up to five hours of work to redo, on a cold cache. A commit the
+#     verdict store already holds a record for is therefore skipped here, which
+#     makes "Re-run failed jobs" cost only what was actually lost. The store is
+#     what the planner selects from too (scripts/rcc-decided.sh), so the two
+#     cannot disagree about what "decided" means.
 #     Not every decided commit, though: a forced replan and the tip of a
 #     `retry-<S>-dev` branch are in the plan *because* they already have a
 #     verdict, and skipping those would make the retry a no-op. The planner
 #     names them in `replanned_despite_verdict`, so the leg reads the intent
 #     from the plan rather than trying to re-derive it.
-#   * The leg *publishes as it goes*. Every verdict is pushed to the `rcc` branch
-#     the moment it exists (scripts/rcc-part-push.sh), so a leg that dies takes
+#   * The leg *publishes as it goes*. Every verdict is pushed to the `rcc2` branch
+#     the moment it exists (scripts/rcc-publish.sh), so a leg that dies takes
 #     nothing with it but the commit it was in the middle of. The artifact and
 #     the fan-in stay as the backstop for the push itself failing -- which is why
 #     each.yaml names the artifact per run *attempt*: a resumed leg's index covers
@@ -65,7 +66,7 @@
 #   FORCE             - if non-empty, rebuild every commit in the shard, decided
 #                       or not; the plan's own `replanned_despite_verdict` list
 #                       already covers the forced and retried ones
-#   NO_PUBLISH        - if non-empty, do not push records to the `rcc` branch;
+#   NO_PUBLISH        - if non-empty, do not push records to the `rcc2` branch;
 #                       the fan-in collects them from the artifact instead
 #   DRY_RUN           - if non-empty, list the commits and exit
 
@@ -81,7 +82,36 @@ SUMMARY_MAX_BYTES="${SUMMARY_MAX_BYTES:-900000}"
 FORCE="${FORCE:-}"
 NO_PUBLISH="${NO_PUBLISH:-}"
 
+# Helpers resolve from `here`, and the loop below resets the workspace to each
+# commit it builds -- so every commit is checked by the harness *it carries*. That
+# is the intent, not a bug: we are vendoring, so a commit is either solid, or
+# broken and the next loop run fixes it, or broken-but-green and the mandatory
+# rebase before a release catches it either way. The run-level scripts use the tip
+# (each-plan.sh, and the fan-in's each-harvest.sh) -- a different question.
 here="$(cd "$(dirname "$0")" && pwd)"
+
+# This file is one of the ones that reset wipes, and bash reads a script
+# incrementally, by byte offset: crossing a commit that changed *this* script
+# lets the running shell resume at a stale offset in whatever content replaced
+# it. That is undefined behaviour, and it is independent of the choice above --
+# nothing about walking commits with the harness they carry requires executing
+# the walker out of the tree being walked.
+#
+# So run from a copy taken before the first reset. `here` survives the re-exec,
+# so the helpers still resolve from the workspace and every commit is still
+# checked by the harness it carries. The copy lives outside the workspace rather
+# than in a `.gitignore`d directory inside it, because `.gitignore` comes from
+# the commit under test: an in-tree staging directory is untracked and unignored
+# at every commit older than the entry, and `rcc-one.sh`'s `clean` gate fails on
+# it -- exactly in the rewind case this protects.
+if [ -z "${EACH_SHARD_HERE:-}" ]; then
+  staged="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/each-shard"
+  mkdir -p "${staged}"
+  cp "${here}/$(basename "$0")" "${staged}/each-shard.sh"
+  EACH_SHARD_HERE="${here}" exec bash "${staged}/each-shard.sh" "$@"
+fi
+here="${EACH_SHARD_HERE}"
+
 started="$(date -u +%s)"
 deadline=$(( started + DEADLINE_MINUTES * 60 ))
 
@@ -149,18 +179,24 @@ set_status() {
     -f "context=rcc" > /dev/null
 }
 
-# Is this commit already decided? `pending` deliberately does not count: that is
-# the wedged-commit state a killed leg leaves behind, and redoing it is exactly
-# what a re-run is for.
-decided() {
-  local state
-  state="$(gh api "repos/{owner}/{repo}/commits/$1/statuses" \
-    --jq '[.[] | select(.context == "rcc")] | .[0].state // ""' 2>/dev/null || true)"
-  case "${state}" in
-    success|failure|error) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# What the verdict store already holds, read once. The same source the planner
+# selects from (scripts/rcc-decided.sh), so "decided" means the same thing in
+# both places -- a record on the `rcc2` branch, not a commit status, which is a
+# display surface and in particular carries the `pending` a killed leg leaves
+# behind.
+#
+# A snapshot at leg start is the right granularity: the commits this leg might
+# skip are the ones a *previous attempt* of it decided, and no other leg is
+# deciding a commit in this shard. Failing to read it is not fatal -- an empty
+# list rebuilds, which is what a leg with no store at all has always done.
+decided_file="${workdir}/decided"
+: > "${decided_file}"
+if ! "${here}/rcc-decided.sh" > "${decided_file}" 2>/dev/null; then
+  echo "Could not read the verdict store; nothing will be skipped as already decided."
+  : > "${decided_file}"
+fi
+
+decided() { grep -qxF -- "$1" "${decided_file}"; }
 
 # --------------------------------------------------------------- publisher ----
 # The run object, once. Every record this leg writes carries it, so the fan-in and
@@ -183,10 +219,10 @@ if [ -n "${GITHUB_RUN_ID:-}" ]; then
   fi
 fi
 
-# The record, in the shape `runs2.ndjson` holds and `runs2.d/<xx>/<sha>.ndjson`
-# now is. Written into LOG_DIR so it travels in the artifact too: the fan-in
-# copies these verbatim rather than rebuilding them, which is what keeps the two
-# paths from drifting apart.
+# The record, in the shape `runs2.d/<xx>/<sha>.ndjson` holds. Written into
+# LOG_DIR so it travels in the artifact too: the fan-in copies these verbatim
+# rather than rebuilding them, which is what keeps the two paths from drifting
+# apart.
 write_record() { # <sha> <state> <duration> <exit-code> <failed-stages-json>
   local sha="$1" state="$2" duration="$3" rc="$4" stages="$5" now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -210,14 +246,38 @@ write_record() { # <sha> <state> <duration> <exit-code> <failed-stages-json>
     > "${LOG_DIR}/parts/${sha}.ndjson"
 }
 
+# One commit's verdict, staged in the shape of the branch and handed to the one
+# writer every producer goes through (scripts/rcc-publish.sh).
+#
+# A verdict that is *not* a failure lists the log for removal rather than staging
+# one: there is nothing to compare against, so any log the branch still holds
+# belongs to a verdict this record overturns -- which is what a retry
+# (.claude/skills/series-loop.md) leaves behind.
+#
 # Never fatal: the artifact plus the fan-in remain the backstop, so the worst a
 # failed publish costs is that this record lands one job later instead of now.
 publish_record() { # <sha> <state>
-  local sha="$1" state="$2" log=""
+  local sha="$1" state="$2" stage="${workdir}/publish"
   [ -n "${NO_PUBLISH}" ] && return 0
-  [ "${state}" = "failure" ] && log="${LOG_DIR}/${sha}.log"
-  if ! "${here}/rcc-part-push.sh" "${sha}" "${LOG_DIR}/parts/${sha}.ndjson" ${log:+"${log}"}; then
-    echo "${sha}: could not publish to the rcc branch; deferring to the fan-in"
+
+  rm -rf "${stage}"
+  mkdir -p "${stage}/runs2.d/${sha:0:2}"
+  cp -f "${LOG_DIR}/parts/${sha}.ndjson" "${stage}/runs2.d/${sha:0:2}/${sha}.ndjson"
+  if [ "${state}" = "failure" ]; then
+    # A failure with no log of its own leaves the branch's alone: it is either
+    # this commit's from an earlier attempt, or nothing, and neither is something
+    # to delete on the strength of a log we could not capture.
+    if [ -f "${LOG_DIR}/${sha}.log" ]; then
+      mkdir -p "${stage}/logs2.d/${sha:0:2}"
+      cp -f "${LOG_DIR}/${sha}.log" "${stage}/logs2.d/${sha:0:2}/${sha}.log"
+    fi
+  else
+    printf 'logs2.d/%s/%s.log\n' "${sha:0:2}" "${sha}" > "${stage}/.remove"
+  fi
+
+  if ! "${here}/rcc-publish.sh" \
+       "each-rcc: ${sha:0:9} (run ${GITHUB_RUN_ID:-local})" "${stage}"; then
+    echo "${sha}: could not publish to the rcc2 branch; deferring to the fan-in"
   fi
 }
 
@@ -225,7 +285,7 @@ publish_record() { # <sha> <state>
 # What a red commit owes the reader of the run summary: which stage broke, and
 # enough of its tail to tell a compile error from a failing test -- without
 # opening a 40-minute job log and scrolling to the end of it. The full log is
-# still harvested onto the `rcc` branch; this is an excerpt, not the record.
+# still harvested onto the `rcc2` branch; this is an excerpt, not the record.
 #
 # Fenced with four backticks, because R, roxygen and pkgdown output can contain
 # a triple fence of its own, and stripped of SGR escapes, which Markdown renders
@@ -291,12 +351,12 @@ for sha in "${commits[@]}"; do
   now="$(date -u +%s)"
   remaining=$(( deadline - now ))
 
-  # Before anything expensive: has someone already decided this commit? On a
-  # first run nobody has, and this costs one REST read per commit. On a re-run of
-  # a leg that died it is the difference between redoing the lost commit and
+  # Before anything expensive: has this commit already been decided? On a first
+  # run nothing has, and the lookup is a grep over a list read once. On a re-run
+  # of a leg that died it is the difference between redoing the lost commit and
   # redoing the whole shard. A commit the planner deliberately replanned is
   # exempt -- its verdict is the thing being overturned.
-  if [ -z "${FORCE}" ] && [ -n "${GH_TOKEN:-}" ] \
+  if [ -z "${FORCE}" ] \
      && ! grep -qxF -- "${sha}" <<<"${replanned}" \
      && decided "${sha}"; then
     echo "${sha}: already decided, skipping (re-run of a partially built shard)"
