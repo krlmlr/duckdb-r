@@ -1,6 +1,6 @@
 #!/bin/bash
 # The ref motion of the series loop, stages 3 and 5, for one series:
-# fast-forward `<S>-green` over the all-green prefix, move `<S>-build-base` to
+# fast-forward `<S>-green` over the all-green prefix, set `<S>-build-base` to
 # the equivalent `-build` commit, and extend `<S>-dev` from the buffer.
 #
 # Everything here is mechanical and gated; the judgement calls (repairs,
@@ -154,10 +154,17 @@ if [ "$new_green" != "$(git rev-parse "$green")" ]; then
   if [ -n "$up" ]; then
     eq=$(git log --format='%H %s' "$build" | grep -m 1 "duckdb@$up" | cut -d' ' -f1 || true)
     if [ -n "$eq" ]; then
-      git merge-base --is-ancestor "$base" "$eq" ||
-        { echo "Error: build-base would not move forward"; exit 1; }
-      git push "$remote" "$eq:refs/heads/$S-build-base"
-      echo "build-base -> $(git rev-parse --short "$eq")"
+      # Set, never advance. -build-base is the one ref of the four that is not
+      # fast-forward only: nothing consumes it, and the match is recomputed
+      # here from scratch every time, so where the ref sat before says nothing
+      # this stage needs (.claude/skills/series-loop.md, stage 3). Force,
+      # because a write from outside this loop -- a CI job committing onto the
+      # branch it ran on -- can leave the ref past the match or beside the
+      # buffer, and refusing that stopped stage 5 with it.
+      if [ "$(git rev-parse "$base")" != "$eq" ]; then
+        git push --force "$remote" "$eq:refs/heads/$S-build-base"
+        echo "build-base -> $(git rev-parse --short "$eq")"
+      fi
     fi
   fi
 else
@@ -207,6 +214,15 @@ else
   anchor=$(git log --format='%H %s' "$build" | grep -m 1 "duckdb@$dev_up" | cut -d' ' -f1 || true)
   [ -n "$anchor" ] ||
     { echo "Error: no -build commit vendors duckdb@$dev_up — mirror the fold in -build first"; exit 1; }
+  # `vendored_sha` walks past commits that vendor nothing, and on a -dev that has
+  # none of its own it walks past the seed too — answering with what the branch
+  # the seed was cut from had vendored. That is every series on its first firing
+  # once stage 4 has ported: -dev is the seed plus tooling picks, so the fast
+  # path above no longer applies and this one reaches below the divergence.
+  # The buffer starts at the merge base whatever -dev's newest vendor commit is.
+  if git merge-base --is-ancestor "$anchor" "$mb"; then
+    anchor=$mb
+  fi
 fi
 ahead=$(git rev-list --count "$anchor..$build")
 if [ "$ahead" -eq 0 ]; then
