@@ -24,6 +24,9 @@
       
       LINE 1: INVALID SQL SYNTAX
               ^
+      
+      LINE 1: INVALID SQL SYNTAX
+              ^
       i Context: rapi_prepare
       i Error type: PARSER
 
