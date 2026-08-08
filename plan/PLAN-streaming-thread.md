@@ -3,8 +3,8 @@
 **Open.**
 Builds on the streaming-results work in
 [#2292](https://github.com/duckdb/duckdb-r/pull/2292)
-(`dbSendQuery(stream = TRUE)`, designed in that branch's
-`plan/streaming-results.md`);
+(`dbSendQuery(stream = TRUE)`, designed in
+[`PLAN-streaming-results.md`](PLAN-streaming-results.md));
 this file proposes what comes after it lands.
 The memory facts as they stand today are owned by
 [`usage/memory/`](/handbook/usage/memory/README.md),

@@ -393,9 +393,10 @@ private:
 // and the prepared statement only holds a weak reference to it.
 struct RQueryResult : public ROpenResult {
 	// A streamed result holds its connection's query open from here on, so it is tracked until it is handed on
-	RQueryResult(duckdb::shared_ptr<ClientContext> context_p, duckdb::unique_ptr<QueryResult> result_p, bool streamed)
+	RQueryResult(duckdb::shared_ptr<ClientContext> context_p, duckdb::unique_ptr<QueryResult> result_p, bool streamed_p)
 	    : context(std::move(context_p)), result(std::move(result_p)), types(result->GetTypes()),
-	      names(IdentifiersToStrings(result->GetNames())), client_properties(result->client_properties) {
+	      names(IdentifiersToStrings(result->GetNames())), client_properties(result->client_properties),
+	      streamed(streamed_p) {
 		if (streamed && context) {
 			Track(context.get());
 		}
@@ -409,6 +410,11 @@ struct RQueryResult : public ROpenResult {
 		Untrack();
 		return std::move(result);
 	}
+	//! The next chunk for rapi_stream_fetch(), null at the end. Throws on an execution error.
+	//! A streamed result is opened as a stream on the first call
+	duckdb::unique_ptr<DataChunk> FetchChunk();
+	//! Ends the query and drops what the result holds, for rapi_stream_close()
+	void Release();
 
 	// Declared first, so the context outlives everything that reads it.
 	duckdb::shared_ptr<ClientContext> context;
@@ -417,6 +423,16 @@ struct RQueryResult : public ROpenResult {
 	vector<LogicalType> types;
 	vector<string> names;
 	ClientProperties client_properties;
+	// Data-frame streaming state (dbSendQuery(stream = TRUE)): the unconsumed
+	// tail of the last chunk served by rapi_stream_fetch(), and whether the
+	// underlying result has been drained, after which rapi_stream_fetch()
+	// fetches nothing more and serves only the buffered tail.
+	duckdb::unique_ptr<DataChunk> pending_chunk;
+	bool stream_drained = false;
+	// Whether the result was submitted to stream (rapi_execute_impl()), and the stream
+	// rapi_stream_fetch() reads it through once it has taken the result
+	bool streamed = false;
+	duckdb::unique_ptr<QueryResultStream<>> stream_result;
 };
 
 typedef cpp11::external_pointer<RQueryResult> rqry_eptr_t;
@@ -519,6 +535,12 @@ cpp11::list rapi_bind(duckdb::stmt_eptr_t, SEXP paramsexp, duckdb::ConvertOpts);
 SEXP rapi_execute(duckdb::stmt_eptr_t, duckdb::ConvertOpts);
 
 void rapi_release(duckdb::stmt_eptr_t);
+
+// Shared guard for every entry point that takes a query result (arrow_export.cpp).
+void CheckQueryResult(const duckdb::rqry_eptr_t &qry_res, const char *context);
+
+// The error a query result reports once another statement on its connection has ended it (arrow_export.cpp)
+extern const char *const INVALIDATED_MESSAGE;
 
 void rapi_register_df(duckdb::conn_eptr_t, std::string, cpp11::data_frame, duckdb::ConvertOpts);
 
