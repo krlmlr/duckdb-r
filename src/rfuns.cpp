@@ -21,12 +21,12 @@ void BaseRAddFunctionInteger(DataChunk &args, ExpressionState &state, Vector &re
 
 	BinaryExecutor::Execute<int32_t, int32_t, int32_t>(parts.lefts, parts.rights, result, args.size(),
 	                                                   [&](int32_t left, int32_t right) -> optional<int32_t> {
-		                                                   int64_t result = (int64_t)left + right;
-		                                                   if (result > INT_MAX || result < (INT_MIN + 1)) {
+		                                                   int64_t sum = (int64_t)left + right;
+		                                                   if (sum > INT_MAX || sum < (INT_MIN + 1)) {
 			                                                   // FIXME: Need warning: NAs produced by integer overflow
 			                                                   return nullopt;
 		                                                   }
-		                                                   return (int32_t)result;
+		                                                   return (int32_t)sum;
 	                                                   });
 }
 
@@ -832,12 +832,12 @@ void InExecute(DataChunk &args, ExpressionState &state, Vector &result) {
 		return false;
 	};
 
-	auto in_loop = [&](idx_t count, const LHS_TYPE *x_data, bool *result_data, const ValidityMask &mask) {
+	auto in_loop = [&](idx_t row_count, const LHS_TYPE *x_data, bool *result_data, const ValidityMask &mask) {
 		idx_t base_idx = 0;
-		auto entry_count = ValidityMask::EntryCount(count);
+		auto entry_count = ValidityMask::EntryCount(row_count);
 		for (idx_t entry_idx = 0; entry_idx < entry_count; entry_idx++) {
 			auto validity_entry = mask.GetValidityEntry(entry_idx);
-			idx_t next = MinValue<idx_t>(base_idx + ValidityMask::BITS_PER_VALUE, count);
+			idx_t next = MinValue<idx_t>(base_idx + ValidityMask::BITS_PER_VALUE, row_count);
 
 			if (ValidityMask::AllValid(validity_entry)) {
 				for (; base_idx < next; base_idx++) {
