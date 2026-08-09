@@ -151,7 +151,8 @@ void check_column_validity(SEXP col, const std::string &col_name, ConvertOpts::S
 		stop("expr_constant: Need value of length one");
 	}
 	check_column_validity(val, "val", convert_opts.strict_relational, convert_opts.timezone_out);
-	auto const_value = RApiTypes::SexpToValue(val, 0, false);
+	auto const_value =
+	    RApiTypes::SexpToValue(val, 0, false, convert_opts.posixct == ConvertOpts::PosixctType::TIMESTAMPTZ);
 	auto out = make_external_from<ParsedExpression>("duckdb_expr", ConstantExpression::FromValue(const_value));
 	if (alias != "") {
 		out->SetAlias(Identifier(std::move(alias)));
@@ -312,6 +313,7 @@ void check_column_validity(SEXP col, const std::string &col_name, ConvertOpts::S
 	// and duckplyr's experimental mode has scanned them as VARCHAR since #1092.
 	// `integer64` and `map_list_of` are left out too, so the connection's `map` does not apply here
 	// and an integer64 column does not scan as BIGINT (handbook/usage/relational/README.md).
+	other_params["timestamptz"] = Value::BOOLEAN(convert_opts.posixct == ConvertOpts::PosixctType::TIMESTAMPTZ);
 	auto alias = StringUtil::Format("dataframe_%d_%d", (uintptr_t)(SEXP)df,
 	                                (int32_t)(NumericLimits<int32_t>::Maximum() * unif_rand()));
 	auto rel =

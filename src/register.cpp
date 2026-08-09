@@ -62,6 +62,8 @@ using namespace duckdb;
 		parameter_map["experimental"] =
 		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
 		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
+		parameter_map["timestamptz"] =
+		    Value::BOOLEAN(convert_opts.posixct == ConvertOpts::PosixctType::TIMESTAMPTZ);
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
 		    ->CreateView(Identifier(name), overwrite, true);
