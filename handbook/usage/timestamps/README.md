@@ -32,12 +32,28 @@ the wider type mapping is
 * **The session `TimeZone` is the icu extension's setting.**
   `SET TimeZone` needs icu for any value, `'UTC'` included;
   where icu never loaded, results quietly fall back to a `UTC` label.
+  Where icu is *installed but not loaded*,
+  which is what running `INSTALL icu` once leaves behind,
+  the fallback holds only until something touches
+  the setting: `SET TimeZone` and `current_setting('TimeZone')` both
+  autoload icu, and from then on the label is the machine's zone,
+  so the same query can return a differently labeled column later in
+  one session, with nothing announcing the switch
+  ([`experiments/2026-08-09-rel-from-df-posixct/`](/experiments/2026-08-09-rel-from-df-posixct/README.md)).
+  Asking `duckdb_extensions()` loads nothing, and is how to tell
+  which state a session is in.
   This package autoloads an *installed* icu but downloads nothing
   by itself ([`extensions/`](/handbook/usage/extensions/README.md)),
   and does not link icu statically —
   a binary that does (the DuckDB CLI, a fast-path build against a
   release `libduckdb`) has the setting from startup,
   defaulting to the machine's zone.
+  It takes that zone as the machine spells it,
+  so a `TIMESTAMPTZ` label is `TZ` verbatim:
+  `"UTC"` and `"Etc/UTC"` are one zone under two labels,
+  and no value of `timezone_out` aligns with the session zone
+  on every machine, because the session zone is not a constant
+  ([`experiments/2026-08-09-rel-from-df-posixct/`](/experiments/2026-08-09-rel-from-df-posixct/README.md)).
 * **`tz_out_convert = "force"` is the one instant-changing path.**
   It relabels every datetime column in `timezone_out`,
   preserving the UTC-rendered wall clock;
@@ -47,23 +63,34 @@ the wider type mapping is
   as the display zone for `"with"`,
   as the target zone for `"force"` —
   both spelled `timezone_out = ""`.
-* **Which DuckDB type a `POSIXct` becomes is `posixct`'s to choose.**
-  The default `"timestamp"` sends the UTC rendering of each instant
-  into a `TIMESTAMP` column and drops the R-side zone;
-  `dbConnect(posixct = "timestamptz")` sends the instant itself,
-  which is what a `POSIXct` value means, into a `TIMESTAMPTZ` column
+* **A `POSIXct` crosses as `TIMESTAMPTZ`, the instant it names.**
+  That is what the R value means, and
+  `dbConnect(posixct = "timestamp")` is the way back to the older
+  mapping, which sent the UTC rendering into a naive `TIMESTAMP`
+  column and dropped the R-side zone
   ([#184](https://github.com/duckdb/duckdb-r/issues/184)).
-  The setting reaches every path that hands R values to the engine —
-  `dbWriteTable()`, `dbAppendTable()`, `duckdb_register()`,
-  `rel_from_df()`, bound parameters, `dbDataType()` and
-  `dbQuoteLiteral()` — nested columns included.
+  The setting reaches `dbWriteTable()`, `dbAppendTable()`,
+  `duckdb_register()`, bound parameters, `dbDataType()` and
+  `dbQuoteLiteral()`, nested columns included.
+* **Two paths stay on `TIMESTAMP` whatever the setting says.**
+  A data frame picked up by name under
+  `duckdb(environment_scan = TRUE)` follows the connection's `map` and `experimental`
+  ([`relational/`](/handbook/usage/relational/README.md)) but not yet its `posixct`,
+  which the replacement scan in [`src/register.cpp`](/src/register.cpp) does not pass on.
+  `rel_from_df()` declines the setting rather than misses it:
+  a relation promises the data frame back unchanged, which a
+  `TIMESTAMPTZ` column cannot keep, and what each candidate policy
+  costs is measured in
+  [`experiments/2026-08-09-rel-from-df-posixct/`](/experiments/2026-08-09-rel-from-df-posixct/README.md).
+  A caller who wants the setting there passes `convert_opts`;
+  the rest is [`relational/`](/handbook/usage/relational/README.md)'s.
 * **A zone survives the round trip only through `TIMESTAMPTZ`,
   and only the session's.**
-  Write under `posixct = "timestamptz"` with the session `TimeZone`
-  set to the column's zone, and the data frame comes back identical;
-  set to any other zone, the instant still comes back exact
-  and the label is the session's.
-  The default mapping has no zone to read back at all,
+  Set the session `TimeZone` to the column's zone and the data frame
+  comes back identical;
+  set it to any other zone and the instant still comes back exact,
+  labeled with the session's.
+  `posixct = "timestamp"` has no zone to read back at all,
   because the column it writes carries none.
 * **In a dbplyr pipeline, `posixct` reaches only the escaped value.**
   `!!` escapes R-side through `dbQuoteLiteral()`, so the literal is
@@ -82,5 +109,5 @@ the wider type mapping is
 
 *To deepen: extend
 [`experiments/2026-08-08-timezone-grid/`](/experiments/2026-08-08-timezone-grid/README.md)
-over the writing direction, so `posixct` is measured
-rather than argued.*
+over the writing direction, so the paths `posixct` does reach
+are measured across their settings too.*

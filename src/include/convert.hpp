@@ -38,7 +38,7 @@ struct ConvertOpts {
 	ArrayConversion array = ArrayConversion::NONE;
 	GeometryConversion geometry = GeometryConversion::BLOB;
 	MapShape map = MapShape::DATA_FRAME;
-	PosixctType posixct = PosixctType::TIMESTAMP;
+	PosixctType posixct = PosixctType::TIMESTAMPTZ;
 	ArrowConversion arrow = ArrowConversion::DISABLED;
 	AllowStreamResult allow_stream_result = AllowStreamResult::DISABLED;
 	ExperimentalFeatures experimental = ExperimentalFeatures::DISABLED;

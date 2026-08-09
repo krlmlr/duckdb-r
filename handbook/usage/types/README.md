@@ -8,7 +8,7 @@ and every entry on this page was measured on DuckDB 1.5.5, in [`experiments/2026
 [`experiments/2026-09-27-review-limits/`](/experiments/2026-09-27-review-limits/README.md),
 [`experiments/2026-09-28-type-rereview/`](/experiments/2026-09-28-type-rereview/README.md)
 or, for geometry route by route, [`experiments/2026-08-09-spatial-interop/`](/experiments/2026-08-09-spatial-interop/README.md).
-Which zone labels a timestamp is [`timestamps/`](/handbook/usage/timestamps/README.md)'s.
+Which zone labels a timestamp, and which type a `POSIXct` writes, is [`timestamps/`](/handbook/usage/timestamps/README.md)'s.
 
 The reference pages `?duckdb_types` and `?duckdb_types_arrow` are this leaf and [`arrow-types/`](/handbook/usage/arrow-types/README.md),
 rendered into roxygen under `R/` by [`scripts/types-rd.R`](/scripts/types-rd.R), which leaves this paragraph out.
@@ -27,6 +27,7 @@ A cast to `VARCHAR` in the query reads any type as text.
 **Writing.**
 `dbWriteTable()` and `duckdb_register()` take a column's type from its R class,
 and `field.types` casts that column to the type it names, from any value that casts.
+`dbConnect(posixct = )` chooses the type a `POSIXct` writes, as a column and as a parameter, with default `"timestamptz"`.
 `dbAppendTable()` casts to the type of the existing column, and a parameter (`params =`) binds by its R class, cast by the query.
 A `character` column holding a value's text form writes every scalar type through `field.types`, because DuckDB parses the text it prints.
 Arrow, registered with `duckdb_register_arrow()`, writes the types no R class does.
@@ -83,12 +84,11 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
   The offset it drops is a limitation (below).
   Its text writes it.
 * **`TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP`** (`DATETIME`) read as `POSIXct`.
-  `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even, and `field.types` names the other precisions.
+  Under `posixct = "timestamp"`, `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even, and `field.types` names the other precisions.
 * **`TIMESTAMP_NS`** reads as `POSIXct`.
   `POSIXct` writes it to the microsecond through `field.types`, and Arrow writes it directly.
 * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
-  `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
-  and Arrow writes it directly.
+  `POSIXct` writes it, the instant it names, under the default `posixct = "timestamptz"`, and Arrow writes it directly.
 * **`INTERVAL`** reads as `difftime` in seconds, counting a month as 30 days and a day as 24 hours.
   A `difftime` in any unit, or an `hms`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
 
