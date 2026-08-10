@@ -19,7 +19,7 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`format.py`](format.py) | Format the source directory; driven by the Makefile's format-* targets. |
 | [`python_helpers.py`](python_helpers.py) | Shared file helpers for the Python scripts in this directory (imported by format.py). |
 
-## [`architecture/r-layer/`](/handbook/architecture/r-layer/README.md)
+## [`architecture/r-layer/conventions/`](/handbook/architecture/r-layer/conventions/README.md)
 
 | File | Purpose |
 |---|---|
@@ -51,6 +51,12 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 |---|---|
 | [`install-duckdb-cli.sh`](install-duckdb-cli.sh) | Download the standalone DuckDB CLI matching the vendored DuckDB sources under src/duckdb/. |
 | [`install-libduckdb.sh`](install-libduckdb.sh) | Install the libduckdb prebuilt binary matching the vendored DuckDB sources under src/duckdb/. |
+
+## [`build/warnings/`](/handbook/build/warnings/README.md)
+
+| File | Purpose |
+|---|---|
+| [`warnings.sh`](warnings.sh) | The compiler-warning gate: what each scope is held to, and the check itself. |
 
 ## [`meta/handbook/`](/handbook/meta/handbook/README.md)
 
