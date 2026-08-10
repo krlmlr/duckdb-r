@@ -12,14 +12,14 @@ ownership by topic, navigation by place
 ([the rules](/handbook/meta/handbook/README.md)).
 Root of the documentation tree: [`handbook/`](/handbook/README.md).
 
-## [`architecture/glue/`](/handbook/architecture/glue/README.md)
+## [`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md)
 
 | File | Purpose |
 |---|---|
 | [`format.py`](format.py) | Format the source directory; driven by the Makefile's format-* targets. |
 | [`python_helpers.py`](python_helpers.py) | Shared file helpers for the Python scripts in this directory (imported by format.py). |
 
-## [`architecture/r-layer/`](/handbook/architecture/r-layer/README.md)
+## [`architecture/r-layer/conventions/`](/handbook/architecture/r-layer/conventions/README.md)
 
 | File | Purpose |
 |---|---|
@@ -52,6 +52,12 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`install-duckdb-cli.sh`](install-duckdb-cli.sh) | Download the standalone DuckDB CLI matching the vendored DuckDB sources under src/duckdb/. |
 | [`install-libduckdb.sh`](install-libduckdb.sh) | Install the libduckdb prebuilt binary matching the vendored DuckDB sources under src/duckdb/. |
 
+## [`build/warnings/`](/handbook/build/warnings/README.md)
+
+| File | Purpose |
+|---|---|
+| [`warnings.sh`](warnings.sh) | The compiler-warning gate: what each scope is held to, and the check itself. |
+
 ## [`meta/handbook/`](/handbook/meta/handbook/README.md)
 
 | File | Purpose |
@@ -83,7 +89,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 
 | File | Purpose |
 |---|---|
-| [`each-harvest.sh`](each-harvest.sh) | Fan-in for `each-rcc`: make sure every commit the legs decided has a record on the orphan `rcc2` branch. |
 | [`rcc-consolidate.sh`](rcc-consolidate.sh) | Consolidate the orphan `rcc2` branch: drop everything past the retention window, and squash the whole history to two commits. |
 | [`rcc-cutover.sh`](rcc-cutover.sh) | One-shot: build the `rcc2` verdict store from what the old `rcc` branch holds. |
 | [`rcc-lib.sh`](rcc-lib.sh) | Shared helpers for the verdict store on the orphan `rcc2` branch. |
@@ -98,7 +103,7 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 |---|---|
 | [`VENDORING.md`](VENDORING.md) | DuckDB R Package Vendoring |
 | [`merge-version.sh`](merge-version.sh) | Git merge driver for DESCRIPTION. |
-| [`rconfigure.py`](rconfigure.py) | Regenerate the vendored build configuration from a DuckDB checkout: src/duckdb/, src/include/sources.mk, R/version.R and the Makevars files. |
+| [`rconfigure.py`](rconfigure.py) | Regenerate the vendored build configuration from a DuckDB checkout: src/duckdb/, src/include/sources.mk, R/version.R, the Makevars files and the logos. |
 | [`setup-git.sh`](setup-git.sh) | Register repository-local git configuration that cannot live in versioned files. |
 | [`vendor-one.sh`](vendor-one.sh) | Vendors DuckDB sources commit-by-commit from the upstream repository. |
 | [`vendor.sh`](vendor.sh) | Vendors DuckDB sources from the upstream repository (manual vendoring). |
@@ -108,7 +113,8 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | File | Purpose |
 |---|---|
 | [`r-universe-check.sh`](r-universe-check.sh) | Read-only: what did r-universe make of the refs this repository publishes? |
-| [`series-advance.sh`](series-advance.sh) | The ref motion of the series loop, stages 3 and 5, for one series: fast-forward `<S>-green` over the all-green prefix, move `<S>-build-base` to the equivalen... |
+| [`series-advance-test.sh`](series-advance-test.sh) | Check stage 5's carry of the base series' test-side fixes, offline, against a synthetic remote and clone built here -- no network, no fixtures on disk. |
+| [`series-advance.sh`](series-advance.sh) | The ref motion of the series loop, stages 3 and 5, for one series: fast-forward `<S>-green` over the all-green prefix, set `<S>-build-base` to the equivalent... |
 | [`series-check.sh`](series-check.sh) | Read-only diagnosis for the series loop: what should a firing do? |
 | [`series-cutover.sh`](series-cutover.sh) | Atomically replace a series with its forward counterpart. |
 | [`series-forward-build.sh`](series-forward-build.sh) | Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-build` onto HEAD, which must be the freshly flavored seed on current `main` (.claude/ski... |

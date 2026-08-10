@@ -26,6 +26,12 @@ the replay then populates `<S>-fwd-build`.
    plus the separate fifth-component commit on a dev branch
    (`series-open.md`) —
    then replay each vendor commit onto it.
+   `flavor.sh` needs `krlmlr/cpp11` installed, and refuses the whole run
+   without it (`series-open.md`, step 2).
+   A series seeded from a release branch rather than from `main`
+   regenerates on **that** branch,
+   whose `scripts/` may be older than `main`'s —
+   replay the recorded seed commits instead when it is.
 
    **The forward series takes the whole of the new base.**
    The replay is a cherry-pick, not a tree reconstruction:
@@ -90,16 +96,64 @@ the replay then populates `<S>-fwd-build`.
    `scripts/series-forward-build.sh <old-build> <old-base>`
    does exactly this, run on the fresh seed —
    `<old-base>` only delimits the range.
+
+   **It refuses to start while the buffer carries a change
+   the new base does not have.**
+   `-build` takes no ports, so a non-vendor commit above its first
+   vendor commit is the buffer's own —
+   the `patch/` entries stage 3 commits onto it —
+   and the replay has nowhere to put it.
+   The script names each one and stops before writing anything.
+   Work through them in this order:
+
+   1. **Read it.** The refusal rests on two cheap tests,
+      so a change the new base carries in a shape neither recognises
+      is listed too; confirm by reading the base for its effect.
+      If it is there, the commit is done.
+   2. **Find the commit it belongs to** —
+      the first whose tree carries the code it answers, never the commit
+      it was written at
+      ([`vendoring/troubleshooting/`](/handbook/operations/vendoring/troubleshooting/README.md)).
+      Name it by its upstream SHA:
+      the replayed commit does not exist yet.
+   3. **Rerun with `--placed <sha>` for each** — the script prints the
+      whole command — and let the replay finish.
+      The acknowledgement is remembered, so a conflict stop resumes
+      without it.
+   4. **Fold each change into its commit, then replay the tail.**
+      Detach at the commit, apply the change, `git commit --amend`,
+      and `git rebase --onto HEAD <that commit> <S>-fwd-build`.
+      Amending rather than inserting is what keeps the counter equal to
+      the number of commits the script wrote,
+      which is how it finds its place on a later resume.
+   5. **Verify by tree.**
+      `git diff --name-only <S>-build <S>-fwd-build -- src/duckdb patch/`
+      must be empty.
+      This is the check that catches everything above going wrong,
+      including a fold that landed in the wrong place.
    `DESCRIPTION` merges on every commit,
    so register the merge driver first (`scripts/setup-git.sh`);
    on a conflict the script stops with the tree in place,
    and rerunning it after `git add` continues where it stopped.
 
+   **The buffer stays at what compiles, and that is the whole split.**
+   `-fwd-build` inherits what the base buffer had —
+   the vendored tree and the glue that makes it compile,
+   that being what the vendor gate checks —
+   and nothing of what the base series learned afterwards.
+   That second half is not replayed here and is not missing either:
+   the loop's stage 5 folds it in from the base `<S>-dev`
+   as each buffer commit is consumed (`series-loop.md`),
+   glue included where a test rather than the compiler demanded it.
+   So do not reach for it during the replay,
+   and do not put a snapshot or a test fix onto `-fwd-build` by hand.
+
 2. **`<S>-fwd-dev` = `<S>-fwd-green` = `<S>-fwd-build-base`** =
    the seed tip:
    green contains the flavor change from day one,
    so whatever consumes it builds the flavored package;
-   the loop's stage 5 extends `-fwd-dev` from the populated buffer.
+   the loop's stage 5 extends `-fwd-dev` from the populated buffer,
+   folding in the base series' test-side fixes as it goes.
 
 3. Nothing else is special:
    a forward series is a series,

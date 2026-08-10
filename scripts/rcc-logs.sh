@@ -2,18 +2,26 @@
 # Collect rcc results and failure logs for commits the verdict store has no
 # record for, and stage them for publication to the orphan `rcc2` branch.
 #
-# The scheduled backstop, and only that: the `each-rcc` legs publish their own
-# verdicts within seconds of deciding them (scripts/each-shard.sh), and the run's
-# fan-in recovers what a dead leg could not (scripts/each-harvest.sh). This is
-# what covers the case where neither ran at all, because the whole workflow was
-# cancelled -- it can reconstruct a record from the commit status and the run
-# object, and a *run*-level log in place of the per-commit one.
+# The emergency backstop, and only that -- dispatched, never scheduled
+# (.github/workflows/rcc-logs.yaml): the `each-rcc` legs publish their own
+# verdicts within seconds of deciding them (scripts/each-shard.sh), and that is
+# now the store's only automatic writer. This is what covers the case where the
+# leg never published, because the whole workflow was cancelled -- it can
+# reconstruct a record from the commit status and the run object, and a
+# *run*-level log in place of the per-commit one.
+#
+# A run-level log is the weaker artifact, and series-check.sh's classifier can
+# misread it. That is the accepted cost of the store being a fallback: the
+# per-commit log is in the leg's `each-logs-*` artifact and, past its 14 days,
+# inline in the leg's job log, which is what a firing reads first
+# (.claude/skills/series-loop.md stage 2).
 #
 # Iterates first-parent commits since $SINCE on every refs/remotes/*/*-dev
 # branch (deduped by SHA) and, for each commit with no record:
 #   1. Reads the `rcc` commit status from
 #      repos/{owner}/{repo}/commits/<sha>/statuses
-#      (skipping commits with no rcc status; they are retried next time).
+#      (skipping commits with no rcc status, and commits whose status is not yet
+#      a verdict; both are retried next time).
 #   2. Parses the workflow run id from the status `target_url`.
 #   3. Fetches the run object for the latest run_attempt and skips it if the
 #      run is not yet `completed` (also retried next time).
@@ -137,6 +145,23 @@ while IFS= read -r sha; do
     continue
   fi
 
+  # A record is a decision, and scripts/rcc-decided.sh reads presence alone, so
+  # writing one whose `.status.state` is still `pending` marks the commit decided
+  # forever: the planner skips it and nothing ever replaces the record. That is
+  # what a cancelled leg leaves behind -- the run completes, the status it set on
+  # entry never does -- and it wedges the series until somebody pushes
+  # `retry-<S>-dev` by hand. Leave such a commit undecided instead; the ordinary
+  # rule replans it on the next push.
+  status_state="$(jq -r '.state // ""' <<<"${status_json}")"
+  case "${status_state}" in
+    success | failure | error) ;;
+    *)
+      echo "Commit ${sha}: rcc status is ${status_state:-empty}, not a verdict -- leaving it undecided"
+      skipped_pending=$((skipped_pending + 1))
+      continue
+      ;;
+  esac
+
   target_url="$(jq -r '.target_url // ""' <<<"${status_json}")"
   run_id="$(printf '%s' "${target_url}" \
               | sed -n 's#.*/actions/runs/\([0-9][0-9]*\).*#\1#p')"
@@ -146,8 +171,8 @@ while IFS= read -r sha; do
     continue
   fi
 
-  # Shared projection, so a record written here is shaped exactly like one written
-  # by an `each-rcc` leg or its fan-in; see scripts/rcc-run-fields.jq.
+  # Shared projection, so a record written here is shaped exactly like one
+  # written by an `each-rcc` leg; see scripts/rcc-run-fields.jq.
   run_json="$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" 2>/dev/null \
     | jq -c -f "${here}/rcc-run-fields.jq")"
   if [ -z "${run_json}" ]; then
