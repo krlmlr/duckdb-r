@@ -229,11 +229,11 @@ private:
 
 	// col IN (v1, v2, ...) as a balanced tree of equality comparisons.
 	static SEXP TransformInExpression(const BoundOperatorExpression &op_expr, SEXP column_name_expr, SEXP functions) {
-		if (op_expr.GetChildren().empty() ||
-		    op_expr.GetChildren()[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
+		auto &op_children = op_expr.GetChildren();
+		if (op_children.empty() || op_children[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
 			throw NotImplementedException("Arrow table filter pushdown %s not supported yet", op_expr.ToString());
 		}
-		const idx_t num_values = op_expr.GetChildren().size() - 1;
+		const idx_t num_values = op_children.size() - 1;
 		if (num_values == 0) {
 			// col IN () matches no rows
 			return CreateScalar(functions, cpp11::sexp(Rf_ScalarLogical(false)));
@@ -247,8 +247,8 @@ private:
 		}
 		vector<cpp11::sexp> equal_exprs;
 		equal_exprs.reserve(num_values);
-		for (idx_t i = 1; i < op_expr.GetChildren().size(); i++) {
-			auto &value_expr = *op_expr.GetChildren()[i];
+		for (idx_t i = 1; i < op_children.size(); i++) {
+			auto &value_expr = *op_children[i];
 			if (value_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", op_expr.ToString());
 			}

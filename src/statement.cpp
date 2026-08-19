@@ -263,14 +263,15 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 // Note we cannot use cpp11's data frame here as it tries to calculate the number of rows itself,
 // but gives the wrong answer if the first column is another data frame. So we set the necessary
 // attributes manually.
-static cpp11::writable::list duckdb_r_allocate_df(const vector<LogicalType> &types, const vector<string> &names,
+static cpp11::writable::list duckdb_r_allocate_df(const vector<LogicalType> &types, const vector<Identifier> &names,
                                                   idx_t nrows, const duckdb::ConvertOpts &convert_opts,
                                                   const char *caller) {
 	cpp11::writable::list data_frame;
 	data_frame.reserve(types.size());
 
 	for (size_t col_idx = 0; col_idx < types.size(); col_idx++) {
-		cpp11::sexp varvalue = duckdb_r_allocate(types[col_idx], nrows, names[col_idx], convert_opts, caller);
+		cpp11::sexp varvalue =
+		    duckdb_r_allocate(types[col_idx], nrows, names[col_idx].GetIdentifierName(), convert_opts, caller);
 		duckdb_r_decorate(types[col_idx], varvalue, convert_opts);
 		data_frame.push_back(varvalue);
 	}
@@ -293,9 +294,8 @@ SEXP duckdb::duckdb_execute_R_impl(MaterializedQueryResult *result, const duckdb
 	ConvertOpts local_convert_opts = convert_opts;
 	local_convert_opts.session_time_zone = result->client_properties.time_zone;
 
-	cpp11::writable::list data_frame =
-	    duckdb_r_allocate_df(result->GetTypes(), IdentifiersToStrings(result->GetNames()), nrows, local_convert_opts,
-	                         "duckdb_execute_R_impl");
+	cpp11::writable::list data_frame = duckdb_r_allocate_df(result->GetTypes(), result->GetNames(), nrows,
+	                                                        local_convert_opts, "duckdb_execute_R_impl");
 
 	// step 3: set values from chunks
 	idx_t dest_offset = 0;
