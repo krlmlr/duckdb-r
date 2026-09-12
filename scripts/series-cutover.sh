@@ -75,23 +75,29 @@ desc_field() {
   git show "$1:DESCRIPTION" 2>/dev/null | sed -n "s/^$2: *//p" | head -n 1 || true
 }
 
-# Compare two dotted numeric versions componentwise, printing -1, 0 or 1.
-# `sort -V` would be one line, but it is GNU-only in practice and this script
-# runs where the system tools are BSD's too (scripts/flavor.sh says the same of
-# `sed`). A missing component reads as 0, so 1.5.5.9020 sorts below
-# 1.5.5.9020.1 rather than beside it.
+# GNU sort, wherever it is called: on Linux that is `sort`, on macOS it is
+# `gsort` and the system `sort` is BSD's. Prefer `gsort`, then verify -- the
+# same choice, and the same reason, scripts/flavor.sh makes for `sed`. Empty
+# when neither is GNU, which is a comparison not made rather than a wrong one.
+if command -v gsort >/dev/null 2>&1; then
+  gnu_sort=gsort
+else
+  gnu_sort=sort
+fi
+case "$("$gnu_sort" --version 2>/dev/null || true)" in
+  *"GNU coreutils"*) ;;
+  *) gnu_sort= ;;
+esac
+
+# Where two dotted versions sort against each other, as -1, 0 or 1. `sort -V`
+# compares them component by component and numerically, so 1.5.5.9013.36 sorts
+# below 1.5.5.9020.12 rather than by string order, and a missing component
+# ranks below a present one: 1.5.5.9020 below 1.5.5.9020.1.
 version_cmp() {
-  awk -v a="$1" -v b="$2" '
-    BEGIN {
-      na = split(a, x, "."); nb = split(b, y, ".")
-      n = na > nb ? na : nb
-      for (i = 1; i <= n; i++) {
-        u = (i <= na) ? x[i] + 0 : 0
-        v = (i <= nb) ? y[i] + 0 : 0
-        if (u != v) { print (u < v) ? -1 : 1; exit }
-      }
-      print 0
-    }'
+  local sorted
+  [ "$1" != "$2" ] || { printf '%s\n' 0; return; }
+  sorted=$(printf '%s\n%s\n' "$1" "$2" | "$gnu_sort" -V)
+  if [ "${sorted%%$'\n'*}" = "$1" ]; then printf '%s\n' -1; else printf '%s\n' 1; fi
 }
 
 for r in build dev green build-base; do
@@ -193,31 +199,43 @@ for r in build dev green build-base; do
 done
 
 # A version that does not move forward -- back, or not at all -- is the swap's
-# one cost that nothing else on screen shows. `<S>-dev` is what r-universe builds, so its version is the
-# one consumers are offered -- and the replay's renumbering starts the fifth
-# component well below what the base series accumulated. Usually the fourth
-# component covers it, because the forward is seeded on a newer `main` whose
-# version has moved on since; where it does not, r-universe has nothing to
-# offer as an upgrade until the new chain's counter climbs past the old one's.
-# That is a cost rather than a corruption, and whether it is worth paying is a
-# judgement, so this names it and leaves the decision with the confirmation.
-for r in dev green; do
-  oldv=$(desc_field "refs/remotes/$remote/$S-$r" Version)
-  newv=$(desc_field "refs/remotes/$remote/$S-fwd-$r" Version)
-  [ -n "$oldv" ] && [ -n "$newv" ] || continue
-  case "$(version_cmp "$oldv" "$newv")" in
-    -1) continue ;;
-    # Equal is the same problem wearing the other face: two different trees
-    # published under one version, so whoever already has it never sees the
-    # replacement at all.
-    0) echo "Warning: $S-$r keeps version $oldv across the swap." ;;
-    1) echo "Warning: $S-$r would go from $oldv back to $newv." ;;
-  esac
-  if [ "$r" = dev ]; then
-    echo "  r-universe publishes from this ref and has no upgrade to offer"
-    echo "  until the forward chain's counter passes $oldv."
-  fi
-done
+# one cost that nothing else on screen shows. `<S>-dev` is what r-universe
+# builds, so its version is the one consumers are offered, and the replay's
+# renumbering starts the fifth component well below what the base series
+# accumulated. Usually the fourth component covers it, because the forward is
+# seeded on a newer `main` whose version has moved on since; where it does not,
+# r-universe has nothing to offer as an upgrade until the new chain's counter
+# climbs past the old one's. That is a cost rather than a corruption, and
+# whether it is worth paying is a judgement, so this names it and leaves the
+# decision with the confirmation.
+#
+# Without a GNU sort the versions are still printed and simply not compared:
+# the swap is not worth blocking over a missing coreutils, and a comparison
+# made with the wrong tool would read as a clean bill.
+if [ -z "$gnu_sort" ]; then
+  echo "Note: no GNU sort here, so the versions above were not compared."
+  echo "  Read them: a $S-dev version that does not move forward is an upgrade"
+  echo "  r-universe cannot offer. Install GNU coreutils as 'gsort' -- on"
+  echo "  macOS, 'brew install coreutils'."
+else
+  for r in dev green; do
+    oldv=$(desc_field "refs/remotes/$remote/$S-$r" Version)
+    newv=$(desc_field "refs/remotes/$remote/$S-fwd-$r" Version)
+    [ -n "$oldv" ] && [ -n "$newv" ] || continue
+    case "$(version_cmp "$oldv" "$newv")" in
+      -1) continue ;;
+      # Equal is the same problem wearing the other face: two different trees
+      # published under one version, so whoever already has it never sees the
+      # replacement at all.
+      0) echo "Warning: $S-$r keeps version $oldv across the swap." ;;
+      1) echo "Warning: $S-$r would go from $oldv back to $newv." ;;
+    esac
+    if [ "$r" = dev ]; then
+      echo "  r-universe publishes from this ref and has no upgrade to offer"
+      echo "  until the forward chain's counter passes $oldv."
+    fi
+  done
+fi
 
 # The gate above says the swap is allowed; this asks whether it is wanted. It
 # comes last so the operator confirms with the coverage lines, the package
