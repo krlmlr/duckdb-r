@@ -17,6 +17,12 @@
 # A base series ref that does not exist yet is created rather than swapped:
 # a series that started as -fwd has no counterpart to replace.
 #
+# The report names the package on both sides -- `Package:` once, and `Version:`
+# for each of the four refs, before and after -- because the swap moves both:
+# the forward regenerates its own flavor commits, and the replay renumbers the
+# fifth component as a counter of its own chain. A version that goes backwards
+# is the one cost of the swap that nothing else on screen shows.
+#
 # Usage: series-cutover.sh <series> [remote] [upstream-clone]
 #   series-cutover.sh main origin ../duckdb
 #
@@ -56,6 +62,36 @@ vendored_sha() {
     fi
   fi
   echo "$sha"
+}
+
+# One field of a branch's DESCRIPTION, empty when the ref or the field is not
+# there. Both fields this script reads are per-branch: the flavor rename writes
+# `Package:`, and the replay renumbers the fifth component of `Version:`.
+#
+# A missing ref is ordinary here -- a series opened as `-fwd` has no base refs
+# at all -- so `git show`'s failure is swallowed rather than left to `pipefail`,
+# which would otherwise make an empty answer end the run.
+desc_field() {
+  git show "$1:DESCRIPTION" 2>/dev/null | sed -n "s/^$2: *//p" | head -n 1 || true
+}
+
+# Compare two dotted numeric versions componentwise, printing -1, 0 or 1.
+# `sort -V` would be one line, but it is GNU-only in practice and this script
+# runs where the system tools are BSD's too (scripts/flavor.sh says the same of
+# `sed`). A missing component reads as 0, so 1.5.5.9020 sorts below
+# 1.5.5.9020.1 rather than beside it.
+version_cmp() {
+  awk -v a="$1" -v b="$2" '
+    BEGIN {
+      na = split(a, x, "."); nb = split(b, y, ".")
+      n = na > nb ? na : nb
+      for (i = 1; i <= n; i++) {
+        u = (i <= na) ? x[i] + 0 : 0
+        v = (i <= nb) ? y[i] + 0 : 0
+        if (u != v) { print (u < v) ? -1 : 1; exit }
+      }
+      print 0
+    }'
 }
 
 for r in build dev green build-base; do
@@ -120,6 +156,23 @@ if [ "$rc" -eq 1 ]; then
 fi
 echo
 
+# The package the swap publishes, named on both sides. `Package:` and
+# `Version:` are what a consumer installs, and the swap moves both: the name
+# because the forward regenerates its own flavor commits, the version because
+# the replay renumbers the fifth component as a counter of its own chain. So
+# each ref is shown with the version it carries before and after, and a name
+# that changes is called out rather than left to be read off four lines.
+old_pkg=$(desc_field "refs/remotes/$remote/$S-dev" Package)
+new_pkg=$(desc_field "refs/remotes/$remote/$S-fwd-dev" Package)
+if [ -z "$old_pkg" ] || [ "$old_pkg" = "$new_pkg" ]; then
+  echo "package: ${new_pkg:-<none>}"
+else
+  echo "package: $old_pkg -> $new_pkg"
+  echo "  ^ the swap renames the package. A series and its forward are flavored"
+  echo "    the same; a name that moved means the forward was seeded with"
+  echo "    another flavor, and the swap would publish a different package."
+fi
+
 leases=()
 refspecs=()
 echo "refs to swap:"
@@ -133,13 +186,44 @@ for r in build dev green build-base; do
   leases+=("--force-with-lease=refs/heads/$S-$r:$cur")
   refspecs+=("$new:refs/heads/$S-$r")
   short=${cur:0:7}
-  printf '  %-20s %s -> %s\n' "$S-$r" "${short:-<new>}" "${new:0:7}"
+  oldv=$(desc_field "refs/remotes/$remote/$S-$r" Version)
+  newv=$(desc_field "refs/remotes/$remote/$S-fwd-$r" Version)
+  printf '  %-26s %-7s %-16s ->  %-7s %s\n' \
+    "$S-$r" "${short:-<new>}" "${oldv:--}" "${new:0:7}" "${newv:--}"
+done
+
+# A version that does not move forward -- back, or not at all -- is the swap's
+# one cost that nothing else on screen shows. `<S>-dev` is what r-universe builds, so its version is the
+# one consumers are offered -- and the replay's renumbering starts the fifth
+# component well below what the base series accumulated. Usually the fourth
+# component covers it, because the forward is seeded on a newer `main` whose
+# version has moved on since; where it does not, r-universe has nothing to
+# offer as an upgrade until the new chain's counter climbs past the old one's.
+# That is a cost rather than a corruption, and whether it is worth paying is a
+# judgement, so this names it and leaves the decision with the confirmation.
+for r in dev green; do
+  oldv=$(desc_field "refs/remotes/$remote/$S-$r" Version)
+  newv=$(desc_field "refs/remotes/$remote/$S-fwd-$r" Version)
+  [ -n "$oldv" ] && [ -n "$newv" ] || continue
+  case "$(version_cmp "$oldv" "$newv")" in
+    -1) continue ;;
+    # Equal is the same problem wearing the other face: two different trees
+    # published under one version, so whoever already has it never sees the
+    # replacement at all.
+    0) echo "Warning: $S-$r keeps version $oldv across the swap." ;;
+    1) echo "Warning: $S-$r would go from $oldv back to $newv." ;;
+  esac
+  if [ "$r" = dev ]; then
+    echo "  r-universe publishes from this ref and has no upgrade to offer"
+    echo "  until the forward chain's counter passes $oldv."
+  fi
 done
 
 # The gate above says the swap is allowed; this asks whether it is wanted. It
-# comes last so the operator confirms with the coverage lines and the four ref
-# moves on screen, and it takes the series name rather than a keystroke because
-# the mistake worth catching is cutting over the wrong series.
+# comes last so the operator confirms with the coverage lines, the package
+# versions and the four ref moves on screen, and it takes the series name
+# rather than a keystroke because the mistake worth catching is cutting over
+# the wrong series.
 printf 'Replace series %s with %s-fwd-*? Type the series name to confirm: ' "$S" "$S"
 read -r confirm
 [ "$confirm" = "$S" ] || { echo "Aborted; nothing was pushed."; exit 1; }
