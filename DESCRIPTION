@@ -79,8 +79,10 @@ Config/comment/gha/extra-packages: arrow does not compile against Rtools45,
     cover that -- it demotes a failed build, not a failed lookup --
     and pak reads repos alone, so Additional_repositories does not
     either. ignore-build-errors stays for the day it returns to CRAN and
-    Rtools45 has to build it again. ignore-before-r keeps this series'
-    own rule: it supports R 4.1, where neither package installs.
+    Rtools45 has to build it again. It is installed from
+    Additional_repositories by .github/workflows/install.
+    ignore-before-r keeps this series' own rule: it supports R 4.1,
+    where neither package installs.
 Config/gha/filter: os != "windows-latest" | r != "4.1"
 Config/gha/filter-note: Inexplicable build failures on Windows GHA with R
     4.1, works locally
