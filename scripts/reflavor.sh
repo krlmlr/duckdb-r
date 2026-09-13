@@ -30,25 +30,18 @@
 
 set -euxo pipefail
 
-usage='usage: reflavor.sh <package-name>'
-argerr() { echo "$usage" >&2; exit 2; }
-
-args=()
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -h | --help) echo "$usage"; exit 0 ;;
-    -*) argerr ;;
-    *) args+=("$1"); shift ;;
-  esac
-done
-[ ${#args[@]} -eq 1 ] || argerr
-new=${args[0]}
-
 # The tree to reflavor, found the way every scripts/series-*.sh finds it, so a
 # copy of this script outside the worktree still reflavors the worktree.
 toplevel=${VENDOR_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || true)}
 [ -n "$toplevel" ] || { echo "Error: $PWD is not a git worktree" >&2; exit 1; }
 cd "$toplevel"
+
+new="${1-}"
+if [ -z "$new" ]; then
+  echo "Usage: $0 <package-name>" >&2
+  echo "  $0 2.0.dev" >&2
+  exit 1
+fi
 
 if command -v gsed >/dev/null 2>&1; then gnu_sed=gsed; else gnu_sed=sed; fi
 case "$("$gnu_sed" --version 2>/dev/null || true)" in
@@ -112,17 +105,6 @@ for f in "${patched[@]}"; do
       ;;
   esac
 done
-
-# The `.dd` files are outside the surface and are normalized rather than
-# renamed. They name the types header, `src/include/deps.mk` includes them, and
-# a name the tree does not carry stops every build before the first compile with
-# "No rule to make target 'include/duckdb_types.hpp', needed by 'cpp11.o'".
-# A rename would not reach it either way: a port takes `main`'s whole commit, so
-# the mainline name arrives there on a tree flavored long ago, which is how
-# `v1.5-variegata-fwd` was seeded unbuildable (2026-09-28).
-"$gnu_sed" -i -E \
-  "s|include/duckdb(_[A-Za-z0-9_]+)?_types\\.hpp|include/duckdb_${new_u}_types.hpp|g" \
-  src/*.dd
 
 R -q -e 'cpp11::cpp_register()'
 

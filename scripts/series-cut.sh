@@ -10,9 +10,7 @@
 # does not touch.
 #
 # It writes local refs only. The push is the caller's, after the reflavor, and
-# `--next` prints the exact remaining commands with this series' names filled in,
-# for both the new series and its parent: a cut leaves each carrying a version
-# prefix that names a line it does not preview.
+# `--next` prints the exact remaining commands with this series' names filled in.
 #
 # Usage: series-cut.sh <series> [--parent <series>] [--remote <name>]
 #                      [--upstream <path>] [--flavor <name>] [--check] [--next]
@@ -205,26 +203,16 @@ if [ -n "$next" ]; then
 
 Next, in order -- the cut is not complete until the rename is in:
 
-  # 1. Reflavor each strand, one commit above its cut, and stamp the prefix of
-  #    the line it previews. Run *this* checkout's copies of both scripts:
-  #    neither strand carries scripts/, a buffer takes no ports, and the cut
-  #    predates them in any case.
-  git worktree add ../wt-$S-build $S-build && (cd ../wt-$S-build && $PWD/scripts/reflavor.sh $F && $PWD/scripts/preview-prefix.sh)
-  git worktree add ../wt-$S-dev   $S-dev   && (cd ../wt-$S-dev   && $PWD/scripts/reflavor.sh $F && $PWD/scripts/preview-prefix.sh)
-
-  # 1b. $parent previews the *next* line from today, so its strands owe the
-  #     stamp as well -- and no reflavor: its flavor names the branch it
-  #     tracks, not the version (series-open/SKILL.md step 3).
-  git worktree add ../wt-$parent-build $parent-build && (cd ../wt-$parent-build && $PWD/scripts/preview-prefix.sh)
-  git worktree add ../wt-$parent-dev   $parent-dev   && (cd ../wt-$parent-dev   && $PWD/scripts/preview-prefix.sh)
+  # 1. Reflavor each strand, one commit above its cut. Run *this* checkout's
+  #    copy of the script: neither strand carries scripts/, a buffer takes no
+  #    ports, and the cut predates the script in any case.
+  git worktree add ../wt-$S-build $S-build && (cd ../wt-$S-build && $PWD/scripts/reflavor.sh $F)
+  git worktree add ../wt-$S-dev   $S-dev   && (cd ../wt-$S-dev   && $PWD/scripts/reflavor.sh $F)
 
   # 2. Push all four together; a ref landing alone invites a half-built firing.
-  #    $parent's two stamped strands go with them, in the same push: the pair
-  #    has to move together or the merge driver sees prefixes that differ.
   git push --atomic $remote \\
     $S-build:refs/heads/$S-build $S-build-base:refs/heads/$S-build-base \\
-    $S-dev:refs/heads/$S-dev     $S-green:refs/heads/$S-green \\
-    $parent-build:refs/heads/$parent-build $parent-dev:refs/heads/$parent-dev
+    $S-dev:refs/heads/$S-dev     $S-green:refs/heads/$S-green
 
   # 3. Open both forwards -- series-forward/SKILL.md, twice, neither waiting
   #    on the other:
@@ -233,9 +221,9 @@ Next, in order -- the cut is not complete until the rename is in:
   #        $parent-fwd-build at $(git rev-parse --short "$cut_build"), $parent-fwd-dev at $(git rev-parse --short "$cut_dev").
   #        Each strand grafts its own cut; everything below is $S's now.
 
-  # 4. Declare the flavor $F -- one entry in scripts/series.yaml -- then
-  #    scripts/series-table.R and a README render write both tables from it,
-  #    and scripts/pull-config.sh --check holds the mirror rules against it.
+  # 4. Announce the flavor $F in both tables -- README.Rmd (rendered into
+  #    README.md and .github/README.md) and handbook/branches/flavors/ --
+  #    then scripts/pull-config.sh --check.
 NEXT
 fi
 

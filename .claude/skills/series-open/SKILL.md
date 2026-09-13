@@ -30,7 +30,7 @@ rebuilding it. `series-cut.sh` reports how deep that goes, and leaves the commit
 **It leaves two lines standing on the fork point, so both are forwarded.**
 The cut puts `<S>` on the fork point's R side, months behind `main`, and
 everything below that point has just stopped being `<P>`'s, so `<P>` is re-rooted
-there too. Neither forward is tidying afterwards — step 5 opens both, and the
+there too. Neither forward is tidying afterwards — step 4 opens both, and the
 re-root's saving is what makes them affordable.
 
 **Prerequisite: `main` has no `-fwd` in flight.** A series has exactly one set of
@@ -62,9 +62,9 @@ until now.
    version in the series name.
 
    It writes `<S>-build` and `<S>-build-base` at `<P>-build`'s cut, `<S>-dev` and
-   `<S>-green` at `<P>-dev`'s. Local refs only; nothing is pushed until step 4.
+   `<S>-green` at `<P>-dev`'s. Local refs only; nothing is pushed until step 3.
    No `-fwd` refs yet — a forward counterpart protects a green consumers are
-   already reading, and nobody is reading this one. Step 5 creates them.
+   already reading, and nobody is reading this one. Step 4 creates them.
 
    **Why the fork point is not the merge base**, and why below it the parent has
    already vendored, glued and judged everything the new line inherits, are
@@ -99,52 +99,8 @@ until now.
    context. It needs `krlmlr/cpp11`, for the reason `flavor.sh` gives, and refuses
    the run when the symbols come out wrong.
 
-3. **Stamp the new preview prefix on all four strands, in the same breath.**
-
-   ```bash
-   scripts/preview-prefix.sh --check     # <S>-build, <S>-dev, <P>-build, <P>-dev
-   scripts/preview-prefix.sh
-   ```
-
-   **Both series need it, for opposite reasons.** `<P>` stops previewing the
-   line its version names: upstream `main` starts declaring the *next* line the
-   same week, so the version it carries is a line it no longer serves. `<S>`
-   never previewed the line its version names at all — the cut handed it `<P>`'s
-   tree, prefix included, and it serves a line no released version names yet.
-   Neither is fixed by the other: this step named only `<P>` when v2.0 was cut,
-   and `v2.0-cyanoptera`'s strands were still publishing `1.5.5.90xx` — the line
-   they had never previewed — until it was stamped by hand afterwards.
-
-   Until a strand is stamped it carries a foreign prefix, and its pair drifts
-   apart with it — the state where the `DESCRIPTION` merge driver stops
-   resolving them
-   ([`releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
-
-   The prefix is read off the engine the strand vendors, so it takes no input
-   and cannot name the wrong line: `2.1.0-dev` on `<P>` means previewing 2.1,
-   which is `2.0.99.9000`; `2.0.0-dev` on `<S>` means previewing 2.0, which is
-   `1.99.99.9000`. The vendor counter carries over — the chain does not restart
-   — and the script refuses a version that would not rise.
-
-   **`-green` is not stamped, and does not need to be.** It is fast-forward
-   only, so the stamp reaches it the way every other commit does: the loop
-   advances over it once CI has judged it. A stamp committed onto `-green`
-   directly would fork it off `-dev`'s history, which is the one thing the
-   frontier may never do. Run `--check` against `<S>-build` and `<S>-dev`;
-   a `-green` still on the old prefix is the queue, not a miss.
-
-   **The flavor does not change, and that is not an oversight.** `<P>`'s package
-   name says which branch it tracks, not which version: `duckdb.dev` is upstream
-   `main`'s rolling preview whatever line that is today, which is why every cut
-   so far has given the *new* line a versioned flavor and left `duckdb.dev`
-   alone. Renaming it each cycle would break `install.packages("duckdb.dev")`
-   and need a fresh r-universe registration every time
-   ([`branches/flavors/`](/handbook/branches/flavors/README.md)).
-
-4. **Push all four refs, together — and `<P>`'s two stamped strands with them.**
-   `git push --atomic`, as `--next` spells it.
-   Step 3 moved `<P>-build` and `<P>-dev` as well, and a pair that lands split
-   is a pair whose prefixes differ, which is where the merge driver gives up. The loop discovers series from
+3. **Push all four refs, together.**
+   `git push --atomic`, as `--next` spells it. The loop discovers series from
    refs and serves them in one firing, so a ref landing alone invites a firing
    into half a series — and a series pushed before step 2 is one that grows under
    the wrong name. Up to this push the opening is local branches and a deletion
@@ -158,7 +114,7 @@ until now.
    `series-cut.sh` reports how many are left to walk; that number is the loop's
    backlog, not a task.
 
-5. **Open both forwards.** Two invocations of
+4. **Open both forwards.** Two invocations of
    [`series-forward/SKILL.md`](series-forward), neither waiting on the other:
 
    * **`<S>` onto current `main`.** The cut left it on the fork point's R side,
@@ -179,36 +135,17 @@ until now.
 
    Both run beside their live refs as `-fwd-*` and swap in at cutover, so no green
    anyone reads is rewritten.
-   The graft keeps the fork point's R side, so `<P>`'s next forward is the one that
-   aligns it with `main`, and it takes the fork point from `<S>`'s forward rather
-   than rederiving it: `series-forward-build.sh --graft-from <S>-fwd-build`
-   ([`series-forward/SKILL.md`](series-forward)).
 
-6. **Declare `<F>`, and generate what says so.**
+5. **Announce `<F>` in both tables** — the `Flavors` table in
+   [`README.Rmd`](/README.Rmd), see below, and the one in
+   [`branches/flavors/`](/handbook/branches/flavors/README.md), which says where
+   each flavor publishes from. Those two are the only places a new series is named
+   by hand; everything else is discovered from refs.
 
-   ```bash
-   # add the flavor to scripts/series.yaml, then
-   scripts/series-table.R
-   R -q -e 'rmarkdown::render("README.Rmd")'
-   ```
-
-   One entry, and both tables are written from it — the `Flavors` table in
-   [`README.Rmd`](/README.Rmd) and the one in
-   [`branches/flavors/`](/handbook/branches/flavors/README.md) — along with the
-   mirror rules step 7 checks. The entry is the only place a new series is named
-   by hand; everything else is discovered from refs or derived from it.
-   See below for what the fields mean and what a badge row gets wrong.
-
-   **The entry may already be there.** A loop firing that saw the line cut
-   opens the declaration PR by itself, so this step is often merging or
-   reviewing that one rather than writing the entry
-   ([`series-loop/SKILL.md`](series-loop), "What a firing reports").
-   The loop never cuts the refs — only steps 1–5 above do.
-
-7. **Update the fork's mirror configuration — derived, not remembered.**
+6. **Update the fork's mirror configuration — derived, not remembered.**
    A series' *ahead* badge measures against a branch the fork mirrors, which stays
    current only while [`.github/pull.yml`](/.github/pull.yml) carries a rule for
-   it. Which rules the file owes is a function of the table step 6 just moved, so
+   it. Which rules the file owes is a function of the table step 5 just moved, so
    [`scripts/pull-config.sh`](/scripts/pull-config.sh) evaluates that function and
    prints what is missing (`--check` exits non-zero). A line still releasing from
    `main` is measured against `main`, which is ruled already, so most openings add
@@ -224,7 +161,7 @@ until now.
    and writes the mirror configuration too, from the same detection
    ([`series-loop/SKILL.md`](series-loop)).
 
-8. **Register the new flavor with r-universe.**
+7. **Register the new flavor with r-universe.**
    `<F>` is a package nothing in this repository creates: a universe is configured
    by `<user>/<user>.r-universe.dev`, whose `packages.json` gives each package a
    `url` and the `branch` to build — `<S>-green` for a series. Adding `<F>` is an
@@ -241,39 +178,19 @@ until now.
    Linux on one R version, and stage 3 of the loop has nothing to read back
    ([`series-loop/SKILL.md`](series-loop)).
 
-## Declaring the flavor
+## Patching the README
 
-[`scripts/series.yaml`](/scripts/series.yaml) is the declaration.
-[`README.Rmd`](/README.Rmd) builds its table from a chunk, so rendering is what
-writes the root and `.github/` copies; the handbook's is a plain `.md`, so
-[`scripts/series-table.R`](/scripts/series-table.R) splices it between
-`<!-- flavors:begin -->` markers. Order in the file is order in the
-table — CRAN, then LTS, then the `.dev` flavors newest series first. A `.dev`
-entry is eight fields:
+Edit [`README.Rmd`](/README.Rmd): `README.md` and `.github/README.md` are
+rendered from it, and all three carry the table.
+Copy the row of the nearest `.dev` flavor and substitute `<F>`, `<U>` and the
+series' refs, keeping the table's order — CRAN, then LTS, then the `.dev` flavors
+newest series first.
 
-```yaml
-  - flavor: duckdb.2.0.dev
-    kind: dev
-    upstream: v2.0-cyanoptera
-    series: v2.0-cyanoptera
-    releases_from: main
-    publishes_from: v2.0-cyanoptera-green
-    repo: duckdb/duckdb-r
-    badges: [r-universe]
-```
+Two things a copied row gets wrong.
 
-`series` is the prefix of the four refs; `publishes_from` is what r-universe
-builds. `releases_from` is the one to get right, and it does two jobs: it is the
-base the *ahead* badge measures from, and it is the branch the series seeds and
-forward-ports from, which is why the fork mirrors it and why
-`pull-config.sh` reads it rather than the badge
-([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-
-Two things the generator settles that a hand-copied row used to get wrong.
-
-**Which branch *ahead* measures from.** It is `releases_from`, which for a line
-still releasing from `main` *is* `main` — not `<U>`, and not the parked baseline
-a retired line moves to later.
+**Which branch *ahead* measures from.** It is the branch the series releases from,
+which for a line still releasing from `main` *is* `main` — not `<U>`, and not the
+parked baseline a retired line uses.
 
 **Which repository each badge is counted in**, because that differs within one
 row. shields.io compares two refs of a single repository, and the row's three
@@ -287,19 +204,17 @@ comparisons do not all live in the same one:
 
 A badge whose base the named repository lacks renders as an error rather than a
 count, and one reading a stale mirror is worse because it renders: it counts
-commits that have already shipped. Step 7 settles both.
+commits that have already shipped. Step 6 settles both.
 
 **The table must stay clear of `scripts/flavor.patch`.**
 `README.Rmd` is a flavored file and the patch rewrites the installation hunks near
 the top, so `git apply --check --include=README.Rmd scripts/flavor.patch` has to
-still pass after regenerating. Name the `.Rmd`: `--include` matching no path exits
-0, so checking the rendered `README.md` — which the patch does not touch — passes
-whatever the edit did.
+still pass. Name the `.Rmd`: `--include` matching no path exits 0, so checking the
+rendered `README.md` — which the patch does not touch — passes whatever the edit
+did.
 
-`README.md` and `.github/README.md` are rendered from `README.Rmd`, so run the
-render after the generator. The change lands on `main` and is forward-ported like
-any other R-side change; when the series later releases, it gains a stable entry
-of its own.
+The edit lands on `main` and is forward-ported like any other R-side change.
+When the series later releases, it gains a stable row of its own.
 
 ## Later, when the line parks
 
@@ -308,7 +223,7 @@ and its `.dev` badge follows it there — the *ahead* base is the branch the ser
 releases from, which is no longer `main`.
 That move is what earns the outgoing line a mirror and a rule, on the day it
 parks rather than on the day it was opened, and `pull-config.sh` reports it as
-soon as the badge base moves: step 7 arriving by itself rather than being
+soon as the badge base moves: step 6 arriving by itself rather than being
 remembered.
 
 What is left of the walk-backwards problem when `<S>` releases is

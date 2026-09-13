@@ -35,9 +35,33 @@ what the patch rewrites is the surface, by construction.
 [`scripts/flavor.sh`](/scripts/flavor.sh) takes the suffix
 (`1.4`, `1.5.dev`, `dev`) and applies it,
 regenerating `src/cpp11.cpp` and `R/cpp11.R` instead of patching them,
-because cpp11 derives the `.Call` symbol prefix from the name.
+because cpp11 derives the `.Call` symbol prefix from the name —
+which is also why the cpp11 that generates them has to be the fork
+([`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md)).
+The two READMEs are regenerated for the same reason:
+the patch renames [`README.Rmd`](/README.Rmd),
+and `README.md` and `.github/README.md` are written from it
+([`meta/handbook/`](/handbook/meta/handbook/README.md)),
+so the rename is spelled once rather than in three files kept in step
+by hand.
+
+**Changing one flavor for another is a rename, not a second patch.**
+`flavor.sh` builds a flavor onto an unflavored tree and refuses one that
+already has it, which is what a series cut from another series arrives as
+([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)):
+the cut takes its parent's tree entire, so the name is the only thing wrong
+with it.
+Reversing the old flavor to re-apply the new one is what does not work —
+`flavor.patch` is the unflavored template `main` owns, and the tree has moved
+since the flavor was applied, so the reverse fails on context that has nothing
+to do with the name.
+[`scripts/reflavor.sh`](/scripts/reflavor.sh) substitutes one name for the
+other across the same surface, which needs no context at all.
+It renames only inside that surface: `duckdb.dev` also appears in `handbook/`
+and `plan/` as prose about the series that carries it, and renaming those would
+make the documentation say something false.
 Everywhere else the package asks for its name at run time
-([`architecture/r-layer/`](/handbook/architecture/r-layer/README.md));
+([`architecture/r-layer/conventions/`](/handbook/architecture/r-layer/conventions/README.md));
 the scan that keeps it that way is
 [`testing/guards/`](/handbook/testing/guards/README.md)'s.
 
