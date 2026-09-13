@@ -12,7 +12,6 @@ permissions:
 jobs:
   matrix:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30 # longest run seen: 2 min
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
@@ -40,17 +39,16 @@ jobs:
       # https://docs.github.com/en/free-pro-team@latest/rest/reference/actions#workflow-runs
       - name: Collect the reverse dependencies
         id: set-matrix
-        uses: cynkra/cynkratemplate/.github/actions/revdep-collect-deps@main
+        uses: ./.github/workflows/revdep-collect-deps
 
   check-matrix:
     runs-on: ubuntu-26.04
-    timeout-minutes: 15 # longest run seen: 1 min
     needs: matrix
     steps:
       - uses: actions/checkout@v6
 
       - name: Check matrix definition
-        uses: cynkra/cynkratemplate/.github/actions/matrix-check@main
+        uses: ./.github/workflows/matrix-check
         with:
           matrix: ${{ needs.matrix.outputs.matrix }}
 
@@ -58,7 +56,6 @@ jobs:
     needs: matrix
 
     runs-on: ubuntu-26.04
-    timeout-minutes: 120 # no recent runs to measure
 
     name: 'revdep: ${{ matrix.package }}'
 
@@ -97,7 +94,7 @@ jobs:
       - uses: r-lib/actions/setup-pandoc@v2
 
       - name: Close the log group that setup-pandoc leaves open
-        # See `.github/actions/install/action.yml` for why this is needed.
+        # See `.github/workflows/install/action.yml` for why this is needed.
         # Fixed upstream by https://github.com/r-lib/actions/pull/1103.
         if: runner.os == 'Linux'
         run: |
@@ -125,11 +122,11 @@ jobs:
         shell: Rscript {0}
 
       - name: Session info old
-        uses: cynkra/cynkratemplate/.github/actions/session-info@main
+        uses: ./.github/workflows/session-info
 
       - name: Check old
         # Avoid downloading binary package from RSPM
-        uses: cynkra/cynkratemplate/.github/actions/revdep-check-old@main
+        uses: ./.github/workflows/revdep-check-old
         with:
           package: ${{ matrix.package }}
       - name: Install local package
@@ -138,14 +135,14 @@ jobs:
         shell: Rscript {0}
 
       - name: Session info new
-        uses: cynkra/cynkratemplate/.github/actions/session-info@main
+        uses: ./.github/workflows/session-info
 
       - name: Check new
-        uses: cynkra/cynkratemplate/.github/actions/revdep-check-new@main
+        uses: ./.github/workflows/revdep-check-new
         with:
           package: ${{ matrix.package }}
       - name: Compare
-        uses: cynkra/cynkratemplate/.github/actions/revdep-compare@main
+        uses: ./.github/workflows/revdep-compare
         with:
           package: ${{ matrix.package }}
       - name: Upload check results

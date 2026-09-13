@@ -36,7 +36,6 @@ permissions: {}
 jobs:
   rcc-status:
     runs-on: ubuntu-26.04
-    timeout-minutes: 15 # longest run seen: 1 min
 
     name: "Update commit status"
 
@@ -54,7 +53,7 @@ jobs:
 
     steps:
       - name: Update commit status
-        uses: cynkra/cynkratemplate/.github/actions/rcc-status-update@main
+        uses: cynkra/cynkratemplate/.github/workflows/rcc-status-update@main
         with:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
           repo: ${{ github.repository }}
