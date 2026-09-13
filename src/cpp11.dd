@@ -1,4 +1,5 @@
 cpp11.o: \
   cpp11.cpp \
   include/convert.hpp \
+  include/duckdb_types.hpp \
   include/rapi.hpp \
