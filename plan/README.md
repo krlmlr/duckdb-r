@@ -60,6 +60,7 @@ topic today.
 | What the TIMESTAMPTZ session-`TimeZone` fix ([#2401](https://github.com/duckdb/duckdb-r/pull/2401)) was verified against, scenario by scenario, and the limitations it left | [`history/2026-05-timestamptz-icu.md`](history/2026-05-timestamptz-icu.md) |
 | Findings verified against the code by the closed handbook wave, and the issues its defects became | [`history/2026-08-handbook-wave-salvage.md`](history/2026-08-handbook-wave-salvage.md) |
 | The glue adaptations the August 2026 forward of all three series replayed, where each modification was placed, and what the run found out about the routine | [`history/2026-08-series-forward-glue.md`](history/2026-08-series-forward-glue.md) |
+| What was checked before the September 2026 cutovers of `v1.4-andium` and `v1.5-variegata` were handed to a human: the gates, every vendored commit that adapted the glue on either lineage, and what the swap changes | [`history/2026-09-v1.4-v1.5-cutover-review.md`](history/2026-09-v1.4-v1.5-cutover-review.md) |
 
 ## Adding a document here
 
