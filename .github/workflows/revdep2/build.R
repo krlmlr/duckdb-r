@@ -8,10 +8,7 @@
 # Environment variables:
 #   OUT_DIR  - where the tarball, binary and metadata land (default: pkg)
 
-source(file.path(
-  dirname(sub("--file=", "", grep("^--file=", commandArgs(), value = TRUE))),
-  "util.R"
-))
+source(file.path(dirname(sub("--file=", "", grep("^--file=", commandArgs(), value = TRUE))), "util.R"))
 
 out_dir <- env_chr("OUT_DIR", "pkg")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -45,8 +42,7 @@ build_lib <- tempfile("lib-")
 dir.create(build_lib)
 status <- system2(
   "R",
-  # Quoted: system2() quotes the command, but not the arguments.
-  c("CMD", "INSTALL", "--build", "-l", shQuote(build_lib), shQuote(tarball))
+  c("CMD", "INSTALL", "--build", "-l", build_lib, tarball)
 )
 if (status != 0) {
   stop("R CMD INSTALL --build failed", call. = FALSE)
@@ -63,11 +59,7 @@ write_json(
     package = package,
     dev_version = dev_version,
     sha = head_sha,
-    r_version = paste(
-      R.version$major,
-      sub("[.].*$", "", R.version$minor),
-      sep = "."
-    ),
+    r_version = paste(R.version$major, sub("[.].*$", "", R.version$minor), sep = "."),
     platform = R.version$platform,
     tarball = tarball,
     binary = file.path("bin", binary),

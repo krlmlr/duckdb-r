@@ -1,7 +1,7 @@
 #!/bin/bash
 # Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-build`
 # onto HEAD, which must be the freshly flavored seed on current `main`
-# (.claude/skills/series-forward/SKILL.md).
+# (.claude/skills/series-forward.md).
 #
 # The replay is a cherry-pick, not a tree reconstruction. A vendor commit's diff
 # is exactly what vendoring changed -- `src/duckdb/`, the version bookkeeping,
@@ -32,7 +32,7 @@
 # `git add`, and rerun; the counter and the remaining picks are derived from
 # HEAD, so the replay continues where it stopped.
 #
-# Usage: series-forward-build.sh <old-build-ref> <old-base-ref> [--placed <sha>]...
+# Usage: series-forward-build.sh [--placed <sha>]... <old-build-ref> <old-base-ref>
 #   old-base-ref only delimits the replay range; it has to sit below the oldest
 #   vendor commit to replay, and nothing else is read from it.
 #   --placed names a non-vendor commit whose change has been dealt with, once
@@ -41,30 +41,21 @@
 
 set -euo pipefail
 
-usage='usage: series-forward-build.sh <old-build-ref> <old-base-ref> [--placed <sha>]...'
-argerr() { echo "$usage" >&2; exit 2; }
+usage='usage: series-forward-build.sh [--placed <sha>]... <old-build-ref> <old-base-ref>'
 
-# It names two refs rather than a series, so it takes no --remote; the options
-# and the exit status are the shared contract's all the same
-# (handbook/operations/vendoring/series-loop/README.md).
 PLACED_ARGS=()
-args=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --placed) [ $# -ge 2 ] || argerr; PLACED_ARGS+=("$2"); shift 2 ;;
-    -h | --help) echo "$usage"; exit 0 ;;
-    -*) argerr ;;
-    *) args+=("$1"); shift ;;
+    --placed) PLACED_ARGS+=("${2:?$usage}"); shift 2 ;;
+    -*) echo "$usage" >&2; exit 1 ;;
+    *) break ;;
   esac
 done
-[ ${#args[@]} -eq 2 ] || argerr
-OLD=${args[0]}
-OLDBASE=${args[1]}
 
-# The tree to replay into, the same knob vendor-one.sh takes; see series-glue.sh.
-toplevel=${VENDOR_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || true)}
-[ -n "$toplevel" ] || { echo "Error: $PWD is not a git worktree" >&2; exit 1; }
-cd "$toplevel"
+OLD=${1:?$usage}
+OLDBASE=${2:?$usage}
+
+cd "$(dirname "$0")/.."
 
 for r in "$OLD" "$OLDBASE"; do
   git rev-parse -q --verify "$r^{commit}" >/dev/null ||

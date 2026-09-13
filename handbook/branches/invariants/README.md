@@ -15,10 +15,8 @@ The families, in one breath:
   and then mostly frozen:
   it moves only for bug fixes
   and for what R-devel on r-universe requires.
-  A series' seed is flavored from day one.
-  The unflavored `dev-base` baseline of the older layout is retired,
-  with its refs in the archive
-  ([`model/`](/handbook/branches/model/README.md)).
+  The dev baseline equals the released tree on legacy series only;
+  a series-loop seed is flavored from day one.
 * **Linearity** — the active history is linear and merge-free,
   so it stays bisectable; forward-ports are cherry-picks.
 * **Flavor / identity** — the names inside a branch agree with each other,
@@ -34,7 +32,7 @@ The families, in one breath:
 * **Forward convergence** — at the end of a forwarding, `<S>-dev` and
   `<S>-fwd-dev` are identical, or every difference between them is
   explicable. A forward is the same series rebuilt on a newer `main`
-  ([`.claude/skills/series-forward/SKILL.md`](/.claude/skills/series-forward/SKILL.md)),
+  ([`.claude/skills/series-forward.md`](/.claude/skills/series-forward.md)),
   so the histories differ by construction and only the trees carry the
   claim.
 * **Prerelease** — while a release stabilises, only `main` and the dev
@@ -72,7 +70,8 @@ The structural and flavor families hold **by construction** —
 the rename is one patch applied by
 [`scripts/flavor.sh`](/scripts/flavor.sh), which prepares and checks the
 whole thing before it commits anything, so the patch is the surface.
-Linearity is checked by nothing at all: no script counts parents.
+Linearity and the dev baseline are checked by nothing at all;
+no script reads `dev-base`, and none counts parents.
 
 How well an unenforced one holds is measurable rather than assumed:
 [`experiments/2026-07-main-dev-review/`](/experiments/2026-07-main-dev-review/README.md)
@@ -80,7 +79,8 @@ counted the R-side commits in one series' active range, and
 [`experiments/2026-08-02-lts-drift/`](/experiments/2026-08-02-lts-drift/README.md)
 measured how far the LTS flavor has drifted from its baseline.
 
-*To deepen: say what would catch linearity, the invariant a violation of
-reaches a release, and what a check for it would cost —
+*To deepen: say what would catch the two that nothing catches.
+Linearity and the dev baseline are the invariants a violation of
+reaches a release, and what a check for either would cost —
 where it would run, and what it would refuse —
-which is written down nowhere.*
+is written down nowhere.*

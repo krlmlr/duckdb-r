@@ -30,7 +30,6 @@ struct DuckDBErrorDetails {
 
 #include <string.h>
 
-#include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 
 #include "duckdb/parser/keyword_helper.hpp"
@@ -493,10 +492,10 @@ AdbcStatusCode ConnectionGetTableSchema(struct AdbcConnection *connection, const
 
 	std::string query = "SELECT * FROM ";
 	if (catalog != nullptr && strlen(catalog) > 0) {
-		query += duckdb::KeywordHelper::WriteOptionallyQuoted(catalog) + ".";
+		query += duckdb::SQLIdentifier(catalog) + ".";
 	}
-	query += duckdb::KeywordHelper::WriteOptionallyQuoted(db_schema) + ".";
-	query += duckdb::KeywordHelper::WriteOptionallyQuoted(table_name) + " LIMIT 0;";
+	query += duckdb::SQLIdentifier(db_schema) + ".";
+	query += duckdb::SQLIdentifier(table_name) + " LIMIT 0;";
 
 	auto success = QueryInternal(connection, &arrow_stream, query.c_str(), error);
 	if (success != ADBC_STATUS_OK) {
@@ -565,7 +564,7 @@ static AdbcStatusCode ConnectionSetOptionCurrentValue(duckdb::DuckDBAdbcConnecti
 		return ADBC_STATUS_INVALID_STATE;
 	}
 	auto conn = reinterpret_cast<duckdb::Connection *>(conn_wrapper->connection);
-	std::string query = sql_prefix + duckdb::KeywordHelper::WriteOptionallyQuoted(value);
+	std::string query = sql_prefix + duckdb::SQLIdentifier(value);
 	return ExecuteQuery(conn, query.c_str(), error);
 }
 
@@ -1247,15 +1246,15 @@ static std::string BuildCreateTableSQL(const char *catalog, const char *schema, 
 	// the table is automatically placed in the temp catalog.
 	if (!temporary) {
 		if (catalog) {
-			create_table << duckdb::KeywordHelper::WriteOptionallyQuoted(catalog) << ".";
+			create_table << duckdb::SQLIdentifier(catalog) << ".";
 		}
 		if (schema) {
-			create_table << duckdb::KeywordHelper::WriteOptionallyQuoted(schema) << ".";
+			create_table << duckdb::SQLIdentifier(schema) << ".";
 		}
 	}
-	create_table << duckdb::KeywordHelper::WriteOptionallyQuoted(table_name) << " (";
+	create_table << duckdb::SQLIdentifier(table_name) << " (";
 	for (idx_t i = 0; i < types.size(); i++) {
-		create_table << duckdb::KeywordHelper::WriteOptionallyQuoted(names[i]);
+		create_table << duckdb::SQLIdentifier(names[i]);
 		create_table << " " << types[i].ToString();
 		if (i + 1 < types.size()) {
 			create_table << ", ";
@@ -1630,11 +1629,11 @@ AdbcStatusCode StatementGetParameterSchema(struct AdbcStatement *statement, stru
 	// would be worth the extra management
 
 	auto prepared_wrapper = reinterpret_cast<duckdb::PreparedStatementWrapper *>(wrapper->statement);
-	if (!prepared_wrapper || !prepared_wrapper->statement || !prepared_wrapper->statement->data) {
+	if (!prepared_wrapper || !prepared_wrapper->statement) {
 		SetError(error, "Invalid prepared statement wrapper");
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
-	auto count = prepared_wrapper->statement->data->properties.parameter_count;
+	auto count = prepared_wrapper->statement->GetParameterCount();
 	std::vector<duckdb_logical_type> types(count);
 	std::vector<std::string> owned_names;
 	owned_names.reserve(count);
@@ -1747,8 +1746,8 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 	std::memset(&raw_stream_wrapper->result, 0, sizeof(raw_stream_wrapper->result));
 	DuckDBAdbcStreamWrapperGuard stream_wrapper(raw_stream_wrapper);
 	// Only process the stream if there are parameters to bind
-	auto prepared_statement_params = reinterpret_cast<duckdb::PreparedStatementWrapper *>(wrapper->statement)
-	                                     ->statement->data->properties.parameter_count;
+	auto prepared_statement_params =
+	    reinterpret_cast<duckdb::PreparedStatementWrapper *>(wrapper->statement)->statement->GetParameterCount();
 	if (has_stream && prepared_statement_params > 0) {
 		// A stream was bound to the statement, use that to bind parameters
 		ArrowArrayStream stream = wrapper->ingestion_stream;
@@ -1858,7 +1857,6 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 		out->get_next = get_next;
 		out->release = release;
 		out->get_last_error = get_last_error;
-		// Register this stream wrapper so it can be materialized if another query runs
 		if (wrapper->conn_wrapper) {
 			wrapper->conn_wrapper->RegisterStream(released);
 		}
@@ -2239,8 +2237,7 @@ AdbcStatusCode StatementSetOptionDouble(struct AdbcStatement *statement, const c
 
 std::string createFilter(const char *input) {
 	if (input) {
-		auto quoted = duckdb::KeywordHelper::WriteQuoted(input, '\'');
-		return quoted;
+		return duckdb::SQLString::ToString(input);
 	}
 	return "'%'";
 }
@@ -3537,6 +3534,8 @@ static const char *DuckDBErrorTypeToString(duckdb_error_type type) {
 		return "Autoload";
 	case DUCKDB_ERROR_SEQUENCE:
 		return "Sequence";
+	case DUCKDB_ERROR_DATA_CORRUPTION:
+		return "DataCorruption";
 	case DUCKDB_INVALID_CONFIGURATION:
 		return "InvalidConfiguration";
 	default:

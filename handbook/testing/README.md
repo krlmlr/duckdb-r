@@ -13,4 +13,4 @@ never for the absence of something red.
 * [`suite/`](suite/) — layout, helpers, the fast loop
 * [`snapshots/`](snapshots/) — snapshot discipline
 * [`guards/`](guards/) — CRAN guard, flavor guard
-* [`revdep/`](revdep/) — the reverse-dependency route, and when a release runs it
+* [`revdep/`](revdep/) — `revdep/` before release

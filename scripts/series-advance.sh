@@ -40,57 +40,25 @@
 # `--continue` picks the run up where it stopped; `--abort` throws the worktree
 # away and leaves the refs untouched.
 #
-# **`--dev-note` writes a stage-3 finding into the commit this stage mints.** An
-# r-universe failure has no per-commit record anywhere and no commit of its own,
-# so the series keeps it in the message of the next `-dev` commit
-# (.claude/skills/series-loop/SKILL.md stage 3). This stage is the one that mints that
-# commit and pushes it in the same breath, so a firing that writes the finding
-# afterwards pays an amend, a force-push, and one each-rcc run spent on a commit
-# it is about to re-mint. The note is appended to the newest minted commit's
-# message before the push instead. A note forces the replay route below, because
-# the plain ref move has no commit of its own to carry it, and it is an error to
-# ask for one when the chunk minted nothing.
-#
-# Usage: series-advance.sh <series> [--chunk <n>] [--dev-note <file>]
-#        series-advance.sh <series> --continue [--dev-note <file>]
+# Usage: series-advance.sh <series> [chunk-size]     # chunk default 100
+#        series-advance.sh <series> --continue       # after resolving a stop
 #        series-advance.sh <series> --abort          # discard a stopped replay
-#
-# --remote is spelled the same in every scripts/series-*.sh, and the chunk size
-# is an option like vendor-one.sh's --commits rather than a bare number beside
-# the series name; see the shared contract in
-# handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
 
-usage='usage: series-advance.sh <series> [--chunk <n>] [--remote <name>] [--dev-note <file>]
-       series-advance.sh <series> --continue [--dev-note <file>]
-       series-advance.sh <series> --abort'
-argerr() { echo "$usage" >&2; exit 2; }
+usage='usage: series-advance.sh <series> [chunk-size | --continue | --abort]'
+S=${1:?$usage}
 CONTINUE=
 ABORT=
-DEV_NOTE=
 chunk=100
-remote=${SERIES_REMOTE:-origin}
-args=()
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --continue) CONTINUE=1; shift ;;
-    --abort) ABORT=1; shift ;;
-    --chunk) [ $# -ge 2 ] || argerr; chunk=$2; shift 2 ;;
-    --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
-    --dev-note) [ $# -ge 2 ] || argerr; DEV_NOTE=$2; shift 2 ;;
-    -h | --help) echo "$usage"; exit 0 ;;
-    -*) argerr ;;
-    *) args+=("$1"); shift ;;
-  esac
-done
-[ ${#args[@]} -eq 1 ] || argerr
-S=${args[0]}
-case "$chunk" in '' | *[!0-9]*) echo "Error: --chunk takes a number: $chunk" >&2; exit 2 ;; esac
-if [ -n "$DEV_NOTE" ] && [ ! -s "$DEV_NOTE" ]; then
-  echo "Error: --dev-note file is missing or empty: $DEV_NOTE" >&2
-  exit 1
-fi
+case "${2:-}" in
+  '') ;;
+  --continue) CONTINUE=1 ;;
+  --abort) ABORT=1 ;;
+  -*) echo "$usage" >&2; exit 1 ;;
+  *) chunk=$2 ;;
+esac
+remote=origin
 rcc=${RCC_BRANCH:-rcc2}
 
 # A stopped stage 5 lives here: the worktree it kept, the buffer commit whose
@@ -212,7 +180,7 @@ version_gt() { # <a> <b>
 
 # Raise DESCRIPTION's fifth component to one above the parent's, on a commit
 # that vendors. Every vendor commit must be strictly above its parent
-# (.claude/skills/series-loop/SKILL.md): gaps are fine, repeats are not, because
+# (.claude/skills/series-loop.md): gaps are fine, repeats are not, because
 # r-universe installs by version and cannot tell a run of commits sharing one
 # apart.
 #
@@ -335,7 +303,7 @@ carry_paths() { # <buffer commit> <base -dev commit>
 
 # Glue the base `-dev` has and the base `-build` lacks *entirely* -- a fix
 # folded during a repair and never mirrored onto the buffer, so the next tree
-# regenerated there still wants it (.claude/skills/series-loop/SKILL.md, stage 2).
+# regenerated there still wants it (.claude/skills/series-loop.md, stage 2).
 # Carried like the rest, but said out loud, because it is buffer drift.
 #
 # Deliberately the filename test rather than carry_paths': a file the buffer
@@ -390,7 +358,7 @@ if [ "$new_green" != "$(git rev-parse "$green")" ]; then
       # Set, never advance. -build-base is the one ref of the four that is not
       # fast-forward only: nothing consumes it, and the match is recomputed
       # here from scratch every time, so where the ref sat before says nothing
-      # this stage needs (.claude/skills/series-loop/SKILL.md, stage 3). Force,
+      # this stage needs (.claude/skills/series-loop.md, stage 3). Force,
       # because a write from outside this loop -- a CI job committing onto the
       # branch it ran on -- can leave the ref past the match or beside the
       # buffer, and refusing that stopped stage 5 with it.
@@ -442,7 +410,7 @@ fi
 # So a base series consumes its buffer like any other, and the two lineages run
 # level until a human swaps them. It is more CI on a series about to be retired;
 # it is also the only thing that makes retiring it a check rather than a hope.
-# Pending work does not hold the buffer (.claude/skills/series-loop/SKILL.md stage 5):
+# Pending work does not hold the buffer (.claude/skills/series-loop.md stage 5):
 # each.yaml plans every commit in green..tip that has no status, so a longer tip
 # is more work planned in the same pass, not work deferred. A known failure does
 # hold it: stage 2 will fold a fix into that commit and replay everything above,
@@ -494,13 +462,6 @@ if [ "$ahead" -eq 0 ]; then
 fi
 n=$((ahead < chunk ? ahead : chunk))
 
-# What -dev is at before this stage writes anything, so the closing line can
-# report what the stage actually added rather than what it set out to add. The
-# replay drops a buffer commit whose content reached -dev by another route
-# (`--empty=drop` below), so the two differ, and `git push` moves the
-# remote-tracking ref this resolves -- read it once, here.
-dev_before=$(git rev-parse "$dev")
-
 # Which commits in this chunk have a test-side fix waiting on the base series.
 # Computed before anything is written, because it decides the route: a plain ref
 # move cannot carry content, so one carry in the chunk makes the whole chunk a
@@ -530,10 +491,7 @@ if [ -n "$base_dev" ]; then
   fi
 fi
 
-# A note takes the replay route: the fast path pushes the buffer's own commits
-# unchanged, so there is nothing of this stage's making to write the finding on.
-if [ "$anchor" = "$(git rev-parse "$dev")" ] && [ "$carries" -eq 0 ] &&
-   [ -z "$CONTINUE" ] && [ -z "$DEV_NOTE" ]; then
+if [ "$anchor" = "$(git rev-parse "$dev")" ] && [ "$carries" -eq 0 ] && [ -z "$CONTINUE" ]; then
   next=$(git rev-list --reverse "$anchor..$build" | sed -n "${n}p")
   git push "$remote" "$next:refs/heads/$S-dev"
 else
@@ -662,22 +620,6 @@ else
     restamp "$wt" "$c"
     [ -n "${CARRY[$c]:-}" ] && apply_carry "$wt" "$c" "${CARRY[$c]}"
   done
-  # The stage-3 finding, onto the newest commit this chunk minted. Appended
-  # rather than folded in anywhere else: the commit already carries the vendor
-  # message the finding is about, and the readers of these findings --
-  # series-glue.sh, and stage 2's mining step -- read exactly this message.
-  if [ -n "$DEV_NOTE" ]; then
-    if [ "$(git -C "$wt" rev-parse HEAD)" = "$(git rev-parse "$dev")" ]; then
-      git worktree remove --force "$wt"
-      echo "Error: $S — the chunk minted nothing, so --dev-note has no commit" >&2
-      echo "  to write the finding on. Record it on the next chunk instead." >&2
-      exit 1
-    fi
-    { git -C "$wt" log -1 --format=%B; echo; cat "$DEV_NOTE"; } > "$wt/.series-advance-note"
-    git -C "$wt" commit -q --amend --no-verify -F "$wt/.series-advance-note"
-    rm -f "$wt/.series-advance-note"
-  fi
-
   next=$(git -C "$wt" rev-parse HEAD)
   if ! verify_counter "$wt" "$dev"; then
     git worktree remove --force "$wt"
@@ -687,4 +629,4 @@ else
   rm -f "$STATE"
   git push "$remote" "$next:refs/heads/$S-dev"
 fi
-echo "dev -> $(git rev-parse --short "$next") (+$(git rev-list --count "$dev_before..$next"))"
+echo "dev -> $(git rev-parse --short "$next") (+$n)"

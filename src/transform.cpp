@@ -1,6 +1,10 @@
 #include "duckdb/common/types/geometry_crs.hpp"
 #include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/vector/array_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/function/scalar/variant_utils.hpp"
 #include "rapi.hpp"
 #include "typesr.hpp"
@@ -34,6 +38,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::SMALLINT:
 	case LogicalTypeId::USMALLINT:
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		return INTSXP;
 	case LogicalTypeId::UINTEGER:
@@ -52,6 +57,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::DATE:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIME_TZ:
@@ -66,6 +72,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 		return duckdb_r_typeof(child_type, name, caller);
 	}
 	case LogicalTypeId::STRUCT:
+	case LogicalTypeId::TUPLE:
 		return VECSXP;
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::UUID:
@@ -99,11 +106,14 @@ SEXP duckdb_r_allocate(const LogicalType &type, idx_t nrows, const string &name,
 		    duckdb_r_allocate(child_type, (nrows * array_size), name, convert_opts, "LogicalTypeId::ARRAY");
 		return varvalue;
 	}
-	case LogicalTypeId::STRUCT: {
-		cpp11::writable::list dest_list;
-		dest_list.reserve(StructType::GetChildTypes(type).size());
+	case LogicalTypeId::STRUCT:
+	case LogicalTypeId::TUPLE: {
+		const auto child_types = RApiTypes::StructLikeChildTypes(type);
 
-		for (const auto &child : StructType::GetChildTypes(type)) {
+		cpp11::writable::list dest_list;
+		dest_list.reserve(child_types.size());
+
+		for (const auto &child : child_types) {
 			const auto &child_name = child.first;
 			const auto &child_type = child.second;
 
@@ -182,6 +192,11 @@ double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(int64_t timestamp) {
 	return static_cast<double>(timestamp) / Interval::NANOS_PER_SEC;
 }
 
+template <>
+double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_TZ_NS>(int64_t timestamp) {
+	return ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(timestamp);
+}
+
 template <LogicalTypeId LT>
 void ConvertTimestampVector(const Vector &src_vec, size_t count, const SEXP dest, uint64_t dest_offset) {
 	auto src_data = FlatVector::GetData<int64_t>(src_vec);
@@ -205,6 +220,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::HUGEINT:
@@ -269,6 +285,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -313,14 +330,15 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 			Rf_setAttrib(dest, R_ClassSymbol, RStrings::get().integer64_str);
 		}
 		break;
-	case LogicalTypeId::STRUCT: {
-		const auto &child_types = StructType::GetChildTypes(type);
+	case LogicalTypeId::STRUCT:
+	case LogicalTypeId::TUPLE: {
+		const auto child_types = RApiTypes::StructLikeChildTypes(type);
 		cpp11::writable::strings names;
 		names.reserve(child_types.size());
 
 		for (size_t i = 0; i < child_types.size(); i++) {
 			const auto &child_name = child_types[i].first;
-			names.push_back(child_name);
+			names.push_back(child_name.GetIdentifierName());
 
 			const auto &child_type = child_types[i].second;
 			SEXP child_dest = VECTOR_ELT(dest, i);
@@ -380,7 +398,7 @@ static void TransformArrayVector(const Vector &src_vec, const SEXP dest, idx_t d
 	for (size_t row_idx = 0; row_idx < n; row_idx++) {
 		size_t offset = (row_idx * array_size);
 		size_t end = offset + array_size;
-		child_vector.Slice(ArrayVector::GetEntry(src_vec), offset, end);
+		child_vector.Slice(ArrayVector::GetChild(src_vec), offset, end);
 		duckdb_r_transform(child_vector, buffer, 0, array_size, convert_opts, name);
 
 		// Calculate destination index for R column-major matrix layout
@@ -457,6 +475,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	case LogicalTypeId::SMALLINT:
 		VectorToR<int16_t, uint32_t>(src_vec, n, INTEGER_POINTER(dest), dest_offset, NA_INTEGER);
 		break;
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		VectorToR<int32_t, uint32_t>(src_vec, n, INTEGER_POINTER(dest), dest_offset, NA_INTEGER);
 		break;
@@ -474,6 +493,11 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		break;
 	case LogicalTypeId::TIMESTAMP_NS:
 		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_NS>(src_vec, n, dest, dest_offset);
+		std::call_once(nanosecond_coercion_warning, Rf_warning,
+		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
+		break;
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_TZ_NS>(src_vec, n, dest, dest_offset);
 		std::call_once(nanosecond_coercion_warning, Rf_warning,
 		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;
@@ -497,7 +521,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 			if (!mask.RowIsValid(row_idx)) {
 				dest_ptr[row_idx] = NA_REAL;
 			} else {
-				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].micros) / Interval::MICROS_PER_SEC;
+				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].value) / Interval::MICROS_PER_SEC;
 			}
 		}
 		SET_CLASS(dest, RStrings::get().difftime_str);
@@ -515,7 +539,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 			if (!mask.RowIsValid(row_idx)) {
 				dest_ptr[row_idx] = NA_REAL;
 			} else {
-				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].time().micros) / Interval::MICROS_PER_SEC;
+				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].time().value) / Interval::MICROS_PER_SEC;
 			}
 		}
 		SET_CLASS(dest, RStrings::get().difftime_str);
@@ -629,7 +653,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	}
 	case LogicalTypeId::LIST: {
 		// figure out the total and max element length of the list vector child
-		const auto src_data = ListVector::GetData(src_vec);
+		const auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 		auto &child_type = ListType::GetChildType(src_vec.GetType());
 		Vector child_vector(child_type, nullptr);
 
@@ -639,7 +663,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 				SET_ELEMENT(dest, dest_offset + row_idx, R_NilValue);
 			} else {
 				const auto end = src_data[row_idx].offset + src_data[row_idx].length;
-				child_vector.Slice(ListVector::GetEntry(src_vec), src_data[row_idx].offset, end);
+				child_vector.Slice(ListVector::GetChild(src_vec), src_data[row_idx].offset, end);
 
 				// transform the list child vector to a single R SEXP
 				cpp11::sexp list_element =
@@ -657,20 +681,21 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		TransformArrayVector(src_vec, dest, dest_offset, n, convert_opts, name);
 		break;
 	}
-	case LogicalTypeId::STRUCT: {
+	case LogicalTypeId::STRUCT:
+	case LogicalTypeId::TUPLE: {
 		const auto &children = StructVector::GetEntries(src_vec);
 
 		for (size_t i = 0; i < children.size(); i++) {
 			const auto &struct_child = children[i];
 			SEXP child_dest = VECTOR_ELT(dest, i);
-			duckdb_r_transform(*struct_child, child_dest, dest_offset, n, convert_opts, name);
+			duckdb_r_transform(struct_child, child_dest, dest_offset, n, convert_opts, name);
 		}
 
 		break;
 	}
 
 	case LogicalTypeId::MAP: {
-		auto src_data = ListVector::GetData(src_vec);
+		auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 
 		auto &key_type = MapType::KeyType(src_vec.GetType());
 		auto &value_type = MapType::ValueType(src_vec.GetType());
@@ -721,7 +746,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 
 	case LogicalTypeId::VARIANT: {
 		RecursiveUnifiedVectorFormat format;
-		Vector::RecursiveToUnifiedFormat(const_cast<Vector &>(src_vec), n, format);
+		Vector::RecursiveToUnifiedFormat(src_vec, format);
 		UnifiedVariantVectorData variant_data(format);
 
 		for (idx_t row_idx = 0; row_idx < n; row_idx++) {

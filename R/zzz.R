@@ -29,9 +29,7 @@
     arg_match <<- rlang::arg_match
   } else {
     rethrow_restore()
-    # `rapi_error` already is `rapi_error_base`, and without `try_fetch()` there
-    # is nothing to rethrow through -- the condition reaches the caller as the
-    # base half built it, fields and all.
+    # Overwrite rapi_error with base version when rlang is not available
   }
 
   invisible()
