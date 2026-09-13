@@ -1,3 +1,5 @@
+
+
 test_that("Conversion of sub-dates prior Posix origin is correct", {
   con <- local_con()
 
@@ -15,3 +17,4 @@ test_that("Conversion of sub-dates prior Posix origin is correct", {
     as.character(res$d)
   )
 })
+

@@ -32,54 +32,12 @@ That default is the only thing that depends on how the two clones are
 arranged: either script takes the path as a positional argument
 instead, and a caller that passes one is free of the layout entirely.
 
-**A remote is not a clone, and `gh` names both.**
-A package clone made with `gh` carries two remotes —
-`origin` and `upstream` —
-and the upstream `duckdb/duckdb` checkout is neither of them:
-it is a separate directory on disk, with no remote in this repository
-pointing at it.
-`scripts/series-cutover.sh` takes one of each,
-which is where the two used to get swapped.
-Passing a remote name where the path belonged reported
-`coverage would regress`:
-`git -C` failed because the directory was not there,
-and the gate read that failure as a negative ancestry answer.
-The script now checks that the path is a checkout first,
-so the message names the argument rather than the refs —
-and the two are named rather than positional,
-`--remote <name>` and `--upstream <path>`,
-which is what makes the swap unsayable instead of merely diagnosable.
-That spelling is the one every `scripts/series-*.sh` shares
-([`series-loop/`](/handbook/operations/vendoring/series-loop/README.md)).
-
 **`rconfigure.py`** does the regeneration:
 `src/duckdb/`, `src/include/sources.mk`, the Makevars files
 (`src/Makevars` and `src/Makevars.win`) from `Makevars.in`,
-`R/version.R`,
-and the logos in `man/figures/`
-copied from the upstream checkout's `logo/` —
-all committed, all corrected at the generator.
+and `R/version.R` — all committed, all corrected at the generator.
 That set is the mechanical path set a vendor commit may touch,
 and the generator is its list.
-
-The logos are the one thing in that set that is not a source,
-and they are there because the package shows them:
-the horizontal pair is the banner `.github/README.md` renders,
-the stacked pair is the package logo the site puts in its header,
-and carrying them on the vendor commit is what keeps either
-from drifting away from the engine it documents.
-The horizontal pair keeps its upstream name;
-the stacked pair is renamed on the way in,
-because pkgdown finds the package logo by the name
-`man/figures/logo.svg` rather than by configuration.
-The previous README hotlinked `duckdb.org` instead,
-those URLs went away,
-and GitHub — which proxies README images
-and serves nothing for a URL it cannot fetch — showed no logo at all.
-A checkout that cannot supply them stops the run before the
-regeneration, rather than leaving the vendored copies stale:
-upstream renaming a logo is a decision for a human,
-since the new name has to reach `README.md` too.
 
 **The patch stack** under [`patch/`](/patch) applies R-specific
 modifications to the vendored tree in place,

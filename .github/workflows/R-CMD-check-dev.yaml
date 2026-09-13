@@ -27,15 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Report the GitHub API rate limit
-        uses: ./.github/workflows/rate-limit
+      - uses: ./.github/workflows/rate-limit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: r-lib/actions/setup-r@v2
 
-      - name: Collect the dependencies into a matrix
-        id: set-matrix
+      - id: set-matrix
         uses: ./.github/workflows/dep-matrix
 
   check-matrix:
@@ -76,12 +74,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run the repository-specific before-install steps
-        uses: ./.github/workflows/custom/before-install
+      - uses: ./.github/workflows/custom/before-install
         if: hashFiles('.github/workflows/custom/before-install/action.yml') != ''
 
-      - name: Install R and the package dependencies
-        uses: ./.github/workflows/install
+      - uses: ./.github/workflows/install
         with:
           cache-version: rcc-dev-base-1
           needs: build, check
@@ -96,16 +92,13 @@ jobs:
           sessioninfo::session_info(pkgs, include_base = TRUE)
         shell: Rscript {0}
 
-      - name: Run the repository-specific after-install steps
-        uses: ./.github/workflows/custom/after-install
+      - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Update the testthat snapshots
-        uses: ./.github/workflows/update-snapshots
+      - uses: ./.github/workflows/update-snapshots
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
-      - name: Run R CMD check
-        uses: ./.github/workflows/check
+      - uses: ./.github/workflows/check
         with:
           results: ${{ matrix.package }}
 
@@ -130,12 +123,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run the repository-specific before-install steps
-        uses: ./.github/workflows/custom/before-install
+      - uses: ./.github/workflows/custom/before-install
         if: hashFiles('.github/workflows/custom/before-install/action.yml') != ''
 
-      - name: Install R and the package dependencies
-        uses: ./.github/workflows/install
+      - uses: ./.github/workflows/install
         with:
           cache-version: rcc-dev-${{ matrix.package }}-1
           needs: build, check
@@ -160,15 +151,12 @@ jobs:
           sessioninfo::session_info(pkgs, include_base = TRUE)
         shell: Rscript {0}
 
-      - name: Run the repository-specific after-install steps
-        uses: ./.github/workflows/custom/after-install
+      - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Update the testthat snapshots
-        uses: ./.github/workflows/update-snapshots
+      - uses: ./.github/workflows/update-snapshots
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
-      - name: Run R CMD check
-        uses: ./.github/workflows/check
+      - uses: ./.github/workflows/check
         with:
           results: ${{ matrix.package }}

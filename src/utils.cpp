@@ -114,15 +114,13 @@ RStrings::RStrings() {
 }
 
 LogicalType RStringsType::Get() {
-	LogicalType r_string_type(LogicalTypeId::POINTER);
-	r_string_type.SetAlias(R_STRING_TYPE_NAME);
-	return r_string_type;
+	return LogicalType(LogicalTypeId::POINTER).WithAlias(R_STRING_TYPE_NAME);
 }
 
 template <class SRC, class DST, class RTYPE>
 static void AppendColumnSegment(SRC *source_data, Vector &result, idx_t count) {
 	auto result_data = FlatVector::GetData<DST>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto val = source_data[i];
 		if (RTYPE::IsNull(val)) {
@@ -364,21 +362,21 @@ SEXP RApiTypes::ValueToSexp(const Value &val, const ConvertOpts &convert_opts) {
 	// Convert ExceptionType to string
 	std::string error_type = EnumUtil::ToChars(error_data.Type());
 
-	// Convert extra_info to a named character vector, which `rapi_error()` hands
-	// to the caller as the `extra_info` field of the condition.
+	// Convert extra_info to R list
+	cpp11::writable::list extra_info;
 	const auto &info_map = error_data.ExtraInfo();
 
 	cpp11::writable::strings names(info_map.size());
-	cpp11::writable::strings extra_info(info_map.size());
+	cpp11::writable::strings values(info_map.size());
 
 	size_t i = 0;
 	for (const auto &pair : info_map) {
 		names[i] = pair.first;
-		extra_info[i] = pair.second;
+		values[i] = pair.second;
 		i++;
 	}
 
-	extra_info.names() = names;
+	values.names() = names;
 
 	// Call R function with all parameters
 	rapi_error(context, message, error_type, raw_message, extra_info);

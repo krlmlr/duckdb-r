@@ -19,19 +19,12 @@ namespace duckdb {
 class ScopedInterruptHandler {
 private:
 	shared_ptr<ClientContext> context;
-
-	// Written by the signal handler and read by HandleInterrupt() outside it,
-	// which is the one round trip the standard only guarantees for a
-	// volatile sig_atomic_t: a plain bool leaves the compiler free to keep
-	// the read in a register across the call the handler interrupts.
-	volatile sig_atomic_t interrupted = 0;
+	bool interrupted = false;
 
 	// oldhandler stores the old signal handler
-	// so that it can be restored when the object is destroyed.
-	// An instance constructed without a context installs nothing, so the
-	// initializer is what keeps the unused slot from holding a stale handler.
+	// so that it can be restored when the object is destroyed
 	typedef void (*sig_t)(int);
-	sig_t oldhandler = SIG_DFL;
+	sig_t oldhandler;
 
 	static ScopedInterruptHandler *instance;
 
@@ -52,4 +45,4 @@ private:
 	static void signal_handler(int signum);
 };
 
-} // namespace duckdb
+}; // namespace duckdb

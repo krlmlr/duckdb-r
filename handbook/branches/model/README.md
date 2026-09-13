@@ -3,7 +3,8 @@
 The series and their refs: what a series is, where its branches live,
 what each ref means and how far it may move.
 [`BRANCHES.md`](/BRANCHES.md) keeps what is not yet absorbed:
-the package components and the repository diagrams.
+the package components, the repository diagrams,
+and the legacy `dev`/`dev-base` layout some series still carry.
 
 **A series** is one upstream branch of `duckdb/duckdb` —
 `main`, `v1.5-variegata`, `v1.4-andium` —
@@ -11,25 +12,19 @@ together with the R package branches that carry it.
 A series is *discovered, not configured*:
 the vendoring routine serves every `<S>-build` ref that has a
 sibling `<S>-dev`, so opening one is creating refs
-([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)).
+([`.claude/skills/series-open.md`](/.claude/skills/series-open.md)).
 
 **Two repositories.**
 `duckdb/duckdb-r` is canonical:
 `main`, the parked stable baselines, the LTS flavor branch;
 CRAN and the numbered r-universe packages publish from here.
-`krlmlr/duckdb-r` is a fork of it — a fork object in the same fork
-network, not a copy that shares its name — used for CI/CD
+`krlmlr/duckdb-r` is a fork used for CI/CD
 so the per-commit builds do not consume
 the `duckdb` organization's Actions quota;
 every series' working refs live there,
 beside mirrors of the canonical branches
 they are seeded from and measured against
 ([`mirrors/`](/handbook/branches/mirrors/README.md)).
-The fork carries only the refs the loop serves;
-what it does not carry stands in `krlmlr/duckdb-r-old`,
-an archive that nothing reads and nothing writes to.
-The `<S>-dev-base` refs of the older `dev`/`dev-base` layout are there:
-every series is a series-loop series now, and none of the four below is that baseline.
 
 **The four refs** of a series `<S>`, all in the fork:
 

@@ -3,7 +3,6 @@ url: https://r.duckdb.org/
 
 template:
   bootstrap: 5
-  light-switch: true
 
 authors:
   Hannes Mühleisen:
@@ -49,12 +48,6 @@ reference:
   - duckdb_register_arrow
   - duckdb_read_csv
   - duckdb_explain-class
-- title: Errors
-  desc: >
-    What a failing query raises, and the fields to classify it by instead of
-    parsing the message.
-  contents:
-  - duckdb_error
 - title: Storage locations
   desc: >
     Where DuckDB writes extensions, stored secrets, and temporary files, and

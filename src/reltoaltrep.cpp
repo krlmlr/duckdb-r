@@ -5,6 +5,7 @@
 #include "altrepdataframe_relation.hpp"
 #include "cpp11/declarations.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_result.hpp"
@@ -220,7 +221,7 @@ void AltrepRelationWrapper::Materialize() {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", local_res->GetError().c_str());
 		return;
 	}
-	D_ASSERT(local_res->type == QueryResultType::MATERIALIZED_RESULT);
+	D_ASSERT(local_res->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
 
 	if (max_rows < MAX_SIZE_T) {
 		auto local_mat_res = (MaterializedQueryResult *)local_res.get();
@@ -286,26 +287,26 @@ struct AltrepVectorWrapper {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->names[column_index];
+			return res->GetNames()[column_index].GetIdentifierName();
 		}
 
-		auto child_type = res->types[parent_column_index[0]];
+		auto child_type = res->GetTypes()[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
 		}
 
-		return StructType::GetChildName(child_type, column_index);
+		return StructType::GetChildName(child_type, column_index).GetIdentifierName();
 	}
 
 	string FullName() {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->names[column_index];
+			return res->GetNames()[column_index].GetIdentifierName();
 		}
 
-		string res_name = res->names[parent_column_index[0]];
-		auto child_type = res->types[parent_column_index[0]];
+		string res_name = res->GetNames()[parent_column_index[0]].GetIdentifierName();
+		auto child_type = res->GetTypes()[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			res_name += "$" + StructType::GetChildName(child_type, parent_column_index[i]);
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
@@ -318,10 +319,10 @@ struct AltrepVectorWrapper {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->types[column_index];
+			return res->GetTypes()[column_index];
 		}
 
-		auto child_type = res->types[parent_column_index[0]];
+		auto child_type = res->GetTypes()[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
 		}
@@ -345,10 +346,10 @@ struct AltrepVectorWrapper {
 
 		auto struct_vector = &chunk.data[0];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
-			struct_vector = &*StructVector::GetEntries(*struct_vector)[parent_column_index[i]];
+			struct_vector = &StructVector::GetEntries(*struct_vector)[parent_column_index[i]];
 		}
 
-		return *StructVector::GetEntries(*struct_vector)[column_index];
+		return StructVector::GetEntries(*struct_vector)[column_index];
 	}
 
 	void *Dataptr() {
@@ -546,7 +547,7 @@ R_xlen_t RelToAltrep::StructLength(SEXP x) {
 	auto const *wrapper = AltrepVectorWrapper::Get(x);
 	auto const column_index = wrapper->column_index;
 	auto const &res = wrapper->rel->GetQueryResult();
-	auto const &type = res->types[column_index];
+	auto const &type = res->GetTypes()[column_index];
 
 	return static_cast<R_xlen_t>(StructType::GetChildTypes(type).size());
 	END_CPP11_EX(0)
@@ -622,15 +623,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 		types.push_back(make_pair(col_name, col_type));
 	}
 
-	// Capture the session's TimeZone setting so TIMESTAMP WITH TIME ZONE columns
-	// can be decorated with the matching `tzone` attribute. The session settings
-	// can only be queried while the connection is live, which it is here.
-	ConvertOpts local_convert_opts = rel->convert_opts;
-	if (drel->context) {
-		local_convert_opts.session_time_zone = drel->context->GetContext()->GetClientProperties().time_zone;
-	}
-
-	return rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, types, local_convert_opts);
+	return rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, types, rel->convert_opts);
 }
 
 SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_wrapper, SEXP row_names_sexp,
@@ -647,7 +640,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 
 	for (size_t col_idx = 0; col_idx < ncols; col_idx++) {
 		auto &col_name = types[col_idx].first;
-		names.push_back(col_name);
+		names.push_back(col_name.GetIdentifierName());
 
 		auto &col_type = types[col_idx].second;
 		cpp11::external_pointer<AltrepVectorWrapper> ptr(
@@ -665,7 +658,8 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 			vector_sexp =
 			    rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, child_types, convert_opts, child_col_idx);
 		} else {
-			vector_sexp = R_new_altrep(LogicalTypeToAltrepType(col_type, col_name), ptr, R_NilValue);
+			vector_sexp =
+			    R_new_altrep(LogicalTypeToAltrepType(col_type, col_name.GetIdentifierName()), ptr, R_NilValue);
 			duckdb_r_decorate(col_type, vector_sexp, convert_opts);
 		}
 

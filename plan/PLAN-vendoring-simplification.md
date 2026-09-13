@@ -7,8 +7,7 @@ and the documentation tree's own rules are
 this file is the proposal, and where the two disagree the leaf is right.
 
 Status: **in progress** (2026-07-30, branch `claude/vendoring-tooling-design-3swawc`;
-Phase 1 landed as #87, the README root as #88, Phase 3 as the fork
-move (#2534) — see §9;
+Phase 1 landed as #87, the README root as #88 — see §9;
 revised after a clean-context review of this document against `origin/main`).
 Inputs: `BRANCHES.md`, `scripts/VENDORING.md`, `scripts/EACH.md`,
 `scripts/VENDORING-LOOP.md` (historical), the four skills in `.claude/skills/`,
@@ -77,7 +76,7 @@ with a status line each as the work lands:
   Selection reads commit statuses
   (`each-plan.sh` via GraphQL, `each-shard.sh`'s resume check via REST);
   the loop reads `rcc` records;
-  and the dispatched backstop (`rcc-logs.sh`) *derives records from
+  and the 30-minute backstop (`rcc-logs.sh`) *derives records from
   statuses*, so the record store's own repair path runs through the
   other store. They agree *eventually*, through five writers, a
   newest-verdict-wins rule with run-id comparisons, a
@@ -105,7 +104,7 @@ with a status line each as the work lands:
   the bulk is harvested logs at ~1 MB each, under 30-day retention,
   while a record part is ~2 KB under a 256-way fan-out
   that keeps every tree object small).
-  The full checkouts that remain are the dispatched backstop
+  The full checkouts that remain are the 30-minute backstop
   (`rcc-logs.yaml` adds a `runs/` worktree) and manual consolidation.
   File count is not the constraint;
   if the backstop's checkout ever grows heavy,
@@ -170,7 +169,7 @@ with a status line each as the work lands:
   so it kept being re-examined as if it were coordination state.
   *Status:* moot — the badges are the consumption:
   the README's `Flavors` table renders *buffered* from exactly this ref
-  (#88, since fleshed out; upkeep documented in `series-open/SKILL.md`),
+  (#88, since fleshed out; upkeep documented in `series-open.md`),
   and the contract is stated here (D3, §3.4).
 - **F7 — The docs describe the system three times.** `BRANCHES.md`
   §Vendoring, `scripts/VENDORING.md`, and the skills each re-tell the loop;
@@ -212,13 +211,10 @@ maintain it, per F6.)
 **One verdict store**: one small file per commit
 (`runs2.d/<xx>/<sha>.ndjson` + `logs2.d/<xx>/<sha>.log` on branch `rcc2`),
 written by the leg that decided the commit — with the run fan-in and the
-dispatched backstop recovering what a dead leg could not publish —
+scheduled backstop recovering what a dead leg could not publish —
 and replaced only by an explicit retry.
 Git-native, batch-readable in one blobless fetch, reachable from a
-Claude web session without API access —
-which is the assumption §10.6 now puts under test:
-a session that can read the `each-rcc` run reads the record and the log
-at their source, and the store is what it falls back to.
+Claude web session without API access.
 Commit statuses become a **write-only display surface**;
 today they are still selection's input, which is what D1 changes.
 
@@ -229,7 +225,7 @@ idempotent, restartable, self-selecting its work as
 "commits in `green..tip` that are undecided"
 (the selection key today is the status; D1 makes it the record).
 
-**Seven rules** — deliberately restating `series-loop/SKILL.md`'s invariants
+**Seven rules** — deliberately restating `series-loop.md`'s invariants
 as one checklist; this plan is analysis, not a routing node:
 
 1. One upstream first-parent commit per vendor commit;
@@ -265,20 +261,13 @@ as one checklist; this plan is analysis, not a routing node:
   the remote as litter — §6 retires it.)
 - **Leg-direct publishing** (`rcc-publish.sh`, from the leg). Verdict
   latency in seconds instead of end-of-run; measured cheap. Keep.
-- **The run fan-in** (`each-harvest.sh`). Deletable after all, and
-  deleted — the earlier revision that said so was right for a reason it
-  did not have. The objection was that the fan-in held the only path to
-  a **per-commit log** for a leg that died before publishing, the
-  backstop offering only a *run*-level log that `series-check.sh`'s
-  classifier can misread. That premise died when the loop began reading
-  the leg's `each-logs-*` artifact directly (§10.6): the per-commit log
-  is *there*, uploaded `if: always()`, and inline in the leg's job log
-  after the artifact's 14 days. The fan-in was copying, into a store
-  read only in emergencies, what the reader now opens at the source.
-  What remains of the objection is narrow and stated where it lands: a
-  firing with no Actions access, falling back to the store, for a commit
-  whose leg never published, still gets a run-level log
-  (`rcc-logs.sh` records this).
+- **The run fan-in** (`each-harvest.sh`). Not deletable, contrary to an
+  earlier revision of this plan: it holds the only path to a
+  **per-commit log** for a leg that died before publishing —
+  the backstop can reconstruct records, but only a *run*-level log,
+  which `series-check.sh`'s classifier can misread
+  (`each.yaml` and `each-harvest.sh` both record
+  this). Keep; D2 only removes its aggregate work.
 
 ### 3.3 What goes
 
@@ -344,7 +333,7 @@ the live table is the README's `Flavors` section
 (#88, since fleshed out — per dev flavor an *ahead* badge against the
 release branch plus these two, version badges for CRAN/LTS rows),
 its upkeep including the mirror-freshness constraint is
-`series-open/SKILL.md` §"Patching the README",
+`series-open.md` §"Patching the README",
 and the endpoint mechanics are `scripts/VENDORING.md` §Monitoring.
 True upstream lag ("how far behind `duckdb/duckdb` itself") cannot be a
 badge — the comparison would cross repositories — and stays with the
@@ -393,7 +382,7 @@ Vendor-strand commits are listed and never auto-picked —
 The landed class excludes by **path**
 (`src/duckdb/`, the generated version files) as well as by subject,
 and the landed rationale (in `series-port.sh`'s header and
-`series-loop/SKILL.md` stage 4) asserts that the scans *rely on* every
+`series-loop.md` stage 4) asserts that the scans *rely on* every
 `src/duckdb`-touching `-dev` commit being a vendor commit.
 The principle that landed on `main` in the same day's batch (#85)
 asserts the opposite:
@@ -422,10 +411,10 @@ the boundary is content, and the content boundary is the subject.
 Ported commits are **transient by construction**:
 
 - a forward replays only `vendor:` subjects onto a seed that already
-  carries the tooling, so the port ends there (`series-forward/SKILL.md`);
+  carries the tooling, so the port ends there (`series-forward.md`);
 - a rebase drops them by patch-id once `main` contains them,
   and a sync commit whose delta `main` absorbed rebases to empty
-  (`series-rebase/SKILL.md`);
+  (`series-rebase.md`);
 - they vendor nothing, so the consumption anchor is untouched —
   the loop already reads the anchor from the newest *vendor* subject
   precisely because `-dev` carries such commits (`series-advance.sh`).
@@ -463,7 +452,7 @@ kept light by habit rather than process:
   each with the failing firing linked as evidence;
   a fix must never be load-bearing for the *current* firing
   (the firing works around by hand; the PR prevents the next one).
-  *Status:* landed as stage 7 of `series-loop/SKILL.md`,
+  *Status:* landed as stage 7 of `series-loop.md`,
   with the **reading** of open PRs moved up into that skill's setup,
   where it is context applied with judgement rather than a step:
   an open PR is tooling the series does not have
@@ -483,15 +472,6 @@ kept light by habit rather than process:
   near zero today; the cuts exist to keep it there as the system ages.
 
 ## 6. A fresh fork replaces the standalone repo
-
-*Status:* **landed.** `krlmlr/duckdb-r` is a fork object of
-`duckdb/duckdb-r`, carrying the series refs, the mirrors and the verdict
-store and nothing else, with the Pull app in force (#2534);
-the repository it replaced is the archive `krlmlr/duckdb-r-old`.
-What holds today is
-[`branches/model/`](/handbook/branches/model/README.md)'s and
-[`branches/mirrors/`](/handbook/branches/mirrors/README.md)'s;
-the rest of this section is the reasoning that got there.
 
 `krlmlr/duckdb-r` is a standalone copy, not a GitHub fork object
 (the docs call it "the fork" colloquially);
@@ -540,7 +520,7 @@ Fork-specific switches to flip at creation:
   [`branches/mirrors/`](/handbook/branches/mirrors/README.md));
   its rules stay inert while the upstream is outside the fork network,
   so until the move the mirrors are refreshed by hand —
-  which is what `series-open/SKILL.md` says today,
+  which is what `series-open.md` says today,
   and what it goes on saying rather than promising automation
   that is not there yet.
 
@@ -606,8 +586,8 @@ AGENTS.md ──┤                  maintainers & agents: quickstart + router
             ├─ scripts/VENDORING.md     vendoring mechanics
             │    └─ scripts/EACH.md     per-commit CI design
             ├─ .claude/skills/          playbooks the routine executes
-            │    series-loop · series-forward ·
-            │    series-rebase · series-open
+            │    series-loop.md · series-forward.md ·
+            │    series-rebase.md · series-open.md
             └─ plan/README.md           designs and decisions
                  PLAN-*.md
                  └─ plan/superseded/         designs overtaken by events
@@ -665,13 +645,13 @@ of the kernel.
 |---|---|---|
 | **0 (PR #86, this PR)** | this plan; router in `AGENTS.md`; badge semantics + pointers in `scripts/VENDORING.md` and `scripts/EACH.md` | none — docs only |
 | **1 — landed (#87)** | the port stage: `scripts/series-port.sh` plus the amended `series-loop` / `series-forward` / `series-rebase` skills | first real `--apply` still runs supervised |
-| **1a (follow-up)** | resolve the subject-vs-path contradiction (§4), in order: harden `vendor-one.sh` and `vendor.sh`'s subject scans to bounded-and-loud; relax `classify()` to subject-decided; rewrite the landed rationale in `series-port.sh`'s header and `series-loop/SKILL.md` stage 4; stage 1 invokes `main`'s `vendor-one.sh` against the buffer worktree | wider than first scoped — two scanners, one classifier, two rationale blocks, one skill rule; each independently shippable |
+| **1a (follow-up)** | resolve the subject-vs-path contradiction (§4), in order: harden `vendor-one.sh` and `vendor.sh`'s subject scans to bounded-and-loud; relax `classify()` to subject-decided; rewrite the landed rationale in `series-port.sh`'s header and `series-loop.md` stage 4; stage 1 invokes `main`'s `vendor-one.sh` against the buffer worktree | wider than first scoped — two scanners, one classifier, two rationale blocks, one skill rule; each independently shippable |
 | **2** | single verdict store (D1: selection and resume by record; backstop stops writing, its schedule dispatches idle undecided work); one sweep, then drop the aggregate outright (D2); the fan-in stays (per-commit logs, §3.2) | verdicts are already dual-written today; rollback = read statuses again |
-| **3 — landed (#2534)** | replace the standalone repo with a fresh fork (§6), configured with the Pull app so the release-branch mirrors stay current without a job of our own | one-time move; the replaced repository is kept as `krlmlr/duckdb-r-old` |
+| **3** | replace the standalone repo with a fresh fork (§6), configured with the Pull app so the release-branch mirrors stay current without a job of our own; mirrors stay manual until then | one-time move; keep the standalone until the fork has served one full loop cycle |
 | **4** | docs tree (§8): README root landed (#88); next the moves, then node rewrites (including `AGENTS.md`'s and `BRANCHES.md`'s stale rows); `docs-tree` skill | docs only |
 | **5** | kernel extraction + `rigraph` port (config file, generalized subject marker, igraph cost estimator or constant weight) | new repo consumed `@main`; rollback = vendored copy of the kernel |
 
-Phases 1a and 2 are independently shippable; the deletions concentrate in
+Phases 1a–3 are independently shippable; the deletions concentrate in
 Phase 2.
 
 ## 10. Open questions
@@ -684,23 +664,14 @@ Phase 2.
 2. **Record-store scale.** One commit per record keeps `rcc` growing
    (~1 commit/record; consolidation squashes). Is the current
    consolidation cadence enough once statuses stop being a second copy?
-3. ~~**Fork migration depth (§6).**~~ *Settled by the move:* `rcc2`
-   came across whole, and everything else — the retired `rcc`, the
-   snapshot branches, the ref litter, the finished topic branches —
-   stayed in `krlmlr/duckdb-r-old`, which is read-only from here on.
-   The snapshot branches the gate needs it recreates as it goes.
+3. **Fork migration depth (§6).** Carry the `rcc` records/logs and the
+   1175 snapshot branches into the fresh fork, or restart them and keep
+   the standalone repo read-only as the archive? Records at or below a
+   series' green are never re-read by the loop, so a restart may be
+   cheap.
 4. **Extraction home (Phase 5).** Shared repo (`krlmlr/vendor-loop`?)
    consumed `@main`, vs. copy-with-config in each consumer.
    Leaning shared repo; decide when the port starts.
 5. **Review artifacts.** Should routine-generated review digests
    (like `main-dev-review.md`) land under `plan/` by convention,
    or in PR comments only?
-6. **Does the store still earn its keep?** It exists because an agent
-   firing could not read CI logs; that is no longer true where the
-   firing has Actions access, so `series-loop/SKILL.md` now reads the run
-   and falls back to `rcc2`. Every firing records which path served.
-   If the fallback goes unused across a full cycle, the question is
-   what the store is still *for* — CI-side selection reads it too
-   (D1), so retiring it means replacing that read as well, and the
-   answer may be "keep it, cheaply" rather than "delete it".
-   Decide on the evidence, not on this paragraph.

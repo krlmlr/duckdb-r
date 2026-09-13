@@ -3,7 +3,7 @@
 #' @usage NULL
 dbHasCompleted__duckdb_result <- function(res, ...) {
   if (!res@env$open) {
-    abort("result has already been cleared")
+    stop("result has already been cleared")
   }
 
   if (is.null(res@env$resultset)) {

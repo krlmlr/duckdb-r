@@ -7,8 +7,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Collect the dependencies that have a development repository
-      id: set-matrix
+    - id: set-matrix
       run: |
         # Determine package dependencies
         # From remotes

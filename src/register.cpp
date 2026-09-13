@@ -1,13 +1,20 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/common/enum_util.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/filter/in_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "duckdb/planner/table_filter_set.hpp"
 #include "rapi.hpp"
 #include "signal.hpp"
 #include "typesr.hpp"
@@ -39,7 +46,7 @@ using namespace duckdb;
 		parameter_map["map_list_of"] = convert_opts.map == ConvertOpts::MapShape::LIST_OF;
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
-		    ->CreateView(name, overwrite, true);
+		    ->CreateView(Identifier(name), overwrite, true);
 
 		signal_handler.HandleInterrupt();
 
@@ -62,7 +69,7 @@ using namespace duckdb;
 	signal_handler.HandleInterrupt();
 
 	if (res->HasError()) {
-		rapi_error_with_context("rapi_unregister_df", res->GetErrorObject());
+		rapi_error_with_context("rapi_unregister_df", res->GetError());
 	}
 }
 
@@ -124,9 +131,8 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 
 class RArrowTabularStreamFactory {
 public:
-	RArrowTabularStreamFactory(SEXP export_fun_p, SEXP arrow_scannable_p, ClientProperties config_)
-	    : arrow_scannable(arrow_scannable_p), export_fun(export_fun_p), config(std::move(config_)) {
-	}
+	RArrowTabularStreamFactory(SEXP export_fun_p, SEXP arrow_scannable_p, ClientProperties config)
+	    : arrow_scannable(arrow_scannable_p), export_fun(export_fun_p), config(config) {};
 
 	static unique_ptr<ArrowArrayStreamWrapper> Produce(uintptr_t factory_p, ArrowStreamParameters &parameters) {
 		auto res = make_uniq<ArrowArrayStreamWrapper>();
@@ -144,7 +150,7 @@ public:
 		} else {
 			cpp11::sexp projection_sexp = StringsToSexp(column_list);
 			cpp11::sexp filters_sexp = Rf_ScalarLogical(true);
-			if (filters && !filters->filters.empty()) {
+			if (filters && filters->HasFilters()) {
 				filters_sexp = TransformFilter(*filters, projection_map, factory->export_fun);
 			}
 			export_fun(factory->arrow_scannable, stream_ptr_sexp, projection_sexp, filters_sexp);
@@ -187,13 +193,73 @@ private:
 		return CreateExpression(functions, op, lhs, rhs);
 	}
 
+	// Translate the bound expression of an EXPRESSION_FILTER. Such a filter always
+	// applies to a single column, which is bound as reference index 0.
+	static string FilterDescription(const TableFilter &filter, const string &column_name) {
+		return EnumUtil::ToString(filter.filter_type) + " on " + column_name;
+	}
+
+	static SEXP TransformExpression(const Expression &expr, SEXP column_name_expr, SEXP functions) {
+		if (BoundComparisonExpression::IsComparison(expr)) {
+			auto &comp = expr.Cast<BoundFunctionExpression>();
+			auto comparison_type = comp.GetExpressionType();
+			auto &lhs = BoundComparisonExpression::Left(comp);
+			auto &rhs = BoundComparisonExpression::Right(comp);
+			optional_ptr<const Expression> const_side;
+			if (lhs.GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			    rhs.GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				const_side = &rhs;
+			} else if (rhs.GetExpressionClass() == ExpressionClass::BOUND_REF &&
+			           lhs.GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
+				const_side = &lhs;
+				comparison_type = FlipComparisonExpression(comparison_type);
+			}
+			if (!const_side) {
+				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
+			}
+			cpp11::sexp constant_expr =
+			    CreateConstantExpression(functions, const_side->Cast<BoundConstantExpression>().GetValue());
+			switch (comparison_type) {
+			case ExpressionType::COMPARE_EQUAL:
+				return CreateExpression(functions, "equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_GREATERTHAN:
+				return CreateExpression(functions, "greater", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+				return CreateExpression(functions, "greater_equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_LESSTHAN:
+				return CreateExpression(functions, "less", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+				return CreateExpression(functions, "less_equal", column_name_expr, constant_expr);
+			case ExpressionType::COMPARE_NOTEQUAL:
+				return CreateExpression(functions, "not_equal", column_name_expr, constant_expr);
+			default:
+				throw NotImplementedException("%s can't be transformed to Arrow Scan Pushdown Filter", expr.ToString());
+			}
+		}
+		if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
+			auto &conj = expr.Cast<BoundConjunctionExpression>();
+			const string op = expr.GetExpressionType() == ExpressionType::CONJUNCTION_AND ? "and_kleene" : "or_kleene";
+			vector<cpp11::sexp> child_exprs;
+			child_exprs.reserve(conj.GetChildren().size());
+			for (auto &child : conj.GetChildren()) {
+				child_exprs.push_back(cpp11::sexp(TransformExpression(*child, column_name_expr, functions)));
+			}
+			return FoldBalanced(functions, op, child_exprs, 0, child_exprs.size());
+		}
+		throw NotImplementedException("Arrow table filter pushdown %s not supported yet", expr.ToString());
+	}
+
 	static SEXP TransformFilterExpression(TableFilter &filter, const string &column_name, SEXP functions) {
 		cpp11::sexp column_name_sexp = Rf_mkString(column_name.c_str());
 		cpp11::sexp column_name_expr = CreateFieldRef(functions, column_name_sexp);
 
 		switch (filter.filter_type) {
-		case TableFilterType::CONSTANT_COMPARISON: {
-			auto &constant_filter = (ConstantFilter &)filter;
+		case TableFilterType::EXPRESSION_FILTER: {
+			auto &expr_filter = filter.Cast<ExpressionFilter>();
+			return TransformExpression(*expr_filter.expr, column_name_expr, functions);
+		}
+		case TableFilterType::LEGACY_CONSTANT_COMPARISON: {
+			auto &constant_filter = (LegacyConstantFilter &)filter;
 			cpp11::sexp constant_expr = CreateConstantExpression(functions, constant_filter.constant);
 			switch (constant_filter.comparison_type) {
 			case ExpressionType::COMPARE_EQUAL: {
@@ -216,26 +282,26 @@ private:
 			}
 			default:
 				throw NotImplementedException("%s can't be transformed to Arrow Scan Pushdown Filter",
-				                              filter.ToString(column_name));
+				                              FilterDescription(filter, column_name));
 			}
 		}
-		case TableFilterType::IS_NULL: {
+		case TableFilterType::LEGACY_IS_NULL: {
 			return CreateExpression(functions, "is_null", column_name_expr);
 		}
-		case TableFilterType::IS_NOT_NULL: {
+		case TableFilterType::LEGACY_IS_NOT_NULL: {
 			cpp11::sexp is_null_expr = CreateExpression(functions, "is_null", column_name_expr);
 			return CreateExpression(functions, "invert", is_null_expr);
 		}
-		case TableFilterType::CONJUNCTION_AND: {
-			auto &and_filter = (ConjunctionAndFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_AND: {
+			auto &and_filter = (LegacyConjunctionAndFilter &)filter;
 			return TransformChildFilters(functions, column_name, "and_kleene", and_filter.child_filters);
 		}
-		case TableFilterType::CONJUNCTION_OR: {
-			auto &or_filter = (ConjunctionOrFilter &)filter;
+		case TableFilterType::LEGACY_CONJUNCTION_OR: {
+			auto &or_filter = (LegacyConjunctionOrFilter &)filter;
 			return TransformChildFilters(functions, column_name, "or_kleene", or_filter.child_filters);
 		}
-		case TableFilterType::IN_FILTER: {
-			auto &in_filter = (InFilter &)filter;
+		case TableFilterType::LEGACY_IN_FILTER: {
+			auto &in_filter = (LegacyInFilter &)filter;
 			if (in_filter.values.empty()) {
 				// col IN () matches no rows
 				return CreateScalar(functions, cpp11::sexp(Rf_ScalarLogical(false)));
@@ -245,7 +311,7 @@ private:
 				// optional filter this degrades to pushing TRUE.
 				static_assert(MAX_PUSHDOWN_IN_VALUES == 100, "update the message below");
 				throw NotImplementedException("IN filter with more than 100 values is not pushed down (%s)",
-				                              filter.ToString(column_name));
+				                              FilterDescription(filter, column_name));
 			}
 			// col IN (v1, v2, ...) as a balanced tree of equality comparisons.
 			vector<cpp11::sexp> equal_exprs;
@@ -256,11 +322,11 @@ private:
 			}
 			return FoldBalanced(functions, "or_kleene", equal_exprs, 0, equal_exprs.size());
 		}
-		case TableFilterType::OPTIONAL_FILTER: {
+		case TableFilterType::LEGACY_OPTIONAL_FILTER: {
 			// Optional filters only prune; DuckDB still applies the actual
 			// predicate. Push the child filter if it is expressible, and a
 			// TRUE literal otherwise, instead of failing the whole query.
-			auto &optional_filter = (OptionalFilter &)filter;
+			auto &optional_filter = (LegacyOptionalFilter &)filter;
 			if (optional_filter.child_filter) {
 				try {
 					return TransformFilterExpression(*optional_filter.child_filter, column_name, functions);
@@ -272,7 +338,7 @@ private:
 
 		default:
 			throw NotImplementedException("Arrow table filter pushdown %s not supported yet",
-			                              filter.ToString(column_name));
+			                              FilterDescription(filter, column_name));
 		}
 	}
 
@@ -288,11 +354,11 @@ private:
 
 	static SEXP TransformFilter(TableFilterSet &filter_collection, unordered_map<idx_t, string> &columns,
 	                            SEXP functions) {
-		auto fit = filter_collection.filters.begin();
-		cpp11::sexp res = TransformFilterExpression(*fit->second, columns[fit->first], functions);
-		fit++;
-		for (; fit != filter_collection.filters.end(); ++fit) {
-			cpp11::sexp rhs = TransformFilterExpression(*fit->second, columns[fit->first], functions);
+		auto fit = filter_collection.begin();
+		cpp11::sexp res = TransformFilterExpression((*fit).Filter(), columns[(*fit).GetIndex()], functions);
+		++fit;
+		for (; fit != filter_collection.end(); ++fit) {
+			cpp11::sexp rhs = TransformFilterExpression((*fit).Filter(), columns[(*fit).GetIndex()], functions);
 			res = CreateExpression(functions, "and_kleene", res, rhs);
 		}
 		return res;

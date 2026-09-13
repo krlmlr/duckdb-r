@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bring a series' -dev branch level with `main` — stage 4 of the series loop
-# (.claude/skills/series-loop/SKILL.md).
+# (.claude/skills/series-loop.md).
 #
 # The goal is identity, not curation: after a successful --apply, the tooling
 # paths — .github/, scripts/, .claude/ — of <S>-dev are byte-identical to
@@ -48,12 +48,6 @@
 # reading it is part of the port. In steady state the residue is empty and
 # no sync commit is created.
 #
-# One class of residue is worth more than an eye over a diff, so the sync names
-# it: a file it deletes that is still referenced from outside the tooling paths.
-# `main` moved the file in a commit this series did not take, and the caller
-# that moved with it is somewhere the sync cannot reach. The warning says which
-# file and which callers; the remedy is to port that commit by name.
-#
 # A frozen series takes no ports by default: a line seeded from a release
 # branch keeps the R code it was seeded with, so `main`'s development line is
 # not a backlog it is behind on. The walk is skipped for those and the sync
@@ -72,50 +66,33 @@
 # they are transient — a forward's seed already carries their content, and a
 # rebase drops patch-id equivalents and empty leftovers.
 #
-# Usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [sha...]
-#
-# --remote is spelled the same in every scripts/series-*.sh; see the shared
-# contract in handbook/operations/vendoring/series-loop/README.md.
+# Usage: series-port.sh <series> [--list] [--apply [sha...]]
 
 set -euo pipefail
 
-usage='usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [sha...]'
-argerr() { echo "$usage" >&2; exit 2; }
+S=${1:?usage: series-port.sh <series> [--list] [--apply [sha...]]}
+shift
 # --list walks a frozen series anyway, for when the question is which commit of
 # `main` to name. No effect on any other series: the walk is their default.
 list=
+if [ "${1:-}" = "--list" ]; then
+  list=1
+  shift
+fi
 apply=
-remote=${SERIES_REMOTE:-origin}
-args=()
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --list) list=1; shift ;;
-    --apply) apply=1; shift ;;
-    --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
-    -h | --help) echo "$usage"; exit 0 ;;
-    -*) argerr ;;
-    *) args+=("$1"); shift ;;
-  esac
-done
-[ ${#args[@]} -ge 1 ] || argerr
-S=${args[0]}
-set -- ${args+"${args[@]:1}"}
-[ -n "$apply" ] || [ $# -eq 0 ] || argerr
+if [ "${1:-}" = "--apply" ]; then
+  apply=1
+  shift
+fi
+remote=origin
 
 # The identity set: what CI and the routine execute. patch/ stays out
 # (vendor-coupled: applied by vendor runs, refreshed by repairs), as do the
-# docs that are flavored per branch or belong to the release strand —
-# commits touching them are still listed and picked like any other,
+# root docs (README.md is flavored per branch, NEWS.md belongs to the release
+# strand) — commits touching them are still listed and picked like any other,
 # but the sync commit never rewrites them.
-#
-# `.github/README.md` is one of those, and it is the reason `.github` cannot be
-# taken whole: it is the README GitHub renders, it is generated from the
-# flavored `README.Rmd`, and taking main's copy would put the mainline name at
-# the top of every flavored series' front page — the defect #2517 and #2518
-# were about, in the file most likely to be read.
-tooling=(.github scripts .claude ':(exclude).github/README.md')
+tooling=(.github scripts .claude)
 paths_re='^(\.github/|scripts/|\.claude/)'
-flavored_docs_re='^\.github/README\.md$'
 # A vendor commit is one whose subject says it vendored: the `vendor:` prefix
 # vendor-one.sh writes, or the `<owner>/<repo>@<sha>` reference that carries the
 # upstream commit as machine-readable state. Same rule as every other reader of
@@ -123,20 +100,8 @@ flavored_docs_re='^\.github/README\.md$'
 vendor_subject_re='^vendor:|duckdb/duckdb@[0-9a-f]+'
 
 # scripts/flavor.sh's first commit, and so the foot of every seed
-# (series-open step 2, series-forward step 1).
+# (series-open.md step 2, series-forward.md step 1).
 seed_re='^chore: Update flavor patch to '
-
-# A pick that moves `Version:` is decided by the `ours-version` merge driver,
-# whose name -> command mapping lives in .git/config and cannot be committed.
-# A fresh clone has the attribute and not the driver, so register it here and
-# refuse only if it is still missing -- refusing first made every firing run
-# scripts/setup-git.sh by hand for a step this script already took under
-# --apply. Idempotent; .git/config is shared with the worktree.
-if [ -x "$(dirname "$0")/setup-git.sh" ]; then
-  VENDOR_REPO="$(git rev-parse --show-toplevel)" "$(dirname "$0")/setup-git.sh" >/dev/null
-fi
-git config --get merge.ours-version.driver >/dev/null ||
-  { echo "Error: merge driver not registered, run scripts/setup-git.sh" >&2; exit 1; }
 
 git fetch -q "$remote"
 dev="$remote/$S-dev" main="$remote/main"
@@ -153,8 +118,8 @@ if [ -z "$mb" ]; then
 fi
 
 # Frozen is read off the series, not listed here. A series is seeded from the R
-# package's `main` (series-open step 2), and a forward regenerates that seed
-# on current `main` (series-forward step 1), so a well-seeded series has its
+# package's `main` (series-open.md step 2), and a forward regenerates that seed
+# on current `main` (series-forward.md step 1), so a well-seeded series has its
 # flavor commit sitting directly on the merge base and `git cherry` offers what
 # `main` gained since the last port. Seeded from a release line instead, the
 # seed sits on that line's own commits, and the walk reaches back to where that
@@ -162,22 +127,13 @@ fi
 #
 # The lineage under the seed is what separates them, and it is the one quantity
 # that does not move: the candidate list and the distance to the join both grow
-# as `main` does, while a well-seeded series stays near zero however long it
-# runs. Naming the series here instead would age — every LTS line opened or
-# retired would be an edit to this script, and a firing would trust the list
-# over the branch in front of it.
-#
-# What is counted is the part of that lineage `main` does not already have.
-# Counting commits instead made one seeding fix enough to freeze a series:
-# `v1.5-variegata-fwd` carried a single `fix(flavor)` commit below its flavor
-# commit — `main`'s own, replayed into the seed — and took no ports at all,
-# until its `-dev` differed from the base series' on 18 paths the convergence
-# report could not explain. A release-seeded lineage is not one commit off:
-# `v1.4-andium` has 56 commits under its seed, 45 of them `main`'s by no
-# reading, which is the shape the freeze is for.
+# as `main` does, while a well-seeded series stays at zero however long it runs.
+# Naming the series here instead would age — every LTS line opened or retired
+# would be an edit to this script, and a firing would trust the list over the
+# branch in front of it.
 seed=$(git rev-list "$mb..$dev" --grep="$seed_re" | tail -n 1)
 under=0
-[ -n "$seed" ] && under=$(git cherry "$main" "$seed^" "$mb" | grep -c '^+' || true)
+[ -n "$seed" ] && under=$(git rev-list --count "$mb..$seed^")
 frozen=
 [ "$under" != 0 ] && frozen=1
 
@@ -216,7 +172,7 @@ classify() { # <sha> -> TOOLING | MIXED | OTHER | VENDOR | VERSION
   if [[ "$(git log -1 --format=%s "$1")" =~ $vendor_subject_re ]]; then echo VENDOR; return; fi
   if version_bump "$1"; then echo VERSION; return; fi
   while IFS= read -r f; do
-    if [[ "$f" =~ $paths_re && ! "$f" =~ $flavored_docs_re ]]; then t=1; else o=1; fi
+    if [[ "$f" =~ $paths_re ]]; then t=1; else o=1; fi
   done < <(git diff-tree --no-commit-id --name-only -r "$1")
   if [ -n "$t" ] && [ -n "$o" ]; then
     echo MIXED
@@ -270,8 +226,11 @@ fi
 
 # A pick can still meet DESCRIPTION's `Version:` -- a named VERSION commit, a
 # forward-port that carries one -- and the ours-version merge driver is what
-# keeps that line off the conflict list. The gate at the top of this script has
-# registered it already.
+# keeps that line off the conflict list. Idempotent; .git/config is shared with
+# the worktree.
+if [ -x "$(dirname "$0")/setup-git.sh" ]; then
+  "$(dirname "$0")/setup-git.sh" >/dev/null
+fi
 
 # The default fill is what a frozen series does not get: `--list --apply` shows
 # the walk and still ports nothing, because seeing the candidates is not the
@@ -310,25 +269,6 @@ if ! git -C "$wt" diff --quiet "$main" -- "${tooling[@]}"; then
   git -C "$wt" commit -q -m "chore(series): Sync tooling with main" \
     -m "Takes main's ${tooling[*]} verbatim on top of the ported commits;
 the diff is the residue the commit walk could not explain."
-
-  # A file the sync deletes can still be named from outside the tooling paths:
-  # `main` moved it in a commit this series did not take, and the caller that
-  # moved with it lives where the sync cannot reach. `configure` calling
-  # `scripts/setup-makeflags.R` is the case this was written for -- the call is
-  # guarded with `|| echo ""`, so the tree stays green and simply builds
-  # single-threaded, which is the kind of loss nobody finds by reading a diff.
-  # Name it instead, and name the remedy: port the commit that moved the file.
-  while read -r gone; do
-    [ -n "$gone" ] || continue
-    callers=$(git -C "$wt" grep -lF -- "$gone" -- . \
-      ':(exclude).github' ':(exclude)scripts' ':(exclude).claude' || true)
-    [ -n "$callers" ] || continue
-    echo "warning: the sync deleted $gone, still referenced by:"
-    echo "$callers" | sed 's/^/  /'
-    echo "  port the commit that moved it: scripts/series-port.sh $S --apply <sha>"
-  done <<EOF
-$(git -C "$wt" diff --diff-filter=D --name-only HEAD^ HEAD)
-EOF
 fi
 git -C "$wt" diff --quiet "$main" -- "${tooling[@]}" ||
   { echo "Error: tooling still differs after sync"; exit 1; }

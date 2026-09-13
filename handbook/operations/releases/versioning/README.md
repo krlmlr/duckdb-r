@@ -48,12 +48,11 @@ so a replayed vendor commit arrives with its parent's counter
 and the series stops being orderable —
 [`scripts/series-advance.sh`](/scripts/series-advance.sh) restamps it,
 and refuses to push a replay whose counter did not rise
-([`.claude/skills/series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md)).
-A preview line is where the two strands drift apart, its prefix not being the one `main` carries (below):
-`main-dev` has carried the preview prefix `1.5.99` over a `main-build` still on `1.5.5`,
+([`.claude/skills/series-loop.md`](/.claude/skills/series-loop.md)).
+`main-dev` carries the preview prefix `1.5.99`
+and its buffer `main-build` carries `1.5.5`,
 which is that state.
-Aligning a series' two strands is the fix,
-and stamping the prefix into the seed rather than onto `-dev` is what keeps them aligned.
+Aligning a series' two strands is the fix.
 Exempting the fifth component from the gate — taking the maximum counter
 across differing prefixes too — is declined
 ([#2488](https://github.com/duckdb/duckdb-r/issues/2488)):
@@ -90,44 +89,3 @@ never derived from git; the tag follows `DESCRIPTION`.
 writing `NEWS.md` from commit messages
 and merging its bump PR by squash — which is why commit messages on `main` are
 written to be read as changelog entries.
-
-**A preview line carries the prefix of the line it previews**, which is the one
-[fledge](https://fledge.cynkra.com/) would write for it:
-`a.b.99` before a minor release and `a.99.99` before a major one, its `pre-minor` and `pre-major` bumps.
-So a series previewing 1.6 from a 1.5.5 seed is `1.5.99.9000`, one previewing 2.0 is `1.99.99.9000`,
-and the vendor counter hangs off that as usual.
-
-**What makes a line a preview line is that its release has not happened,
-not which upstream branch the series tracks.**
-The series tracking upstream `main` is the usual case and not the only one:
-upstream may cut a release branch well ahead of the release,
-and a series opened for one then serves a line no version names yet.
-`v2.0-cyanoptera` was cut while the newest tag was `v1.5.5`,
-so `main` carried `1.5.5` and nothing carried 2.0's version at all.
-The test is whether a released version already names the line —
-where one does the seed takes it from `main` and needs no prefix,
-and where none does the series is previewing, whatever branch it tracks.
-A line still taking patches is one a released version names, and its ordering is worth knowing:
-`1.5.5.9020.36` sits below `1.5.6`, so the day that patch ships the series reads as older
-than the release its own line just made, and re-seeding on the new `main` is what restores that
-([`.claude/skills/series-forward/SKILL.md`](/.claude/skills/series-forward/SKILL.md)).
-Taking fledge's prefix rather than inventing one buys the version's plain reading,
-and it is what `main` itself will carry when the line opens there.
-Versions never compare across flavors, which are separate package names that coexist by design
-([`branches/flavors/`](/handbook/branches/flavors/README.md)),
-so what the prefix must not break is the ordering within one name across re-seeds,
-and `1.99.99.9000` giving way to `2.0.0.9000` rises.
-The cost is the fourth component's other reading:
-on a preview line the version names the line previewed rather than the one seeded from,
-and which release the seed came from is read from the seed commit.
-
-**The prefix belongs to the seed, and so to all four refs.**
-It is stamped beside the fifth component, before `<S>-green`, `<S>-build-base`, `<S>-build` and `<S>-dev`
-are created equal ([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)),
-because a prefix on `-dev` alone is the split the gate above declines to resolve.
-A forward is where a preview line would lose it:
-[`series-forward`](/.claude/skills/series-forward/SKILL.md) regenerates the seed from current `main`,
-which knows nothing of what the series previews,
-and the replay cannot put it back, since the gate keeps our side of `DESCRIPTION` verbatim
-across differing prefixes and every replayed commit inherits whatever the new seed was stamped with.
-Restamping is part of regenerating the seed, not something the replay carries.

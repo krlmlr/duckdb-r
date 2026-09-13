@@ -1,6 +1,6 @@
 # Troubleshooting
 
-When a vendoring run is red, or a build no run covers is:
+When a vendoring run is red:
 telling the failure modes apart and reaching the right repair.
 The repair procedures are the series loop's playbooks
 ([`series-loop/`](/handbook/operations/vendoring/series-loop/README.md)).
@@ -12,11 +12,6 @@ where a forward counterpart has caught up —
 from the harvest on the orphan `rcc2` branch,
 which stores one record per commit and failing commits'
 logs ([`ci/per-commit/store/`](/handbook/operations/ci/per-commit/store/README.md)).
-Those records are copies of what the `each-rcc` run that decided each
-commit already holds, so a reader with Actions access can go to the run
-instead — and the series loop does
-([`series-loop/`](/handbook/operations/vendoring/series-loop/README.md)).
-The store is what answers when the run cannot be reached.
 What is vendored where:
 
 ```sh
@@ -34,14 +29,6 @@ The failure classes, and what each needs:
 * **The glue gate stops `vendor-one.sh`** —
   the fresh headers broke the glue;
   fix the glue and fold it into that vendor commit.
-  The gate names the files it could not compile,
-  and only that banner (`GLUE BROKEN`, exit 3) implicates the commit at HEAD.
-* **The glue gate could not run** (`GLUE CHECK COULD NOT RUN`, exit 6) —
-  the compile flags come from `R CMD SHLIB -n`,
-  which needs the `src/Makevars.rstrtmgr` only `./configure` writes,
-  so this says `./configure` failed and nothing was compiled.
-  It is a local setup problem: run `./configure` and read its output.
-  The vendor commit is not implicated, and amending it fixes nothing.
 * **A patch stopped applying** — if it reverses cleanly the run
   retires it and continues; if it neither applies nor reverses the run
   stops, and the patch needs a hand rebase against the regenerated tree
@@ -52,12 +39,6 @@ The failure classes, and what each needs:
   When the tree upstream shipped is itself the defect, see below.
 * **Stale snapshots** — engine output drifted;
   [`testing/snapshots/`](/handbook/testing/snapshots/README.md).
-* **A diagnostic no run raised** — the per-commit gate is Linux on one
-  R version, so a warning from another platform's compiler reaches this
-  repository through the published build or through a bisect, never
-  through a verdict.
-  The fix is a `patch/` entry, and which commit carries it is
-  *Where a patch goes in the chain*.
 
 ## A commit upstream broke
 
@@ -105,49 +86,7 @@ The version counter gains a gap where the folded bump went,
 which is what a counter that orders rather than counts allows
 ([`versioning/`](/handbook/operations/releases/versioning/README.md)).
 The loop's own statement of the rule is in its repair stage
-([`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md)).
-
-## Where a patch goes in the chain
-
-A `patch/` entry belongs in the first commit whose tree carries the code
-it answers.
-That is rarely the commit at which it was written:
-an entry answering a compiler diagnostic is written when someone reads
-the diagnostic, and the upstream change that raised it can be far below.
-Fold the entry and its effect on the vendored tree into that commit
-together, with an `R-side fix` section, as a forward-ported fix is folded.
-
-**Where the entry applies is a lower bound, not the answer.**
-For one that edits the code it answers the two coincide, and walking the
-patched file's commits for the first tree `patch --dry-run` accepts
-finds it.
-One that merely wraps its subject does not move with it —
-a diagnostic scoped off around a translation unit applies to every
-version of that unit, including the versions with nothing to warn about,
-so the walk answers with the seed.
-Look for where the thing being answered arrives, which is often in
-another file than the one the entry edits, and use `patch --dry-run`
-only to confirm the entry can live there.
-
-**The same distinction decides which branch an entry lives on.**
-A fix is series-specific when the code it answers is not on `main`,
-and an entry that wraps rather than edits will apply to `main` either
-way, so applying there is no evidence it belongs there.
-Landing one whose subject `main`'s engine does not carry adds a
-suppression with nothing to suppress —
-against the rule that nothing is suppressed at all
-([`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md)) —
-and it is the series' until `main`'s engine reaches the code.
-
-The buffer is where the choice is load-bearing.
-No run covers it at all
-([`branches/model/`](/handbook/branches/model/README.md)),
-and the gate that covers `-dev` is a single platform,
-so a diagnostic only the others raise is found by bisecting the buffer by
-hand — and a bisect answers what is asked of it only when every commit in
-its range is clean of what is being bisected for.
-An entry added at the top of the chain instead leaves the span below it
-carrying a defect the same branch already knows how to silence.
+([`series-loop.md`](/.claude/skills/series-loop.md)).
 
 *To deepen: absorb `scripts/VENDORING.md` § Troubleshooting —
 rebuilding the upstream clone, and the spurious `src/*.dd` churn.*

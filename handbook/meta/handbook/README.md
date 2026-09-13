@@ -63,16 +63,6 @@ has exactly one place in this tree.
   and each affected leaf links the plan that carries its intent.
   A plan that has become fact is documented as fact,
   in the leaf, with no trace of its having once been a proposal.
-* **Evidence lives outside the tree.**
-  A measurement too expensive to re-derive is recorded under
-  [`experiments/`](/experiments/README.md),
-  one directory per run, with the method that produced it.
-  The leaf that leans on it takes the finding and links the record;
-  [`meta/experiments/`](/handbook/meta/experiments/README.md) explains
-  that directory and the conventions that govern it.
-  A leaf states what is true,
-  which is not the same kind of writing
-  as a record of what was measured on one day.
 * **The tree is the single source of truth.**
   Everything outside it is secondary —
   user-facing surfaces (the root `README.md`, reference pages),
@@ -87,14 +77,6 @@ has exactly one place in this tree.
   in the roxygen source under `R/` —
   `man/*.Rd` is generated and never edited.
   A secondary document without a backreference is an orphan.
-* **A comment says what the code does; the leaf says why.**
-  A source comment that argues a design, weighs a trade-off,
-  or recounts what went wrong before is a second copy of a leaf,
-  and it is the copy nobody edits when the reasoning moves on.
-  Keep it to what a reader of that line needs in order to read it,
-  name the leaf, and let the leaf carry the rest —
-  the file's backreference is what makes that a pointer
-  rather than a loss.
 * **A leaf is born small and grows in place.**
   Three depths are legitimate published states.
   A **reference** leaf states its scope
@@ -111,7 +93,7 @@ has exactly one place in this tree.
 
 ## Growing a leaf
 
-The tree deepens one leaf per change, by five moves.
+The tree deepens one leaf per change, by four moves.
 Any of them is a complete, mergeable pull request:
 
 1. **Close an issue into its leaf.**
@@ -141,17 +123,6 @@ Any of them is a complete, mergeable pull request:
    The node above it gains a child-list entry, and a scope sentence too
    narrow to admit the new leaf is widened in the same change —
    otherwise the next topic of that kind falls out again.
-5. **Split a fact that has outgrown the page citing it.**
-   Detail too large for the leaf that carries it
-   becomes a leaf of its own beside that one, under the same node,
-   and the page it leaves keeps the shortest statement and the link
-   ([`meta/authoring/`](/handbook/meta/authoring/README.md) says how
-   short).
-   In every other respect it is a new leaf:
-   the node above gains its line in the child list,
-   and the links pointing at the fact move with it.
-   A page left holding nothing but pointers to what it gave away
-   has become an internal node, and is written as one.
 
 Whichever move, the same protocol:
 
@@ -211,8 +182,9 @@ it has the lifetime of the child list
 (a fact an ordinary commit could falsify has a leaf);
 and it names no particulars —
 no paths, scripts, variables, versions, counts, or commands.
-A node whose leaves share no such constraint gets no principle,
-and a node never restates a rule that a leaf under it owns.
+A node whose leaves share no such constraint gets no principle;
+where an area has a leaf whose topic is the area's own rules,
+the principles are that leaf's, and the node stays navigation-only.
 
 **A link that leaves its own directory is written from the repository
 root**, with a leading `/`;
@@ -255,14 +227,6 @@ Where no index covers a document, it carries its own:
   `.Rbuildignore` has removed `handbook/` from,
   so its pointer lives in a Documentation section
   rather than above the first sentence about the package.
-  It is also generated, so the pointer is edited in
-  [`README.Rmd`](/README.Rmd) — which writes both it and
-  `.github/README.md`, differing by the wordmark banner alone.
-  GitHub reads `.github/README.md` in preference to the root one and
-  pkgdown reads the root one, which is how the site's home page ends up
-  with the package logo in its header and no second logo below it
-  ([`operations/site/`](/handbook/operations/site/README.md)).
-  `make readme` rewrites both.
 * *Source files* — a plain source comment,
   above the roxygen block or below the script's one-line header.
   Never a roxygen `#'` line:
@@ -279,8 +243,8 @@ takes no backreference; `man/*.Rd` is the only such case here.
 ## Enforcement
 
 Consistency is agent work.
-The checks — mechanical where a claim can be computed,
-judgment where it cannot —
+The checks — mechanical on shape, links and index freshness,
+judgment on mapping and headers —
 are the `docs-consistency` skill's
 (`.claude/skills/docs-consistency/`), which is the list;
 it runs when documentation is touched

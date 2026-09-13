@@ -2,14 +2,14 @@
 # Atomically replace a series with its forward counterpart.
 #
 # A forward series <S>-fwd-* is the same series rebuilt on a newer `main`
-# (.claude/skills/series-forward/SKILL.md). Once its green ref covers at least the
+# (.claude/skills/series-forward.md). Once its green ref covers at least the
 # upstream commits the old green covered, this script swaps all four series
 # refs in one atomic push, so consumers of <S>-green never observe a
 # half-replaced series. The swap is the one sanctioned non-fast-forward move
 # of a green ref.
 #
 # It is also the one move the series loop never makes: the loop reports a ready
-# cutover and stops (.claude/skills/series-loop/SKILL.md), because retiring the
+# cutover and stops (.claude/skills/series-loop.md), because retiring the
 # lineage r-universe builds from is a decision, not a stage. This script is the
 # mechanical half of that rule — it runs from a terminal, on a typed
 # confirmation, and nowhere else.
@@ -17,48 +17,24 @@
 # A base series ref that does not exist yet is created rather than swapped:
 # a series that started as -fwd has no counterpart to replace.
 #
-# Usage: series-cutover.sh <series> [--remote <name>] [--upstream <path>]
-#   series-cutover.sh main --upstream ../../../duckdb
-#
-# The two are different kinds of thing, and a `gh` clone carries names that made
-# them easy to swap while both were positional:
-#   --remote <name>   a remote of *this* repository -- the one carrying the
-#                     series refs. A clone made with `gh` has both `origin`
-#                     and `upstream`; pass whichever holds `<series>-green`.
-#   --upstream <path> a filesystem path to a `duckdb/duckdb` checkout, read
-#                     with `git -C`. Never a remote name, whatever it is
-#                     called.
-# Both are spelled the same in every scripts/series-*.sh; see the shared
-# contract in handbook/operations/vendoring/series-loop/README.md.
+# Usage: series-cutover.sh <series> [remote] [upstream-clone]
+#   series-cutover.sh main origin ../duckdb
 #
 # The upstream clone is needed for the coverage gate (an ancestry check
 # between vendored upstream SHAs); without it the gate degrades to a warning.
 
 set -euo pipefail
 
-usage='usage: series-cutover.sh <series> [--remote <name>] [--upstream <path>]'
-argerr() { echo "$usage" >&2; exit 2; }
-remote=${SERIES_REMOTE:-origin}
-upstream=${UPSTREAM_CLONE:-}
-args=()
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
-    --upstream) [ $# -ge 2 ] || argerr; upstream=$2; shift 2 ;;
-    -h | --help) echo "$usage"; exit 0 ;;
-    -*) argerr ;;
-    *) args+=("$1"); shift ;;
-  esac
-done
-[ ${#args[@]} -eq 1 ] || argerr
-S=${args[0]}
+S=${1:?usage: series-cutover.sh <series> [remote] [upstream-clone]}
+remote=${2:-origin}
+upstream=${3:-}
 
 # Fail before the fetch, not after it: an unattended firing has no terminal, so
 # there is nothing for it to confirm with and no reason to do any work first.
 if [ ! -t 0 ] || [ ! -t 1 ]; then
   echo "Error: cutover is a manual operation; run this script from a terminal." >&2
   echo "  The series loop reports a ready cutover and stops; a human runs it." >&2
-  echo "  See .claude/skills/series-forward/SKILL.md and series-loop." >&2
+  echo "  See .claude/skills/series-forward.md and series-loop.md." >&2
   exit 1
 fi
 
@@ -115,15 +91,6 @@ if [ -n "$old_up" ]; then
     exit 1
   fi
   if [ -n "$upstream" ]; then
-    # Separate "git could not run there" from "the ancestry says no": both
-    # reach the `||` below, and reporting a regression for a path that is not
-    # a checkout sends the reader after the wrong thing. A remote name passed
-    # as the path is exactly that case.
-    git -C "$upstream" rev-parse --git-dir >/dev/null 2>&1 || {
-      echo "Error: $upstream is not a git checkout"
-      echo "  The third argument is a path to a duckdb/duckdb clone, not a remote."
-      exit 1
-    }
     git -C "$upstream" merge-base --is-ancestor "$old_up" "$new_up" || {
       echo "Error: forward green does not cover old green; coverage would regress"
       exit 1
@@ -132,26 +99,6 @@ if [ -n "$old_up" ]; then
     echo "Warning: no upstream clone given, coverage gate not verified"
   fi
 fi
-
-# Convergence: the coverage gate above asks whether the forward has vendored far
-# enough, which is a statement about how much upstream it reaches and none at all
-# about what it carries. This asks the other half -- whether the two branches
-# still hold the same package -- and prints it here so the operator confirms with
-# it on screen. It reports rather than refuses: the invariant's second half is
-# *explicable*, and whether a difference is explicable is a judgement no script
-# can make -- which is why this prints and the human decides.
-echo
-rc=0
-"$(dirname "$0")/series-converge.sh" "$S" --remote "$remote" --no-fetch || rc=$?
-# 1 is a divergence to read; 2 is the comparison not being available at all --
-# a series that started as `-fwd` has no `<S>-dev` to compare against, and the
-# script has already said so on its own.
-if [ "$rc" -eq 1 ]; then
-  echo
-  echo "  ^ read these before confirming. A swap does not resolve them: it makes"
-  echo "    them the serving branch's, on the lineage r-universe builds from."
-fi
-echo
 
 leases=()
 refspecs=()

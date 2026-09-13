@@ -151,23 +151,19 @@ groups <- list(
     globs = c("flavor*")
   ),
   list(
-    owner = "handbook/branches/mirrors",
-    globs = c("pull-config.sh")
-  ),
-  list(
     owner = "handbook/build/fast-paths",
     globs = c("install-*.sh")
   ),
   list(
-    owner = "handbook/architecture/glue/conventions",
+    owner = "handbook/build/configuration",
+    globs = c("setup-makeflags.R")
+  ),
+  list(
+    owner = "handbook/architecture/glue",
     globs = c("format.py", "python_helpers.py")
   ),
   list(
-    owner = "handbook/build/warnings",
-    globs = c("warnings.sh")
-  ),
-  list(
-    owner = "handbook/architecture/r-layer/conventions",
+    owner = "handbook/architecture/r-layer",
     globs = c("rethrow.R")
   ),
   list(

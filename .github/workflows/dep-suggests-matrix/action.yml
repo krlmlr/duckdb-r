@@ -7,8 +7,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Collect the suggested dependencies
-      id: set-matrix
+    - id: set-matrix
       run: |
         Rscript ./.github/workflows/dep-suggests-matrix/action.R
       shell: bash

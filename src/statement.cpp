@@ -36,7 +36,7 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 	auto stmtholder = make_uniq<RStatement>(std::move(stmt));
 
 	retlist.push_back({"type"_nm = StatementTypeToString(stmtholder->stmt->GetStatementType())});
-	retlist.push_back({"names"_nm = cpp11::as_sexp(stmtholder->stmt->GetNames())});
+	retlist.push_back({"names"_nm = cpp11::as_sexp(IdentifiersToStrings(stmtholder->stmt->GetNames()))});
 
 	cpp11::writable::strings rtypes;
 	rtypes.reserve(stmtholder->stmt->GetTypes().size());
@@ -116,10 +116,8 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 		signal_handler.HandleInterrupt();
 
 		if (res->HasError()) {
-			// `GetErrorObject()`, not `GetError()`: the latter is the formatted
-			// message, and rebuilding an `ErrorData` from it would report every
-			// failure as INVALID with no extra info.
-			rapi_error_with_context("rapi_prepare", res->GetErrorObject());
+			ErrorData error(res->GetError());
+			rapi_error_with_context("rapi_prepare", error);
 		}
 	}
 	auto stmt = conn->conn->Prepare(std::move(statements.back()));
@@ -129,10 +127,10 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 	signal_handler.Disable();
 
 	if (stmt->HasError()) {
-		ErrorData error(stmt->error);
+		ErrorData error(stmt->GetErrorObject());
 		rapi_error_with_context("rapi_prepare", error);
 	}
-	auto n_param = stmt->named_param_map.size();
+	auto n_param = stmt->GetParameterCount();
 	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs);
 }
 
@@ -144,7 +142,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		rapi_error_with_context("rapi_bind", "Invalid statement");
 	}
 
-	auto n_param = stmt->stmt->named_param_map.size();
+	auto n_param = stmt->stmt->GetParameterCount();
 
 	if (n_param == 0) {
 		rapi_error_with_context("rapi_bind", "`dbBind()` called but query takes no parameters");
@@ -198,42 +196,29 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	return out;
 }
 
-// Create the result data frame and allocate columns, without any values yet.
-// Note we cannot use cpp11's data frame here as it tries to calculate the number of rows itself,
-// but gives the wrong answer if the first column is another data frame. So we set the necessary
-// attributes manually.
-static cpp11::writable::list duckdb_r_allocate_df(const vector<LogicalType> &types, const vector<string> &names,
-                                                  idx_t nrows, const duckdb::ConvertOpts &convert_opts,
-                                                  const char *caller) {
-	cpp11::writable::list data_frame;
-	data_frame.reserve(types.size());
-
-	for (size_t col_idx = 0; col_idx < types.size(); col_idx++) {
-		cpp11::sexp varvalue = duckdb_r_allocate(types[col_idx], nrows, names[col_idx], convert_opts, caller);
-		duckdb_r_decorate(types[col_idx], varvalue, convert_opts);
-		data_frame.push_back(varvalue);
-	}
-
-	return data_frame;
-}
-
 SEXP duckdb::duckdb_execute_R_impl(MaterializedQueryResult *result, const duckdb::ConvertOpts &convert_opts,
                                    SEXP class_) {
 	// step 2: create result data frame and allocate columns
-	auto ncols = result->types.size();
+	auto ncols = result->GetTypes().size();
 	if (ncols == 0) {
 		return Rf_ScalarReal(0); // no need for protection because no allocation can happen afterwards
 	}
 
 	auto nrows = result->RowCount();
 
-	// Propagate the session's TimeZone so TIMESTAMP WITH TIME ZONE columns
-	// can be tagged with the timezone DuckDB used to format their value.
-	ConvertOpts local_convert_opts = convert_opts;
-	local_convert_opts.session_time_zone = result->client_properties.time_zone;
+	// Note we cannot use cpp11's data frame here as it tries to calculate the number of rows itself,
+	// but gives the wrong answer if the first column is another data frame. So we set the necessary
+	// attributes manually.
+	cpp11::writable::list data_frame;
+	data_frame.reserve(ncols);
 
-	cpp11::writable::list data_frame =
-	    duckdb_r_allocate_df(result->types, result->names, nrows, local_convert_opts, "duckdb_execute_R_impl");
+	for (size_t col_idx = 0; col_idx < ncols; col_idx++) {
+		cpp11::sexp varvalue =
+		    duckdb_r_allocate(result->GetTypes()[col_idx], nrows, result->GetNames()[col_idx].GetIdentifierName(),
+		                      convert_opts, "duckdb_execute_R_impl");
+		duckdb_r_decorate(result->GetTypes()[col_idx], varvalue, convert_opts);
+		data_frame.push_back(varvalue);
+	}
 
 	// step 3: set values from chunks
 	idx_t dest_offset = 0;
@@ -241,8 +226,8 @@ SEXP duckdb::duckdb_execute_R_impl(MaterializedQueryResult *result, const duckdb
 		D_ASSERT(chunk.ColumnCount() == ncols);
 		D_ASSERT(chunk.ColumnCount() == (idx_t)Rf_length(data_frame));
 		for (size_t col_idx = 0; col_idx < chunk.ColumnCount(); col_idx++) {
-			duckdb_r_transform(chunk.data[col_idx], data_frame[col_idx], dest_offset, chunk.size(), local_convert_opts,
-			                   result->names[col_idx]);
+			duckdb_r_transform(chunk.data[col_idx], data_frame[col_idx], dest_offset, chunk.size(), convert_opts,
+			                   result->GetNames()[col_idx].GetIdentifierName());
 		}
 		dest_offset += chunk.size();
 	}
@@ -252,7 +237,7 @@ SEXP duckdb::duckdb_execute_R_impl(MaterializedQueryResult *result, const duckdb
 	// Convert to SEXP, finalize length
 	(void)(SEXP)data_frame;
 
-	SET_NAMES(data_frame, StringsToSexp(result->names));
+	SET_NAMES(data_frame, StringsToSexp(IdentifiersToStrings(result->GetNames())));
 	duckdb_r_df_decorate(data_frame, nrows, class_);
 
 	// at this point data_frame is fully allocated and the only protected SEXP
@@ -295,7 +280,7 @@ bool FetchArrowChunk(ChunkScanState &scan_state, ClientProperties options, Appen
 	if (count == 0) {
 		return false;
 	}
-	ArrowConverter::ToArrowSchema(&arrow_schema, scan_state.Types(), scan_state.Names(), options);
+	ArrowConverter::ToArrowSchema(&arrow_schema, scan_state.Types(), IdentifiersToStrings(scan_state.Names()), options);
 	batches_list.PrepAppend();
 	batches_list.Append(cpp11::safe[Rf_eval](batch_import_from_c, arrow_namespace));
 	return true;
@@ -332,7 +317,8 @@ bool FetchArrowChunk(ChunkScanState &scan_state, ClientProperties options, Appen
 	}
 
 	SET_LENGTH(batches_list.the_list, batches_list.size);
-	ArrowConverter::ToArrowSchema(&arrow_schema, result->types, result->names, result->client_properties);
+	ArrowConverter::ToArrowSchema(&arrow_schema, result->GetTypes(), IdentifiersToStrings(result->GetNames()),
+	                              result->client_properties);
 	cpp11::sexp schema_arrow_obj(cpp11::safe[Rf_eval](schema_import_from_c, arrow_namespace));
 
 	// create arrow::Table
@@ -447,7 +433,7 @@ bool FetchArrowChunk(ChunkScanState &scan_state, ClientProperties options, Appen
 }
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result) {
-	ScopedInterruptHandler signal_handler(stmt->stmt->context);
+	ScopedInterruptHandler signal_handler(stmt->stmt->TryGetContext());
 
 	auto generic_result = stmt->stmt->Execute(stmt->parameters, allow_stream_result);
 
@@ -456,9 +442,8 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	signal_handler.Disable();
 
 	if (generic_result->HasError()) {
-		// The error object rather than its message, so that the exception type
-		// and extra info survive to the caller -- see rapi_prepare() above.
-		rapi_error_with_context("rapi_execute", generic_result->GetErrorObject());
+		ErrorData error(generic_result->GetError());
+		rapi_error_with_context("rapi_execute", error);
 	}
 
 	if (convert_opts.arrow == ConvertOpts::ArrowConversion::ENABLED) {
@@ -467,7 +452,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		rqry_eptr_t query_resultsexp(query_result.release());
 		return query_resultsexp;
 	} else {
-		D_ASSERT(generic_result->type == QueryResultType::MATERIALIZED_RESULT);
+		D_ASSERT(generic_result->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
 		auto result = (MaterializedQueryResult *)generic_result.get();
 
 		// Avoid rchk warning, it sees QueryResult::~QueryResult() as an allocating function

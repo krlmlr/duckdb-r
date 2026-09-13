@@ -38,7 +38,7 @@ bool RType::operator==(const RType &rhs) const {
 RType RType::FACTOR(cpp11::strings levels) {
 	RType out = RType(RTypeId::FACTOR);
 	for (R_xlen_t level_idx = 0; level_idx < levels.size(); level_idx++) {
-		out.aux_.push_back(std::make_pair(levels[level_idx], RType()));
+		out.aux_.push_back(std::make_pair(Identifier(std::string(levels[level_idx])), RType()));
 	}
 	return out;
 }
@@ -46,9 +46,9 @@ RType RType::FACTOR(cpp11::strings levels) {
 Vector RType::GetFactorLevels() const {
 	D_ASSERT(id_ == RTypeId::FACTOR);
 	Vector duckdb_levels(LogicalType::VARCHAR, aux_.size());
-	auto levels_ptr = FlatVector::GetData<string_t>(duckdb_levels);
+	auto levels_ptr = FlatVector::GetDataMutable<string_t>(duckdb_levels);
 	for (size_t level_idx = 0; level_idx < aux_.size(); level_idx++) {
-		levels_ptr[level_idx] = StringVector::AddString(duckdb_levels, aux_[level_idx].first);
+		levels_ptr[level_idx] = StringVector::AddString(duckdb_levels, aux_[level_idx].first.GetIdentifierName());
 	}
 	return duckdb_levels;
 }
@@ -321,6 +321,7 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		return "POSIXct";
 	case LogicalTypeId::DATE:
 		return "Date";
@@ -431,7 +432,7 @@ double RIntegralType::DoubleCast<>(hugeint_t val) {
 }
 
 string_t RStringSexpType::Convert(SEXP val) {
-	return string_t(CHAR(val));
+	return string_t((char *)CHAR(val));
 }
 
 bool RStringSexpType::IsNull(SEXP val) {

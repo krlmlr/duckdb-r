@@ -1,6 +1,10 @@
 #include "duckdb/common/types/geometry_crs.hpp"
 #include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/vector/array_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/function/scalar/variant_utils.hpp"
 #include "rapi.hpp"
 #include "typesr.hpp"
@@ -18,7 +22,7 @@ static void VectorToR(const Vector &src_vec, size_t count, void *dest, uint64_t 
 	auto &mask = FlatVector::Validity(src_vec);
 	auto dest_ptr = ((DEST *)dest) + dest_offset;
 	for (size_t row_idx = 0; row_idx < count; row_idx++) {
-		dest_ptr[row_idx] = !mask.RowIsValid(row_idx) ? na_val : static_cast<DEST>(src_ptr[row_idx]);
+		dest_ptr[row_idx] = !mask.RowIsValid(row_idx) ? na_val : src_ptr[row_idx];
 	}
 }
 
@@ -34,6 +38,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::SMALLINT:
 	case LogicalTypeId::USMALLINT:
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		return INTSXP;
 	case LogicalTypeId::UINTEGER:
@@ -52,6 +57,7 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::DATE:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIME_TZ:
@@ -182,6 +188,11 @@ double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(int64_t timestamp) {
 	return static_cast<double>(timestamp) / Interval::NANOS_PER_SEC;
 }
 
+template <>
+double ConvertTimestampValue<LogicalTypeId::TIMESTAMP_TZ_NS>(int64_t timestamp) {
+	return ConvertTimestampValue<LogicalTypeId::TIMESTAMP_NS>(timestamp);
+}
+
 template <LogicalTypeId LT>
 void ConvertTimestampVector(const Vector &src_vec, size_t count, const SEXP dest, uint64_t dest_offset) {
 	auto src_data = FlatVector::GetData<int64_t>(src_vec);
@@ -205,6 +216,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::HUGEINT:
@@ -268,7 +280,9 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -277,24 +291,6 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 			}
 		} else {
 			// Conversion happens in the R layer
-			Rf_setAttrib(dest, RStrings::get().tzone_sym, RStrings::get().UTC_str);
-		}
-		break;
-	case LogicalTypeId::TIMESTAMP_TZ:
-		// TIMESTAMP WITH TIME ZONE stores microseconds since the UTC epoch.
-		// Prefer the session's TimeZone (settable via `SET TimeZone = ...` with
-		// the ICU extension) so the displayed clock matches DuckDB's own
-		// rendering, and only fall back to `timezone_out` on paths that
-		// decorate without a captured session timezone (e.g. value-at-a-time
-		// conversion through RApiTypes::ValueToSexp()).
-		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
-		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
-			const string &tz =
-			    convert_opts.session_time_zone != "" ? convert_opts.session_time_zone : convert_opts.timezone_out;
-			if (tz != "") {
-				Rf_setAttrib(dest, RStrings::get().tzone_sym, StringsToSexp({tz}));
-			}
-		} else {
 			Rf_setAttrib(dest, RStrings::get().tzone_sym, RStrings::get().UTC_str);
 		}
 		break;
@@ -320,7 +316,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 
 		for (size_t i = 0; i < child_types.size(); i++) {
 			const auto &child_name = child_types[i].first;
-			names.push_back(child_name);
+			names.push_back(child_name.GetIdentifierName());
 
 			const auto &child_type = child_types[i].second;
 			SEXP child_dest = VECTOR_ELT(dest, i);
@@ -380,7 +376,7 @@ static void TransformArrayVector(const Vector &src_vec, const SEXP dest, idx_t d
 	for (size_t row_idx = 0; row_idx < n; row_idx++) {
 		size_t offset = (row_idx * array_size);
 		size_t end = offset + array_size;
-		child_vector.Slice(ArrayVector::GetEntry(src_vec), offset, end);
+		child_vector.Slice(ArrayVector::GetChild(src_vec), offset, end);
 		duckdb_r_transform(child_vector, buffer, 0, array_size, convert_opts, name);
 
 		// Calculate destination index for R column-major matrix layout
@@ -426,7 +422,7 @@ static void TransformArrayVector(const Vector &src_vec, const SEXP dest, idx_t d
 void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offset, idx_t n,
                         const duckdb::ConvertOpts &convert_opts, const string &name) {
 	if (src_vec.GetType().GetAlias() == R_STRING_TYPE_NAME) {
-		ptrdiff_t sexp_header_size = (const_data_ptr_t)DATAPTR_RO(R_BlankString) - (const_data_ptr_t)R_BlankString;
+		ptrdiff_t sexp_header_size = (data_ptr_t)DATAPTR_RO(R_BlankString) - (data_ptr_t)R_BlankString;
 
 		auto child_ptr = FlatVector::GetData<uintptr_t>(src_vec);
 		auto &mask = FlatVector::Validity(src_vec);
@@ -457,6 +453,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	case LogicalTypeId::SMALLINT:
 		VectorToR<int16_t, uint32_t>(src_vec, n, INTEGER_POINTER(dest), dest_offset, NA_INTEGER);
 		break;
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		VectorToR<int32_t, uint32_t>(src_vec, n, INTEGER_POINTER(dest), dest_offset, NA_INTEGER);
 		break;
@@ -474,6 +471,11 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		break;
 	case LogicalTypeId::TIMESTAMP_NS:
 		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_NS>(src_vec, n, dest, dest_offset);
+		std::call_once(nanosecond_coercion_warning, Rf_warning,
+		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
+		break;
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_TZ_NS>(src_vec, n, dest, dest_offset);
 		std::call_once(nanosecond_coercion_warning, Rf_warning,
 		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;
@@ -497,7 +499,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 			if (!mask.RowIsValid(row_idx)) {
 				dest_ptr[row_idx] = NA_REAL;
 			} else {
-				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].micros) / Interval::MICROS_PER_SEC;
+				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].value) / Interval::MICROS_PER_SEC;
 			}
 		}
 		SET_CLASS(dest, RStrings::get().difftime_str);
@@ -515,7 +517,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 			if (!mask.RowIsValid(row_idx)) {
 				dest_ptr[row_idx] = NA_REAL;
 			} else {
-				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].time().micros) / Interval::MICROS_PER_SEC;
+				dest_ptr[row_idx] = static_cast<double>(src_data[row_idx].time().value) / Interval::MICROS_PER_SEC;
 			}
 		}
 		SET_CLASS(dest, RStrings::get().difftime_str);
@@ -629,7 +631,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 	}
 	case LogicalTypeId::LIST: {
 		// figure out the total and max element length of the list vector child
-		const auto src_data = ListVector::GetData(src_vec);
+		const auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 		auto &child_type = ListType::GetChildType(src_vec.GetType());
 		Vector child_vector(child_type, nullptr);
 
@@ -639,7 +641,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 				SET_ELEMENT(dest, dest_offset + row_idx, R_NilValue);
 			} else {
 				const auto end = src_data[row_idx].offset + src_data[row_idx].length;
-				child_vector.Slice(ListVector::GetEntry(src_vec), src_data[row_idx].offset, end);
+				child_vector.Slice(ListVector::GetChild(src_vec), src_data[row_idx].offset, end);
 
 				// transform the list child vector to a single R SEXP
 				cpp11::sexp list_element =
@@ -663,14 +665,14 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		for (size_t i = 0; i < children.size(); i++) {
 			const auto &struct_child = children[i];
 			SEXP child_dest = VECTOR_ELT(dest, i);
-			duckdb_r_transform(*struct_child, child_dest, dest_offset, n, convert_opts, name);
+			duckdb_r_transform(struct_child, child_dest, dest_offset, n, convert_opts, name);
 		}
 
 		break;
 	}
 
 	case LogicalTypeId::MAP: {
-		auto src_data = ListVector::GetData(src_vec);
+		auto src_data = FlatVector::GetData<list_entry_t>(src_vec);
 
 		auto &key_type = MapType::KeyType(src_vec.GetType());
 		auto &value_type = MapType::ValueType(src_vec.GetType());
@@ -721,7 +723,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 
 	case LogicalTypeId::VARIANT: {
 		RecursiveUnifiedVectorFormat format;
-		Vector::RecursiveToUnifiedFormat(const_cast<Vector &>(src_vec), n, format);
+		Vector::RecursiveToUnifiedFormat(src_vec, format);
 		UnifiedVariantVectorData variant_data(format);
 
 		for (idx_t row_idx = 0; row_idx < n; row_idx++) {
