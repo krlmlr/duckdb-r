@@ -60,11 +60,6 @@ Ignore a forward series
 whose green is an ancestor of its base series' green;
 that is cutover litter pending deletion
 (the base moves on after cutover, so equality cannot be the test).
-`<S>-rc-dev` has no `-build` beside it and is not a series of its own:
-it is the unflavored mirror of `<S>-dev`, derived commit for commit
-([`series-rc/SKILL.md`](series-rc)).
-Nor are `<S>-alpha` and `<S>-rc-alpha`, each one stamp commit on a green commit or its rc twin
-([`series-alpha/SKILL.md`](series-alpha)).
 
 **All four refs exist from day one, equal, and green contains the flavor
 change.**
@@ -99,8 +94,7 @@ ADVANCE / WAIT / RETRY `<sha>` / REPAIR `<sha>` / IDLE,
 plus a CUTOVER line for a forward series that has caught up —
 a suggestion for a human, stage 6,
 and an UNSERVED block for an upstream release line no series covers,
-saying whether `series.yaml` declares its flavor yet,
-and the one the report ends with),
+the other suggestion for a human, and the one the report ends with),
 `scripts/series-advance.sh <S>`
 (stages 3 and 5 — fast-forwards `-green`,
 sets `-build-base` to the vendored-SHA match,
@@ -146,20 +140,7 @@ if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
   git fetch --unshallow origin
 fi
 git fetch --prune --tags origin
-git fetch -q upstream main
 ```
-
-**Both repositories, because `main` is one of them.**
-The series refs live in the fork and `main` belongs to the canonical
-repository, which the fork mirrors on the Pull app's six-hour cycle
-([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-Every read of `main` a firing makes takes the canonical ref:
-stage 4's port and its tooling sync,
-and the flavor declaration stage 7 reports on.
-A checkout that cannot reach it falls back to whatever the mirror last copied,
-and the scripts say so when they do.
-`upstream` is the remote name, the same one `--canonical` takes everywhere;
-add it where a checkout has none.
 
 `--depth` implies `--single-branch`, and a checkout made that way
 sees no `*-build` refs at all —
@@ -189,11 +170,11 @@ list the most recent `each-rcc` runs.
 If that answers, the firing is on the run path for every stage below.
 If it does not — no such access from this session at all —
 the firing falls back to the `rcc2` store,
-which still works, inside its 180-day window,
+which still works, inside its 30-day window,
 but is now an **emergency route** rather than a warm copy:
-the sweep that filled its gaps is no longer a workflow at all
-(duckdb/duckdb-r#2815),
-so a firing that needs the store complete cannot get it, and says so (below).
+`rcc-logs.yaml` is dispatch-only,
+so a firing that needs the store complete has to ask for it
+and read the answer on a later pass (below).
 Record which one served: the store exists to work around a log access
 problem that may have passed, and retiring it waits on firings
 that report they never had to open it.
@@ -334,7 +315,8 @@ between being pushed and being repaired.
 Past that the leg's **job log** carries the same content
 inline — `::group::<sha>` opens the commit's section,
 its log is printed inside, and `<sha>: <state> (<n>s, exit <rc>)` closes it —
-and GitHub keeps job logs far longer than the artifact.
+and GitHub keeps job logs far longer than either the artifact
+or the store's 30-day window.
 Which shard holds which commit is the run's `each-plan` artifact (7 days),
 or the group markers themselves.
 
@@ -361,39 +343,34 @@ or the run is there and its results are not
 (a leg that died before it uploaded anything).
 Nothing else in this stage changes; the bytes are the same either way.
 
-**The store is an emergency route *for a firing*, and it is not kept warm.**
+**The store is an emergency route, and it is not kept warm.**
 One writer is still automatic, and it covers almost all of it:
 a leg publishes its own verdict seconds after deciding a commit.
-That publish is not a copy kept for this stage's benefit:
-CI plans and resumes from the store and from nothing else
-(`scripts/rcc-decided.sh`),
-so the branch is load-bearing even in a cycle where no firing opens it,
-and a steady trickle of pushes to `rcc2` is the system working
-rather than a retired branch still ticking.
 Everything else has been retired in the loop's direction of travel —
 the per-run fan-in, which reconciled onto the branch
 whatever a leg could not publish,
 and the periodic sweep, `rcc-logs.yaml` ticking every 30 minutes.
 Both were copying what a firing now reads at the source.
-So the gap left for the sweep is the leg that never published:
+So the gap left for the dispatch is the leg that never published:
 a run cancelled whole, or a push that failed.
 
-That gap is an operator's to close, not a firing's.
-`rcc-logs.yaml` went with the rest of the `rcc2` workflows (duckdb/duckdb-r#2815),
-so the sweep is now [`scripts/rcc-logs.sh`](/scripts/rcc-logs.sh) run by hand,
-from a checkout holding the `-dev` refs and staged onto the branch with
-[`scripts/rcc-publish.sh`](/scripts/rcc-publish.sh),
-the way consolidation already runs.
-No firing can ask for it, whatever its Actions access,
-so a firing that needs the copy complete is reading one nobody is refreshing —
+Reaching that gap means asking for the sweep —
+through whatever Actions access the firing has,
+the same routes stage 2 already reads runs through:
+the GitHub tools' run-a-workflow call on `rcc-logs.yaml` at `main`,
+or `gh workflow run rcc-logs.yaml --ref main` where a `gh` exists,
+or the *Run workflow* button.
+A firing with no Actions access at all cannot dispatch it either,
+and is reading a copy nobody is refreshing —
 which is worth saying plainly in the report rather than working around.
 
-**Report it and move on.** Nothing in the firing is worth blocking on it:
+**Dispatch it and move on.** A run takes 2–13 minutes,
+and nothing in the firing is worth blocking on it:
 finish the stages that do not depend on the missing record,
-say in the report which record is missing and what it was for,
-and let a later firing read the result once an operator has swept.
-A record still absent after a sweep that completed
-is a real absence and not a stale copy —
+say in the report that the sweep was dispatched and what it was for,
+and let the next firing read the result.
+A record that is still absent on that next pass,
+after a sweep that completed, is a real absence and not a stale copy —
 which is the one question the old schedule could never answer.
 
 `series-check.sh` reads the store and only the store.
@@ -420,8 +397,8 @@ The run list says which kind of waiting it is:
 The store answers this one badly, which is worth the run list even on a firing
 whose verdicts came from the store:
 an absent record can equally mean a queued run, a lost one,
-or a sweep that was never run —
-and with no sweep on a schedule the last of those is the common case,
+or a sweep that was never dispatched —
+and with `rcc-logs.yaml` off its schedule the last of those is the common case,
 not the rare one. The run list separates them; the store's tip cannot.
 
 Only when none of those explains it,
@@ -457,8 +434,7 @@ is reading; they are the same bytes:
 | `Changes detected in workflow_dispatch build` | style / roxygen drift | fix formatting at origin |
 | `Error: R CMD check found WARNINGs` / `ERRORs`, with the `❯ checking …` headers above it naming which checks | `R CMD check --as-cran` is unhappy about the tree, or about the environment CI built it in | read the named checks; fix at origin, or on `main` when the cause is the job's own setup |
 | a gate reached out and was refused — `cannot open URL`, `SSL connect error`, a refused or reset connection — while the tests themselves passed | infra, not the tree | rerun the commit: `retry-<S>-dev` (below) |
-| the leg's record names a failed stage (`"failed_stages":["install"]`) and no rule above matched | the stage failed on its merits — most often an `install` that a glue call site this series' engine no longer offers stopped | fix the glue at origin; never a rerun |
-| none of the above, no test phase, and no failed stage in the record | cancelled or infra | rerun the commit: `retry-<S>-dev` (below) |
+| none of the above and no test phase | cancelled or infra | rerun the commit: `retry-<S>-dev` (below) |
 
 Never classify by absence of a marker:
 `"Job is waiting for a hosted runner"` appears in every log
@@ -757,23 +733,6 @@ The note is appended to the newest commit of the chunk before the push.
 Writing it afterwards costs an amend, a force-push,
 and one `each-rcc` run spent on a commit about to be re-minted.
 
-**An empty buffer mints no vendor commit, and the port stage takes the note
-instead.**
-A firing that finds every buffer level with upstream consumes nothing,
-so stage 5 has no chunk and refuses the note outright —
-while stage 4 still mints the ports and the tooling sync,
-which are then the only `-dev` commits the firing produces.
-`scripts/series-port.sh` takes `--dev-note <file>`
-with the same meaning and the same one-commit target:
-
-```sh
-scripts/series-port.sh <S> --apply --dev-note <file>
-```
-
-Which of the two carries it is whichever one mints;
-the finding goes on the newest `-dev` commit of the firing either way,
-and neither stage is worth an amend after its own push.
-
 **What a fix may be is the handbook's rule, not this skill's.**
 A compiler-warning fix is bound by
 [`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md),
@@ -843,55 +802,6 @@ and the commit that reaches `-dev` from it
 arrives broken again on exactly the platform the patch was for.
 Commit it onto `<S>-build` as well, in the same firing.
 
-**The entry a firing did not write is carried by stage 4, not by hand.**
-Stage 4's port brings whole `main` commits onto `-dev`,
-`patch/` files included,
-so an entry born as a pull request against `main`
-reaches every `-dev` without any firing deciding to put it there —
-and used to reach no buffer at all.
-`scripts/series-port.sh --apply` now closes that as part of porting,
-through `scripts/series-patch-sync.sh <S>`,
-which is a read-only report on its own.
-The drift it exists to prevent is quiet
-while upstream leaves the patched file alone,
-because the buffer is then internally consistent
-and its commits carry no delta for that file;
-it bites the first time upstream touches it,
-and the fix is reverted on `-dev`
-by a commit that looks like an ordinary vendor.
-
-**The carry decides by test-applying, never by the file list.**
-A buffer runs ahead of `main`,
-so an entry `main` needs may not fit the engine the buffer has vendored,
-and committing it there regardless breaks the next vendor run
-(`vendor-one.sh`'s `PATCH BROKEN` exit) rather than helping anything.
-Three answers, three situations:
-*carry* applies cleanly and is taken with its effect on the tree;
-*satisfied* reverse-applies, so only the entry is taken,
-to keep the two stacks named alike;
-*stale* is neither — upstream moved the code out from under it,
-and it reaches the buffer if and when the code it answers does.
-Two shapes are reported and never carried, because both are judgement.
-A candidate whose files an entry the buffer has and `-dev` lacks
-also touches is a **supersession**,
-and applying both is how the next vendor run breaks.
-An entry both stacks carry in different versions is **edited**:
-`main` changed it in place and the port brought the new version to `-dev`,
-while the buffer's tree still carries the old version's effect.
-Test-applying the new one against that tree answers for neither version,
-and it would read as *stale*;
-trading one for the other is a reverse and an apply,
-and whether the new version fits the buffer's engine is a stage 3 question.
-`0009-Remove-stderr-for-zstd` is the standing example.
-
-`scripts/series-check.sh` still prints a PATCH DRIFT line per series,
-naming what the two stacks differ by: an entry only `-dev` has,
-one only `-build` has — a renamed entry is one of each —
-and one both have in different versions.
-It is the backstop, not the mechanism:
-what it reports after a port is what the carry deliberately declined,
-which is a stage 3 repair like any patch this stage writes.
-
 ### 4. Port from `main`
 
 The goal is identity, not curation:
@@ -901,30 +811,6 @@ are byte-identical to `main`'s.
 CI reads workflows and scripts from the branch it checks,
 so this is what puts a fix into effect —
 never park a tooling change to wait for a forward.
-
-**Every ref of the series owes that identity, `<S>-build` included.**
-A workflow fires from the branch it sits on,
-so a ref nobody ports runs the tooling of the day it was seeded,
-and a push filter written back then decides what fires today.
-The buffer takes no *ports* — its line is upstream commits
-and the glue they need — but its **tooling is synced**,
-and `series-port.sh` does it in the same run:
-one commit appended to `<S>-build` when its tooling differs from `main`'s.
-This is not a precaution. `v1.4-andium-build` still carried a
-2026-03-26 `R-CMD-check.yaml` whose release pattern matches
-the buffer's own name, so pushes to it started the template check
-and `R-CMD-check-status.yaml` stamped an `rcc` status
-on a commit no `each-rcc` leg had decided —
-a status with no record, on a ref the model calls untested.
-
-The sync commit vendors nothing,
-so the consumption anchor and the vendored-SHA scans look past it by subject,
-and stage 5 skips it rather than replaying it onto `-dev`,
-whose tooling this stage has already made `main`'s.
-Replaying it held only until `main` moved again.
-The sync's diff runs from the buffer's older tooling,
-so the pick conflicted, or put back on `-dev` what `main` had removed,
-and a sync the anchor never passes was offered again on every firing.
 
 ```sh
 scripts/series-port.sh <S>                  # list candidates + identity check
@@ -1199,12 +1085,6 @@ so the next firing simply reaches the same stop.
 Starting a fresh run beside a stopped one is refused,
 because it would replay over a resolution somebody made.
 
-**A carry into the glue that applies cleanly is compiled before it is kept.**
-The three-way merge keeps both the twin's hunk and the buffer's own version of the same adaptation
-when their context differs, which duplicates code rather than conflicting.
-So `series-advance.sh` syntax-checks the glue after such a carry
-and stops the same way, with the carry staged and the failing files named.
-
 **A resolution that comes out empty is a resolution.**
 The buffer commit's content reached `-dev` by another route —
 a buffer whose flavor rename still names the path a port has since moved,
@@ -1218,23 +1098,8 @@ and every verdict that run reaches is readable from it
 as soon as the leg has written it —
 there is nothing to wait for a harvest for.
 The store's own writer (the leg's publish;
-`rcc-logs.sh` only when an operator runs it)
+`rcc-logs.yaml` only when dispatched)
 just fills the fallback copy behind it.
-
-**Realign the rc strand, last.**
-A series with an `<S>-rc-dev` gets `scripts/series-rc.sh <S> --push`
-after every write this firing made to `<S>-dev`, here or in stages 2 and 4,
-so the unflavored strand never lags the one it mirrors
-([`series-rc/SKILL.md`](series-rc)).
-Its own reds are not repaired on the rc strand:
-a fix goes to `<S>`, and the next realignment carries it.
-
-**Then realign the alpha strand.**
-A series with an `<S>-alpha` gets `scripts/series-alpha.sh <S> --push` on every firing, after its rc strand,
-because it moves when upstream publishes an alpha as well as when `<S>-green` does
-([`series-alpha/SKILL.md`](series-alpha)).
-An alpha whose commit green has not vendored yet writes nothing, and one with a gap in its extensions stops the script;
-both go into the report, and neither is repaired here.
 
 ### 6. Read the forwarding, and suggest a cutover — never perform one
 
@@ -1451,51 +1316,10 @@ so a release line that has none is absent from every stage above
 rather than late in one, and absence raises nothing anywhere.
 The report is the only place it is visible.
 
-**Say it at the top as well, and say what it costs.**
-The block goes last because that is where it cannot be lost among the
-per-series verdicts, but a report whose only mention of a newborn line is
-its final paragraph is one that can be closed after the first screen.
-Open the report with it too — one line naming the branch — and carry the
-number that makes it urgent rather than merely true:
-`scripts/series-cut.sh <S> --upstream <clone> --check` prints the backlog,
-the commits of that line nothing here has vendored, and it grows every day
-the line stays unopened. Opening v2.0 a week after the cut left 193 to walk;
-the same line a fortnight later was past a thousand.
-
-**And `main`'s version is already wrong, whatever is decided about the line.**
-Upstream starts declaring the *next* line the week it cuts a branch, so the
-series tracking upstream `main` stops previewing the line its version names —
-`scripts/preview-prefix.sh --check` on either strand says so and exits 1.
-That is owed even if the new series is deliberately not opened yet, which makes
-it the one part of an UNSERVED report that is not a suggestion.
-Report it in the same block
-([`releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
-
-**Declaring the flavor is a PR the firing may open. Cutting the refs is not.**
-The two halves of an opening are no longer the same kind of work.
-Naming the line — `v2.1-<codename>` is served as `duckdb.2.1.dev` —
-is one entry in [`scripts/series.yaml`](/scripts/series.yaml),
-reviewable on its own and reversible by closing the PR.
-Cutting the four refs moves commits, and stays
-`series-open/SKILL.md`'s job and a human's, exactly as a cutover is (stage 6).
-So the firing opens the declaration PR and reports the rest:
-the line, the fork point, the backlog and the skill.
-
-**Check for the PR before opening one, and read the script's own answer first.**
-`series-check.sh` says on the UNSERVED line whether `series.yaml` already
-names the flavor. *Declared already* means the PR merged and only the refs
-are missing — say so and open nothing. *Undeclared* is not yet a licence:
-a PR may be open, or may have been closed on purpose, and a firing that
-skips the search files the same PR every time it runs. So search `main`'s
-PRs touching `scripts/series.yaml` for the flavor name, **open and closed
-both**, and:
-
-- an open one — name it in the report, add nothing, open nothing;
-- a closed one — the answer was no; report the line and leave it closed;
-- none — open it, one entry, against `main`, titled for the flavor.
-
-A firing that cannot search says so and opens nothing:
-duplicating a declaration is worse than deferring one.
+**Reported, never acted on.**
+Opening the series is `series-open/SKILL.md`'s job, and a human's,
+exactly as a cutover is (stage 6).
+The firing names the line, the fork point and the skill, and stops there.
 
 **A reading that failed is reported as one.**
 When the script says it could not read the upstream branches,
@@ -1504,9 +1328,8 @@ otherwise a question that went unanswered
 reads exactly like an answer of "nothing new".
 
 **A due cutover is reported the same way, above the `UNSERVED` block.**
-It is the one finding a firing may not act on at all —
-an UNSERVED line at least has its declaration PR —
-so it is the one it has to hand over completely:
+The two are the loop's only findings a firing may not act on,
+so they are the two it has to hand over completely:
 stage 6's block, filled in, every firing `series-check.sh` prints a
 `CUTOVER` line, and for the same reason —
 a decision nobody can take from the report alone
@@ -1585,8 +1408,8 @@ the one case where a decided commit legitimately changes state.
 **Dropping a result by hand is a store-side operation**,
 and only concerns a firing that is reading the store:
 remove `runs2.d/<xx>/<sha>.ndjson` and `logs2.d/<xx>/<sha>.log`,
-then have an operator run `rcc-logs.sh` to re-derive both from the fresh status,
-provided the commit is still inside the store's 180-day window.
+then dispatch `rcc-logs.yaml` to re-derive both from the fresh status,
+provided the commit is still inside the store's 30-day window.
 The removal alone no longer does anything:
 nothing sweeps on a schedule to notice the gap,
 so a deletion left unaccompanied is a record simply gone.
@@ -1636,86 +1459,6 @@ is what carries the automatic path into a forward series.
 - **Restore whole directories, not touched files**,
   when replaying over a base that owns them
   (`.github` in particular).
-- **Every buffer still keeps cpp11 where it kept it before #2649**,
-  so every vendor commit stage 5 replays conflicts on
-  `src/Makevars` and `src/Makevars.win`.
-  `scripts/rconfigure.py` is tooling and the buffer sync keeps it level with
-  `main`, but `src/Makevars.in` — the template it generates those two from —
-  is not, and neither is the vendored cpp11 tree it names.
-  So a buffer generates `-Iinclude -I../inst/include` while `-dev` carries
-  `-Iinclude -Ivendor`, and the one `PKG_CPPFLAGS` line collides on every pick.
-  Resolve toward `-dev`: the buffer's own next vendor run rewrites the file
-  anyway, and `-dev` is where the cpp11 headers actually are.
-  `git rerere` settles the repeats within one clone and a firing runs in a
-  fresh one, so the cost is two resolutions per replayed vendor commit, per
-  firing, on every series (`main-build`, `main-fwd-build`,
-  `v1.4-andium-build`, `v1.5-variegata-build`, `v2.0-cyanoptera-build`
-  all carry `inst/include/cpp11`, 2026-09-27).
-  Ending it is re-vendoring cpp11 onto each buffer
-  (`.claude/skills/vendor-cpp11/SKILL.md`), not a wider tooling sync:
-  moving the include path without moving the headers
-  would break the vendor gate's glue compile on the buffer.
-- **A `.dd` file naming a header the flavor renamed stops the build
-  before the first compile**, and no gate above `install` ever runs:
-  `src/include/deps.mk` includes `src/*.dd`, so
-  `include/duckdb_types.hpp` on a tree carrying
-  `include/duckdb_1_5_dev_types.hpp` is
-  "No rule to make target 'include/duckdb_types.hpp', needed by 'cpp11.o'".
-  The `.dd` files sit outside `scripts/flavor.patch`, the rename surface,
-  so a port that takes a `main` commit touching one writes the mainline
-  name onto a flavored tree, and a later reflavor does not reach it.
-  `flavor.sh` and `reflavor.sh` now normalize them, which leaves the
-  branches seeded before that: check with
-
-  ```sh
-  git grep -n 'include/duckdb_types\.hpp' <ref> -- 'src/*.dd'
-  ```
-
-  and fold the corrected file into the oldest commit above green.
-  `v1.5-variegata-fwd` was seeded this way and its whole first chunk
-  would have come back red (2026-09-28).
-- **`src/cpp11.cpp` conflicts on every port that adds an entry point,
-  and the answer is to regenerate it rather than to merge it.**
-  `cpp11::cpp_register()` writes both halves of the binding
-  from `DESCRIPTION:Package`,
-  so every flavor spells the same entry point differently —
-  `_duckdb_rapi_execute` on `main`,
-  `_duckdb_dev_rapi_execute`, `_duckdb_1_5_dev_rapi_execute`,
-  `_duckdb_2_0_dev_rapi_execute` on the series —
-  and the whole `CallEntries[]` table therefore differs from `main`'s
-  line for line.
-  A ported commit that registers a new function conflicts there on every
-  series, and hand-merging it is 150 aligned lines of generated code
-  for the sake of one entry.
-  Check out the series' side, regenerate, and stage both halves:
-
-  ```sh
-  git checkout HEAD -- src/cpp11.cpp
-  R -q -e 'cpp11::cpp_register()'
-  git add src/cpp11.cpp R/cpp11.R
-  ```
-
-  `R/cpp11.R` usually merges cleanly and is wrong when it does —
-  it carries `main`'s unflavored `.Call()` name — so it is regenerated
-  and staged with the other half whether or not git flagged it.
-  `fix(flavor): Check that both halves of the cpp11 binding carry the
-  flavor's prefix` (#2832) is what catches a miss, one CI cycle later.
-  The generator needs the `krlmlr/cpp11` fork, because CRAN's writes
-  `_duckdb.2.0.dev_rapi_execute` for a flavor carrying dots, which is not
-  a C identifier, and it needs `decor`:
-
-  ```sh
-  R -q -e 'install.packages(c("cpp11", "decor"), repos = c("https://krlmlr.r-universe.dev", getOption("repos")))'
-  ```
-
-  `git rerere` does not absorb the repeats across series the way it does
-  for `src/Makevars`: each flavor is its own preimage,
-  so one resolution is owed per series per port that registers anything.
-  The 2026-09-28 firing paid it four times, for `feat(connections): Key
-  the driver cache on the engine's path, not R's` (#2627), which adds
-  `rapi_canonicalize_path()`.
-  Teaching `scripts/series-port.sh` to regenerate and continue by itself
-  is the fix; this entry is what the next firing needs until it exists.
 
 ## Invariants
 
@@ -1775,10 +1518,7 @@ is what carries the automatic path into a forward series.
   for a firing that cannot read the runs.
   Neither source may be *required*: a firing that has only one of them
   still finishes, and says in its report which one it had.
-  The fallback is an emergency route *for the firing*, and is not kept warm:
-  the sweep is `rcc-logs.sh` run by hand, never a workflow and never scheduled,
-  so a firing that needs the copy complete reports the gap
-  instead of waiting on one — it never blocks on one.
-  On the CI side the store is nobody's fallback:
-  selection reads it and only it,
-  which is why the leg's per-commit publish stays automatic.
+  The fallback is an emergency route and is not kept warm:
+  `rcc-logs.yaml` is dispatched, never scheduled,
+  so a firing that needs the copy complete asks for it
+  and reads the answer on a later pass — it never blocks on one.
