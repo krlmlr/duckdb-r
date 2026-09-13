@@ -4,9 +4,8 @@
 # the equivalent `-build` commit, and extend `<S>-dev` from the buffer.
 #
 # Everything here is mechanical and gated; the judgement calls (repairs,
-# review) stay with the skill. A failure in the in-flight range still lets
-# green take the verified commits below it, and then stops the firing before
-# `-dev` is extended — run series-check.sh first and repair.
+# review) stay with the skill. Refuses to do anything when a commit in the
+# in-flight range has a failure — run series-check.sh first and repair.
 #
 # **Stage 5 carries the base series' fixes** onto a forward series as it
 # consumes its buffer. The two branches divide by how far a fix was demanded:
@@ -50,10 +49,7 @@
 # it is about to re-mint. The note is appended to the newest minted commit's
 # message before the push instead. A note forces the replay route below, because
 # the plain ref move has no commit of its own to carry it, and it is an error to
-# ask for one when the chunk minted nothing. A note that does not open with an
-# `R-side fix` header gets one, because that header is what series-glue.sh and
-# stage 2's mining step anchor on: a note written without it lands in the commit
-# and is read by nothing, which is the one outcome the option exists to prevent.
+# ask for one when the chunk minted nothing.
 #
 # **`--canonical` mirrors the green into the repository r-universe reads.**
 # The series refs live in the fork, but the base flavors are published from the
@@ -66,21 +62,6 @@
 # The push runs on every firing, not only on the ones where green moved: an
 # idle series whose copy fell behind for some other reason would otherwise
 # never be asked about again, and the push is a no-op when the two agree.
-#
-# It defaults to `upstream`, the name a `gh` clone of a fork gives the repository
-# it was forked from, so mirroring is on wherever that name means what it usually
-# means. Setting `SERIES_CANONICAL` to the empty string turns it off; leaving it
-# unset does not, because a mirror that silently stops is the failure this
-# exists to prevent.
-#
-# **`--canonical` mirrors the green into the repository r-universe reads.**
-# The series refs live in the fork, but the base flavors are published from the
-# canonical repository, so `<S>-green` has to exist in both and nothing else
-# does. The push is a plain one, fast-forward only, and a refusal stops the
-# firing rather than being forced: green is the verified frontier, and the only
-# thing that legitimately moves it off its lineage is a cutover, which does the
-# mirror itself (scripts/series-cutover.sh). A `-fwd` series is skipped -- its
-# green is a rebuild nobody installs, published from the fork's own universe.
 #
 # It defaults to `upstream`, the name a `gh` clone of a fork gives the repository
 # it was forked from, so mirroring is on wherever that name means what it usually
@@ -313,10 +294,7 @@ index_twins() {
     # Oldest wins: a SHA appears once on a healthy series, and where a repair
     # left two, the first is the one the chain was verified on.
     [ -n "${TWIN[$sha]:-}" ] || TWIN[$sha]=$c
-  done < <(git log --reverse --format='%H%x09%s' "$base_dev" --not "$green")
-  # Bounded by this series' green, whose ancestry is `main`'s history: a base
-  # series rewound to an older fork point vendors SHAs `main` vendored long
-  # ago, and oldest-wins would otherwise pick `main`'s commit over the series'.
+  done < <(git log --reverse --format='%H%x09%s' "$base_dev")
 }
 
 twin_of() { # <buffer commit> -> the base -dev commit for the same upstream SHA
@@ -411,23 +389,13 @@ verify_counter() { # <worktree> <ref the replay started from>
 }
 
 # --- stage 3: the all-green prefix -------------------------------------------
-#
-# A failure ends the walk the way a missing verdict does, and the prefix below
-# it still counts. Every commit under the red one was decided by a run of its
-# own, a repair replays only the tail above it, and green is the ref r-universe
-# installs -- so refusing the whole stage left verified commits unpublished for
-# as long as the repair took, which is the one cost the frontier exists to
-# avoid. The red is still fatal, one stage later: green and `-build-base` are
-# set first, then the firing stops before stage 5 extends `-dev` onto a tip a
-# repair is about to re-mint (.claude/skills/series-loop/SKILL.md, stages 3 and 5).
 new_green=$(git rev-parse "$green")
-failed= failed_state=
 while IFS= read -r sha; do
   st=$(state_of "$sha")
   case "$st" in
     success) new_green="$sha" ;;
     missing|pending) break ;;
-    *) failed=$sha failed_state=$st; break ;;
+    *) echo "Error: $sha is '$st' — repair before advancing"; exit 1 ;;
   esac
 done < <(git rev-list --reverse "$green..$dev")
 
@@ -437,32 +405,6 @@ if [ "$new_green" != "$(git rev-parse "$green")" ]; then
   git push "$remote" "$new_green:refs/heads/$S-green"
   echo "green -> $(git rev-parse --short "$new_green")"
   green_moved=1
-
-  # The canonical repository publishes the base flavors, so its copy of green
-  # has to move too. No `+` and no lease: a plain push is fast-forward only, and
-  # a refusal here means the two repositories disagree about verified history,
-  # which is a thing to look at rather than to overwrite.
-  if [ -n "$canonical" ] && [ "${S%-fwd}" = "$S" ]; then
-    if ! git remote get-url "$canonical" >/dev/null 2>&1; then
-      echo "Error: no remote '$canonical' to mirror $S-green into." >&2
-      echo "  The canonical repository is where r-universe publishes the base" >&2
-      echo "  flavors from, so a green that stays in the fork is a package that" >&2
-      echo "  keeps being published as the fork owner's. Name the remote" >&2
-      echo "  'upstream', or pass --canonical <name>; SERIES_CANONICAL='' turns" >&2
-      echo "  the mirroring off deliberately." >&2
-      exit 1
-    fi
-    if git push "$canonical" "$new_green:refs/heads/$S-green"; then
-      echo "green mirrored to $canonical"
-    else
-      echo "Error: $S-green would not fast-forward in $canonical." >&2
-      echo "  The fork and the canonical repository disagree about verified" >&2
-      echo "  history. Only a cutover moves green off its lineage, and it" >&2
-      echo "  mirrors that itself -- so this is a divergence to read, not to" >&2
-      echo "  force. r-universe is serving the canonical copy meanwhile." >&2
-      exit 1
-    fi
-  fi
 
   up=$(vendored_sha "$new_green")
   if [ -n "$up" ]; then
@@ -524,14 +466,6 @@ if [ -n "$canonical" ] && [ "${S%-fwd}" = "$S" ]; then
   fi
 fi
 
-# A red commit in flight stops the firing here, with the frontier already moved.
-# Stage 2 is going to fold a fix into it and replay everything above, so anything
-# stage 5 appended now would be minted only to be re-minted.
-if [ -n "$failed" ]; then
-  echo "Error: $failed is '$failed_state' — repair before extending -dev" >&2
-  exit 1
-fi
-
 # --- stage 5: extend -dev from the buffer ------------------------------------
 
 # Finish a stopped replay before anything else, and refuse to start a second one
@@ -571,7 +505,7 @@ fi
 # level until a human swaps them. It is more CI on a series about to be retired;
 # it is also the only thing that makes retiring it a check rather than a hope.
 # Pending work does not hold the buffer (.claude/skills/series-loop/SKILL.md stage 5):
-# each.yaml plans every commit in green..tip that has no record, so a longer tip
+# each.yaml plans every commit in green..tip that has no status, so a longer tip
 # is more work planned in the same pass, not work deferred. A known failure does
 # hold it: stage 2 will fold a fix into that commit and replay everything above,
 # so anything appended now is minted only to be re-minted. The stage-3 walk above
@@ -706,34 +640,6 @@ else
     exit 1
   }
 
-  # A carry that applies cleanly can still break the glue. The three-way merge
-  # sees the twin's hunk and the buffer's own adaptation of the same upstream
-  # change as two unrelated additions when their context differs, and keeps
-  # both: `v2.0-cyanoptera-fwd-dev` got a second `TIMESTAMP_TZ_NS` case in
-  # `src/transform.cpp`, and `install` failed on a duplicate `case` label. So a
-  # carry into the glue is syntax-checked the way vendor-one.sh checks a vendor
-  # commit, and a failure stops the run like a conflict, with the carry staged.
-  # A check that cannot run (no `./configure`, no R) warns and carries on.
-  carry_glue_gate() { # <worktree> <buffer commit> <twin>
-    local wt=$1 flags bad
-    flags=$(cd "$wt" && { [ -f src/Makevars.rstrtmgr ] || ./configure >/dev/null 2>&1 || true; } &&
-      (cd src && R CMD SHLIB -n cpp11.cpp 2>/dev/null) |
-      grep -m 1 -E -- '-c cpp11\.cpp' |
-      sed -E 's/^ *(ccache )?g\+\+ //; s/ -c cpp11\.cpp -o cpp11\.o *$//' || true)
-    if [ -z "$flags" ]; then
-      echo "Warning: could not derive the glue compile flags in $wt; carry not checked" >&2
-      return 0
-    fi
-    bad=$(cd "$wt/src" && printf '%s\n' *.cpp | FLAGS="$flags" xargs -P "$(nproc 2>/dev/null || echo 4)" -I{} \
-      sh -c 'eval "g++ $FLAGS -fsyntax-only \"\$1\"" 2>/dev/null || echo "$1"' sh {} | sort | tr '\n' ' ')
-    git -C "$wt" clean -fdxq -- src/
-    [ -n "$bad" ] || return 0
-    echo >&2
-    echo "The carry applied without a conflict, but the glue no longer compiles: $bad" >&2
-    echo "Look for the twin's hunk duplicating an adaptation the buffer already has." >&2
-    stop "$wt" "$2" "$3" carry
-  }
-
   # Fold the base series' test-side fix into the commit that needs it -- never
   # stacked above it, so every commit of -dev stays independently green and the
   # chain stays bisectable. Three-way, so the failure mode is a conflict in the
@@ -754,9 +660,6 @@ else
       stop "$wt" "$c" "$d" carry
     fi
     rm -f "$patch"
-    if printf '%s\n' "${paths[@]}" | grep -qE '^src/'; then
-      carry_glue_gate "$wt" "$c" "$d"
-    fi
     {
       git log -1 --format=%B "$d"
       echo "Carried from \`$base_dev\` at $(git rev-parse --short "$d"):"
@@ -829,19 +732,7 @@ else
   #
   # One commit at a time, because restamp runs between the picks and reads the
   # parent it is bumping from, and because a carry amends the commit just made.
-  #
-  # A buffer tooling sync is skipped, never picked. `-dev`'s tooling is stage
-  # 4's, which made it `main`'s earlier in this same firing, while the sync's
-  # diff runs from whatever tooling the buffer carried before it -- so once
-  # `main` has moved again, the pick conflicts, or quietly puts back on `-dev`
-  # what `main` removed. And since the sync vendors nothing, the anchor never
-  # passes it: one at the buffer's tail is offered again on every firing until
-  # a vendor commit lands above it. scripts/series-port.sh writes it under
-  # exactly this subject, and scripts/series-check.sh discounts it the same way.
   for c in $remaining; do
-    if [ "$(git log -1 --format=%s "$c")" = "chore(series): Sync buffer tooling with main" ]; then
-      continue
-    fi
     before=$(git -C "$wt" rev-parse HEAD)
     if ! git -C "$wt" cherry-pick --empty=drop "$c"; then
       stop "$wt" "$c" "${CARRY[$c]:--}" pick
@@ -854,14 +745,6 @@ else
   # rather than folded in anywhere else: the commit already carries the vendor
   # message the finding is about, and the readers of these findings --
   # series-glue.sh, and stage 2's mining step -- read exactly this message.
-  #
-  # Those readers anchor on an `R-side fix` section, so a note that opens with
-  # prose is a finding nothing ever reads back. The header is the one part of
-  # the note that is the same every time, so the stage writes it when the note
-  # does not, and leaves whichever spelling the note chose alone when it does.
-  # The spelling written here is the colon one. series-glue.sh reads the
-  # section by its opening words under any spelling or case, the same test as
-  # the one below, so a header the note brought reads back as well as this one.
   if [ -n "$DEV_NOTE" ]; then
     if [ "$(git -C "$wt" rev-parse HEAD)" = "$(git rev-parse "$dev")" ]; then
       git worktree remove --force "$wt"
@@ -869,12 +752,7 @@ else
       echo "  to write the finding on. Record it on the next chunk instead." >&2
       exit 1
     fi
-    note_head=
-    if ! sed -n '/[^[:space:]]/{p;q;}' "$DEV_NOTE" | grep -qi '^R-side fix'; then
-      note_head=$'R-side fix:\n\n'
-    fi
-    { git -C "$wt" log -1 --format=%B; echo; printf '%s' "$note_head";
-      cat "$DEV_NOTE"; } > "$wt/.series-advance-note"
+    { git -C "$wt" log -1 --format=%B; echo; cat "$DEV_NOTE"; } > "$wt/.series-advance-note"
     git -C "$wt" commit -q --amend --no-verify -F "$wt/.series-advance-note"
     rm -f "$wt/.series-advance-note"
   fi

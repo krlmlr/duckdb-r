@@ -6,28 +6,6 @@
 # paths — .github/, scripts/, .claude/ — of <S>-dev are byte-identical to
 # `main`'s, and a tooling change never waits for a forward.
 #
-# **<S>-build owes the same identity, and is synced here too.** A workflow
-# fires from the branch it sits on, so a ref nobody ports runs the tooling of
-# the day it was seeded, and a push filter written back then decides what fires
-# today. The buffer takes no *ports* — its line is upstream commits and the glue
-# they need — but its tooling is brought level, by one commit appended when it
-# differs. Measured rather than feared: `v1.4-andium-build` still carried a
-# 2026-03-26 R-CMD-check.yaml whose release pattern matches the buffer's own
-# name, so pushes to it started the template check and R-CMD-check-status.yaml
-# stamped an `rcc` status on a commit no per-commit leg had decided — a status
-# with no record, which is exactly what breaks a reader trusting one against
-# the other.
-#
-# To every reader of the vendor strand the sync commit is invisible: it vendors
-# nothing, so the consumption anchor and the vendored-SHA scans look past it by
-# subject. Stage 5 skips it rather than replaying it onto -dev, whose tooling
-# this stage has already made main's (scripts/series-advance.sh). Replaying it
-# was the first design, and it held only until `main` moved again: the sync's
-# diff runs from the buffer's older tooling, so the pick conflicted or restored
-# what main had removed -- and a sync the anchor never passes was offered again
-# on every firing. The skip reads the subject written below, in series-advance.sh
-# and series-check.sh alike, so a change to it is a change to all three.
-#
 # The script lists EVERY commit on `main` since the series' base that has no
 # patch-id equivalent on <S>-dev (`git cherry`), oldest first, classified by
 # what it touches: TOOLING (only tooling paths), MIXED (tooling and more),
@@ -94,42 +72,26 @@
 # they are transient — a forward's seed already carries their content, and a
 # rebase drops patch-id equivalents and empty leftovers.
 #
-# **`--dev-note` writes a stage-3 finding into the newest commit this stage
-# mints.** An r-universe failure has no per-commit record anywhere and no commit
-# of its own, so the series keeps it in the message of the next `-dev` commit
-# (.claude/skills/series-loop/SKILL.md stage 3). Normally that is stage 5's, and
-# scripts/series-advance.sh takes the note. A firing whose buffer is empty mints
-# no vendor commit at all, though, and then the ports this stage makes are the
-# only `-dev` commits of the whole firing -- so it takes the same option, with
-# the same meaning, rather than leaving the firing to amend and force-push after
-# the push here and spend an each-rcc run on a commit it is about to re-mint.
-#
-# Usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [--dev-note <file>] [sha...]
+# Usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [sha...]
 #
 # --remote is spelled the same in every scripts/series-*.sh; see the shared
 # contract in handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
 
-usage='usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [--canonical <name>] [--dev-note <file>] [sha...]'
+usage='usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [sha...]'
 argerr() { echo "$usage" >&2; exit 2; }
 # --list walks a frozen series anyway, for when the question is which commit of
 # `main` to name. No effect on any other series: the walk is their default.
 list=
 apply=
-DEV_NOTE=
 remote=${SERIES_REMOTE:-origin}
-# The repository `main` belongs to, which the fork mirrors. Same name and same
-# default as series-advance.sh's, and where this script reads `main` from.
-canonical=${SERIES_CANONICAL-upstream}
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --list) list=1; shift ;;
     --apply) apply=1; shift ;;
     --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
-    --canonical) [ $# -ge 2 ] || argerr; canonical=$2; shift 2 ;;
-    --dev-note) [ $# -ge 2 ] || argerr; DEV_NOTE=$2; shift 2 ;;
     -h | --help) echo "$usage"; exit 0 ;;
     -*) argerr ;;
     *) args+=("$1"); shift ;;
@@ -139,18 +101,6 @@ done
 S=${args[0]}
 set -- ${args+"${args[@]:1}"}
 [ -n "$apply" ] || [ $# -eq 0 ] || argerr
-if [ -n "$DEV_NOTE" ]; then
-  # The note rides on a commit, and only --apply mints one.
-  if [ -z "$apply" ]; then
-    echo "Error: --dev-note needs --apply — the note rides on a commit this" >&2
-    echo "  run mints, and a listing run mints none." >&2
-    argerr
-  fi
-  if [ ! -s "$DEV_NOTE" ]; then
-    echo "Error: --dev-note file is missing or empty: $DEV_NOTE" >&2
-    exit 1
-  fi
-fi
 
 # The identity set: what CI and the routine execute. patch/ stays out
 # (vendor-coupled: applied by vendor runs, refreshed by repairs), as do the
@@ -189,54 +139,8 @@ git config --get merge.ours-version.driver >/dev/null ||
   { echo "Error: merge driver not registered, run scripts/setup-git.sh" >&2; exit 1; }
 
 git fetch -q "$remote"
-dev="$remote/$S-dev"
+dev="$remote/$S-dev" main="$remote/main"
 git rev-parse -q --verify "$dev" >/dev/null || { echo "Error: no $S-dev on $remote"; exit 1; }
-
-# `main` is read from the canonical repository, not from the fork's mirror of
-# it. The series live in the fork, but this script's whole output is "what does
-# the series not have that main has", and the sync commit takes that main's
-# tooling tree *verbatim* -- so a mirror that has not caught up is not a smaller
-# answer but a wrong one: every commit merged since it last ran is reverted onto
-# the series, silently and on all of them at once.
-#
-# That is not hypothetical: on 2026-09-14 a firing ported while the fork's main
-# was two commits behind duckdb/duckdb-r#2743 and #2745, which had moved the
-# composite actions out of `.github/workflows/`. The sync pointed `each.yaml`
-# back at `./.github/workflows/git-identity`, which no longer exists anywhere,
-# and every `each-rcc` leg on every series died at that step within seconds.
-# Nothing was judged until the mirror was pushed forward and the ports rerun.
-#
-# Reading the canonical tip is what removes that failure mode rather than
-# detecting it. This script used to ask the canonical repository only whether
-# the mirror was stale, and refuse while it was -- which turned the Pull app's
-# six-hour cycle into a six-hour window where no series could be ported at all,
-# against a repository the run could read the whole time
-# (handbook/branches/mirrors/README.md). Nothing here writes to the fork's
-# `main`, and the mirror keeps serving the badges that measure against it.
-main=
-if [ -n "$canonical" ]; then
-  if git remote get-url "$canonical" >/dev/null 2>&1 &&
-    git fetch -q "$canonical" main 2>/dev/null; then
-    # A fetch of a named branch also updates the remote-tracking ref when the
-    # remote carries the usual refspec, and that ref is what messages below
-    # name. FETCH_HEAD is the fallback for a remote configured without one; it
-    # is read here, before any later fetch overwrites it.
-    if git rev-parse -q --verify "refs/remotes/$canonical/main" >/dev/null; then
-      main="$canonical/main"
-    else
-      main=$(git rev-parse -q --verify FETCH_HEAD || true)
-    fi
-  fi
-  [ -n "$main" ] || {
-    echo "Warning: could not read main from '$canonical'; falling back to" >&2
-    echo "  $remote/main, which the mirror may have left behind. Add the" >&2
-    echo "  canonical repository as that remote, or pass --canonical <name>." >&2
-  }
-fi
-# No canonical remote named at all (SERIES_CANONICAL='') or none reachable: the
-# mirror is what is left. It is only ever behind, never ahead, so a fallback
-# offers a subset of the truth -- worth saying and not worth refusing over.
-[ -n "$main" ] || main="$remote/main"
 
 mb=$(git merge-base "$dev" "$main" 2>/dev/null || true)
 if [ -z "$mb" ]; then
@@ -399,18 +303,6 @@ else
   echo "tooling: differs from main —$(git diff --shortstat "$dev" "$main" -- "${tooling[@]}")"
 fi
 
-# The buffer's own answer to the same question. Reported even when it is
-# identical, because "nothing to say about -build" and "-build has no tooling
-# delta" are different sentences and only one of them is reassuring.
-buildref="$remote/$S-build"
-if ! git rev-parse -q --verify "$buildref" > /dev/null; then
-  echo "buffer tooling: no $S-build on $remote"
-elif git diff --quiet "$buildref" "$main" -- "${tooling[@]}"; then
-  echo "buffer tooling: identical to main"
-else
-  echo "buffer tooling: differs from main —$(git diff --shortstat "$buildref" "$main" -- "${tooling[@]}")"
-fi
-
 [ -n "$apply" ] || exit 0
 
 # A pick can still meet DESCRIPTION's `Version:` -- a named VERSION commit, a
@@ -435,21 +327,11 @@ git worktree add --detach -q "$wt" "$dev"
 # `-x` records the main commit in the message; `--empty=drop` skips a pick
 # whose content arrived some other way. On conflict the worktree stays: the
 # sequencer holds the remaining picks, so one --continue walks the rest.
-#
-# The `-x` trailer is the second dedupe layer, not decoration, so the guidance
-# below names it: a resolution that diverges from main's patch has no patch-id
-# in common with it, and the trailer is then the only thing that stops the pick
-# being offered and reconflicting on every firing. It prints the SHA in full,
-# because the reader above matches 40 hex digits and every other SHA on screen
-# is abbreviated.
 if [ ${#picks[@]} -gt 0 ] && ! git -C "$wt" cherry-pick -x --empty=drop "${picks[@]}"; then
   echo "Conflict; worktree kept at $wt, conflicted files:"
   git -C "$wt" diff --name-only --diff-filter=U | sed 's/^/  /'
   echo "Resolve toward main's intent, then:"
   echo "  git -C $wt cherry-pick --continue    # repeats through the rest"
-  echo "Writing the message by hand instead? Keep the trailer it would have"
-  echo "written, or this pick is offered again on every firing:"
-  echo "  (cherry picked from commit $(git -C "$wt" rev-parse CHERRY_PICK_HEAD))"
   echo "A resolution that comes out empty is committed empty, never skipped —"
   echo "the empty commit is what carries the trailer that retires the pick:"
   echo "  git -C $wt commit --allow-empty --cleanup=strip --no-edit"
@@ -491,86 +373,11 @@ fi
 git -C "$wt" diff --quiet "$main" -- "${tooling[@]}" ||
   { echo "Error: tooling still differs after sync"; exit 1; }
 
-if [ "$(git -C "$wt" rev-parse HEAD)" = "$(git rev-parse "$dev")" ] &&
-  [ -n "$DEV_NOTE" ]; then
-  git worktree remove --force "$wt"
-  echo "Error: $S — the port minted nothing, so --dev-note has no commit" >&2
-  echo "  to write the finding on. Record it on the next one instead." >&2
-  exit 1
-fi
-
-# The stage-3 finding, onto the newest commit this run minted — the same place
-# and the same reason as in scripts/series-advance.sh: the readers of these
-# findings, scripts/series-glue.sh and stage 2's mining step, read exactly this
-# message. They anchor on an `R-side fix` section, so a note that does not open
-# with that header gets the one series-advance.sh writes, by the same test.
-if [ -n "$DEV_NOTE" ]; then
-  note_head=
-  if ! sed -n '/[^[:space:]]/{p;q;}' "$DEV_NOTE" | grep -qi '^R-side fix'; then
-    note_head=$'R-side fix:\n\n'
-  fi
-  { git -C "$wt" log -1 --format=%B; echo; printf '%s' "$note_head";
-    cat "$DEV_NOTE"; } > "$wt/.series-port-note"
-  git -C "$wt" commit -q --amend --no-verify -F "$wt/.series-port-note"
-  rm -f "$wt/.series-port-note"
-fi
-
 next=$(git -C "$wt" rev-parse HEAD)
 git worktree remove --force "$wt"
 if [ "$next" = "$(git rev-parse "$dev")" ]; then
   echo "nothing to port"
-else
-  git push "$remote" "$next:refs/heads/$S-dev"
-  echo "dev -> $(git rev-parse --short "$next")"
+  exit 0
 fi
-
-# The buffer, brought level the same way and for the same reason (see the
-# header). An append, never a rewrite: `-build`'s force-push is reserved for
-# mirroring a fold, and nothing here touches an upstream commit.
-#
-# A series with no buffer -- one pending cutover -- has nothing to sync or to
-# carry `patch/` entries onto, and that is an ordinary state rather than an
-# error.
-git rev-parse -q --verify "$buildref" > /dev/null || exit 0
-if ! git diff --quiet "$buildref" "$main" -- "${tooling[@]}"; then
-  bwt=$(mktemp -d)
-  git worktree add --detach -q "$bwt" "$buildref"
-  git -C "$bwt" rm -qr --ignore-unmatch -- "${tooling[@]}"
-  git -C "$bwt" checkout "$main" -- "${tooling[@]}"
-  git -C "$bwt" commit -q -m "chore(series): Sync buffer tooling with main" \
-    -m "Takes main's ${tooling[*]} verbatim onto the buffer, so a workflow firing
-from this ref is main's rather than the seed's. Vendors nothing, so stage 5
-skips it rather than replaying it onto -dev."
-  # The same check as the -dev sync's, and it matters more here: vendor-one.sh
-  # runs scripts/rconfigure.py and friends from the buffer's own tree. The
-  # remedy differs, because the buffer takes no ports.
-  while read -r gone; do
-    [ -n "$gone" ] || continue
-    callers=$(git -C "$bwt" grep -lF -- "$gone" -- . \
-      ':(exclude).github' ':(exclude)scripts' ':(exclude).claude' || true)
-    [ -n "$callers" ] || continue
-    echo "warning: the buffer sync deleted $gone, still referenced by:"
-    echo "$callers" | sed 's/^/  /'
-    echo "  the buffer takes no ports: make main compatible, or fold the move into -build by hand"
-  done <<EOF
-$(git -C "$bwt" diff --diff-filter=D --name-only HEAD^ HEAD)
-EOF
-  git -C "$bwt" diff --quiet "$main" -- "${tooling[@]}" ||
-    { echo "Error: buffer tooling still differs after sync; worktree kept at $bwt"; exit 1; }
-
-  bnext=$(git -C "$bwt" rev-parse HEAD)
-  git worktree remove --force "$bwt"
-  git push "$remote" "$bnext:refs/heads/$S-build"
-  echo "build -> $(git rev-parse --short "$bnext")"
-fi
-
-# A port is how a `patch/` entry written against `main` reaches this series, and
-# `-dev` is not where it does anything: `vendor-one.sh` applies the *buffer's*
-# stack to every tree it regenerates. Carrying it on is part of porting, not a
-# separate errand somebody remembers -- so it runs here, on every --apply, and
-# whether or not this run had commits to pick. The carry decides by
-# test-applying against the buffer's own tree, because a buffer runs ahead of
-# `main` and an entry that does not fit its engine would break the next vendor
-# run rather than help it. It runs after the tooling sync and fetches again, so
-# it builds on the buffer tip that sync pushed.
-"$(dirname "$0")/series-patch-sync.sh" "$S" --apply --remote "$remote"
+git push "$remote" "$next:refs/heads/$S-dev"
+echo "dev -> $(git rev-parse --short "$next")"
