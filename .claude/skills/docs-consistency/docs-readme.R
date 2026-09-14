@@ -127,10 +127,6 @@ groups <- list(
     globs = c("preview-prefix*")
   ),
   list(
-    owner = "handbook/branches/flavors",
-    globs = c("series.yaml", "series-table.R")
-  ),
-  list(
     owner = "handbook/operations/ci/per-commit/selection",
     globs = c("rcc-decided.sh")
   ),
@@ -153,10 +149,6 @@ groups <- list(
   list(
     owner = "handbook/architecture/rfuns",
     globs = c("vendor-rfuns.sh")
-  ),
-  list(
-    owner = "handbook/usage/types",
-    globs = c("types-rd.R")
   ),
   list(
     owner = "handbook/branches/flavors",
@@ -189,10 +181,6 @@ groups <- list(
   list(
     owner = "handbook/meta/handbook",
     globs = c("README.md")
-  ),
-  list(
-    owner = "handbook/meta/local",
-    globs = c("render-reprex.R")
   )
 )
 groups <- groups[order(vapply(groups, function(g) g$owner, character(1)))]
