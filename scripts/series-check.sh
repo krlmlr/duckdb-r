@@ -16,10 +16,6 @@
 # gets a CUTOVER line: the command to run, for a human to run. The loop never
 # swaps a serving green itself (.claude/skills/series-loop/SKILL.md).
 #
-# A series whose `-dev` carries `patch/` entries its `-build` lacks gets a
-# PATCH DRIFT line: the buffer regenerates its tree from its own patch stack, so
-# an entry that never reached it is one the next vendor run will not apply.
-#
 # Classification is by positive evidence only (.claude/skills/series-loop/SKILL.md);
 # "Job is waiting for a hosted runner" appears in every log and means nothing.
 #
@@ -34,11 +30,11 @@
 # assume; that is a change to make when a firing needs it, not before.
 #
 # The `harvest:` line below is the store's tip, and it is no longer bounded by a
-# schedule: the sweep is `scripts/rcc-logs.sh` run by hand, so what keeps the
-# tip moving is the legs publishing as they decide commits. An old timestamp
-# therefore means "no leg has decided anything since", which on a quiet series is
-# normal and not a fault. Only a record the sweep alone could supply -- a run
-# cancelled whole -- is a reason to ask an operator for one.
+# schedule: `rcc-logs.yaml` is dispatch-only, so what keeps the tip moving is
+# the legs publishing as they decide commits. An old timestamp therefore means
+# "no leg has decided anything since", which on a quiet series is normal and not
+# a fault. Only a record the dispatched sweep alone could supply -- a run
+# cancelled whole -- is a reason to ask for one.
 #
 # The record decides before the log does, for the one thing the log cannot say:
 # a commit the shard's `timeout` killed at its budget (exit 124) stops mid-run
@@ -71,19 +67,14 @@
 #   series-check.sh                                 # discover all from refs
 #   series-check.sh --upstream ../../../duckdb      # fork point too, not just names
 #
-# --remote, --upstream and --canonical are spelled the same in every
-# scripts/series-*.sh; see the shared contract in
-# handbook/operations/vendoring/series-loop/README.md.
+# --remote and --upstream are spelled the same in every scripts/series-*.sh;
+# see the shared contract in handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
 
-usage='usage: series-check.sh [<series>...] [--remote <name>] [--upstream <path>] [--canonical <name>]'
+usage='usage: series-check.sh [<series>...] [--remote <name>] [--upstream <path>]'
 remote=${SERIES_REMOTE:-origin}
 rcc=${RCC_BRANCH:-rcc2}
-
-# The repository `main` belongs to, which the fork mirrors. Read only for the
-# flavor declaration below, and never written here.
-canonical=${SERIES_CANONICAL-upstream}
 
 # Where the release-line check at the end reads upstream. Branch names are all
 # that check needs, and `git ls-remote` supplies those from the URL alone, so a
@@ -98,7 +89,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
     --upstream) [ $# -ge 2 ] || argerr; upstream=$2; shift 2 ;;
-    --canonical) [ $# -ge 2 ] || argerr; canonical=$2; shift 2 ;;
     -h | --help) echo "$usage"; exit 0 ;;
     -*) argerr ;;
     *) args+=("$1"); shift ;;
@@ -107,12 +97,6 @@ done
 set -- ${args+"${args[@]}"}
 
 git fetch -q "$remote"
-# The flavor declaration is read from the canonical `main`, so refresh that ref
-# too. Best effort: a checkout with no such remote, or no way to reach it, still
-# answers every other question here from the fork alone.
-if [ -n "$canonical" ] && git remote get-url "$canonical" >/dev/null 2>&1; then
-  git fetch -q "$canonical" main 2>/dev/null || true
-fi
 
 rcc_tip() { git rev-parse -q --verify "refs/remotes/$remote/$rcc" 2>/dev/null; }
 
@@ -156,16 +140,9 @@ vendored_sha() {
 # The comparison is by content and not by patch-id: `git cherry` reports such a
 # commit as unmerged, because the same post-image was reached on `-dev` by a
 # different diff.
-#
-# A buffer tooling sync is no work whatever it holds: series-advance.sh skips it
-# rather than picking it, because `-dev`'s tooling is stage 4's. Counted, the
-# one at a quiet buffer's tail would read ADVANCE for ever, exactly as above.
 consumable_count() { # <range> <dev> -> commits of <range> that are not no-ops on <dev>
   local range=$1 dev=$2 n=0 c f
   while IFS= read -r c; do
-    if [ "$(git log -1 --format=%s "$c")" = "chore(series): Sync buffer tooling with main" ]; then
-      continue
-    fi
     while IFS= read -r -d '' f; do
       if [ "$(git rev-parse -q --verify "$c:$f" || true)" \
         != "$(git rev-parse -q --verify "$dev:$f" || true)" ]; then
@@ -220,16 +197,6 @@ exit_code_of() { # <sha> -> exit code the shard recorded, empty if none
 
 duration_of() { # <sha> -> seconds the shard spent on it, empty if none
   record_field "$1" 's/.*"duration_seconds": *([0-9]+).*/\1/p'
-}
-
-# The stages the shard recorded as failed, which the log cannot always say. A
-# stage that fails before the tests run -- `install` above all, where a glue
-# call site the series' engine no longer offers stops the compile -- leaves a
-# log with no testthat output in it, which is byte for byte what a cancelled
-# leg leaves. Without this the fallback below calls such a commit transient and
-# the loop spends a rerun to be told the same thing.
-failed_stages_of() { # <sha> -> the stages, comma-separated, empty if none
-  record_field "$1" 's/.*"failed_stages": *\[([^]]*)\].*/\1/p' | tr -d '"' | sed 's/,/, /g'
 }
 
 # Positive evidence that a gate reached out over the network and was refused.
@@ -287,13 +254,6 @@ classify() { # <sha> -> "<kind>|<one line>"; kind `transient` means rerun, do no
   elif grep -qE "$net_re" <<<"$log"; then
     gate=$(failed_gate "$log")
     echo "transient|network failure in the ${gate:-unnamed} gate ($(grep -oE "$net_re" <<<"$log" | head -1))"
-  elif [ -n "$(failed_stages_of "$1")" ]; then
-    # The record named a stage, and that is definite: the stage ran and failed
-    # on its merits, so this is a REPAIR however little the log shows. Behind
-    # the rules above, which name the fix more precisely, and behind the network
-    # rule, since a gate refused a download is transient whichever stage it sat
-    # in. Ahead of the fallback, which is only about a leg that decided nothing.
-    echo "stage|the $(failed_stages_of "$1") stage failed, and the gates after it did not run"
   elif ! grep -q "test_local\|testthat" <<<"$log"; then
     echo "transient|cancelled or infra (no test phase in log)"
   else
@@ -346,21 +306,12 @@ flavor_of() { # v<major>.<minor>-<codename> -> duckdb.<major>.<minor>.dev
 # nothing done at all, and the flavor PR merged with only the refs left to cut
 # (.claude/skills/series-loop/SKILL.md, "What a firing reports").
 #
-# Read from a `main` ref rather than the working tree: a firing checks out
-# series branches, whose trees lag `main` by whatever stage 4 has not ported
-# yet, and the declaration is `main`'s.
-#
-# The canonical repository comes first, and the fork's mirror of it second. The
-# question this answers is whether the flavor PR has merged, so a mirror the
-# Pull app has not refreshed yet answers "undeclared" for a PR that merged
-# hours ago -- and the skill's rule on an undeclared line is to open one, which
-# is how a firing would file the same PR twice
-# (.claude/skills/series-loop/SKILL.md, "What a firing reports"). Whichever ref
-# is fresher is right, and only the canonical one is guaranteed to be.
+# Read from the remote's `main` rather than the working tree: a firing checks
+# out series branches, whose trees lag `main` by whatever stage 4 has not
+# ported yet, and the declaration is `main`'s.
 declaration() { # -> the file, empty and non-zero when no ref carries it
   local r
-  for r in ${canonical:+"refs/remotes/$canonical/main"} \
-    "refs/remotes/$remote/main" refs/heads/main; do
+  for r in "refs/remotes/$remote/main" refs/heads/main; do
     git show "$r:scripts/series.yaml" 2>/dev/null && return 0
   done
   return 1
@@ -502,49 +453,6 @@ for S in "${series[@]}"; do
     echo "  IDLE   nothing in flight, buffer empty — vendor"
   else
     echo "  ADVANCE"
-  fi
-
-  # A `patch/` entry that only ever reached `-dev` is absent the next time the
-  # buffer vendors: `vendor-one.sh` applies the *buffer's* patch stack to every
-  # tree it regenerates (.claude/skills/series-loop/SKILL.md stage 3). Stage 4's port
-  # is how such an entry arrives -- it carries whole `main` commits onto `-dev`,
-  # `patch/` files included -- and `-build` takes no ports by design, so nothing
-  # closes the gap by itself. The drift is quiet while upstream leaves the
-  # patched file alone, because the buffer is then internally consistent and its
-  # commits carry no delta for that file; it bites the first time upstream
-  # touches it, and the fix is reverted on `-dev` by a commit that looks like an
-  # ordinary vendor.
-  #
-  # Reported in both directions, because a renamed entry is one of each and
-  # neither half alone says so.
-  # Compared by blob, not by name: `main` also edits an entry in place, and the
-  # port brings the new content to `-dev` under a name the buffer already has,
-  # which a name-only comparison calls level. Such an entry is `edited`, as
-  # series-patch-sync.sh calls it, and is never carried.
-  only_dev=$(comm -23 \
-    <(git ls-tree --name-only "$dev" patch/ | sort) \
-    <(git ls-tree --name-only "$build" patch/ | sort))
-  only_build=$(comm -13 \
-    <(git ls-tree --name-only "$dev" patch/ | sort) \
-    <(git ls-tree --name-only "$build" patch/ | sort))
-  edited=$(for n in $(comm -12 \
-      <(git ls-tree --name-only "$dev" patch/ | sort) \
-      <(git ls-tree --name-only "$build" patch/ | sort)); do
-    [ "$(git rev-parse "$dev:$n")" = "$(git rev-parse "$build:$n")" ] || echo "$n"
-  done)
-  if [ -n "$only_dev$only_build$edited" ]; then
-    echo "  PATCH DRIFT  the two patch stacks of $S differ:"
-    if [ -n "$only_dev" ]; then
-      printf '%s\n' "$only_dev" | sed 's|^patch/|               -dev only:    |'
-    fi
-    if [ -n "$only_build" ]; then
-      printf '%s\n' "$only_build" | sed 's|^patch/|               -build only:  |'
-    fi
-    if [ -n "$edited" ]; then
-      printf '%s\n' "$edited" | sed 's|^patch/|               edited:       |'
-    fi
-    echo "               scripts/series-patch-sync.sh $S --remote $remote says which of these it can carry;"
-    echo "               after a port, what is left is what it declined — stage 3 work"
   fi
 
   # Suggested, never done: a firing reports a ready cutover and stops
