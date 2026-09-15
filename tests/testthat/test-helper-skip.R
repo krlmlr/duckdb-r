@@ -23,3 +23,13 @@ test_that("a release version is told from a snapshot between releases", {
   expect_false(is_release_version("v1.5.5"))
   expect_false(is_release_version(""))
 })
+
+test_that("the snapshots that hold an Arrow result whole are told apart", {
+  expect_false(arrow_result_streams("2.0.0-dev84770"))
+  expect_false(arrow_result_streams("2.0.0-dev85441"))
+
+  expect_true(arrow_result_streams("2.0.0-dev84769"))
+  expect_true(arrow_result_streams("2.0.0-dev85442"))
+  expect_true(arrow_result_streams("2.0.0"))
+  expect_true(arrow_result_streams("1.5.4-dev84800"))
+})
