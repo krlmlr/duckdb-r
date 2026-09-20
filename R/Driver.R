@@ -94,21 +94,10 @@ driver_registry <- new.env(parent = emptyenv())
 #' calling `duckdb()` again with the same `dbdir` returns the same driver and instance while it is still alive.
 #' This is deliberate.
 #' DuckDB allows only a single read-write handle to a database file at a time,
-#' so opening a second instance of the same file fails with a lock error in another process,
-#' and, on Linux and macOS, is not prevented at all within the same one.
+#' so opening a second instance of the same file would fail with a lock error.
 #' Reusing one instance instead lets any number of `dbConnect(duckdb(dbdir = "my.db"))` calls share it.
 #' An in-memory database (`:memory:`, the default) has no file to lock and is never cached:
 #' every `duckdb()` call creates a fresh, isolated instance.
-#'
-#' The key is the path as the *engine* resolves it, not as [normalizePath()] does.
-#' DuckDB canonicalizes the longest part of the path that exists and appends the rest,
-#' so a database that does not exist yet gets the key it will keep once created,
-#' and two spellings of one database (a relative path, a symlink, a different separator)
-#' share an instance instead of each opening their own.
-#' A path that resolves no further is used as it stands rather than refused.
-#' Symbolic links are not supported on Windows,
-#' where creating one takes administrator rights or Developer Mode:
-#' there, a symlink to a database that does not exist yet fails to open.
 #'
 #' Because the instance is created once per database file,
 #' `config`, `read_only`, `home`, and `shared_home` take effect only at creation.
@@ -121,11 +110,8 @@ driver_registry <- new.env(parent = emptyenv())
 #' then create it again.
 #' [dbDisconnect()] closes one connection, and its `shutdown` argument is unused.
 #' Connections keep the instance alive,
-#' so it is released once the last connection to it closes,
-#' unless a result not yet cleared with [dbClearResult()] or an Arrow stream not yet released still uses it.
-#' The cache does not find an instance that only such a result or stream keeps open,
-#' so `duckdb()` with the same `dbdir` then opens a second instance of the file in the same session.
-#' A driver that was never connected to releases its instance
+#' so it is released once the last connection to it closes;
+#' a driver that was never connected to releases its instance
 #' when the driver is garbage-collected or the session ends.
 #' [dbIsValid()] reports whether a driver still holds an instance.
 #'
@@ -299,21 +285,16 @@ duckdb <- function(
 
   # Always create new database for in-memory,
   # allows isolation and mixing different configs
-  # The wrapper names the frame that called its caller, so it runs one call down,
-  # and an error opening the database names this call.
-  startup <- function() {
-    rethrow_rapi_startup(
+  drv <- new(
+    "duckdb_driver",
+    config = config,
+    database_ref = rethrow_rapi_startup(
       dbdir,
       read_only,
       startup_config,
       environment_scan,
       ax$allow
-    )
-  }
-  drv <- new(
-    "duckdb_driver",
-    config = config,
-    database_ref = startup(),
+    ),
     dbdir = dbdir,
     read_only = read_only,
     convert_opts = convert_opts,
@@ -322,12 +303,7 @@ duckdb <- function(
   )
 
   if (dbdir != DBDIR_MEMORY) {
-    # Resolved again now that the engine has created the file: a symlink to a
-    # database yet to be created resolves only from now on, and every later
-    # call looks the instance up under its target.
-    # Explained in handbook/usage/connections/README.md.
-    drv@dbdir <- path_normalize(dbdir)
-    driver_registry[[drv@dbdir]] <- drv
+    driver_registry[[dbdir]] <- drv
   }
 
   reg.finalizer(drv@database_ref, onexit = TRUE, rapi_shutdown)
@@ -410,29 +386,12 @@ is_installed <- function(pkg) {
   as.logical(requireNamespace(pkg, quietly = TRUE)) == TRUE
 }
 
-# The Olson list, read into `the` on first use, not at load time,
-# and read again whenever `TZDIR` has changed since.
-# `OlsonNames()` reads the zoneinfo directory on every call, 1.4 ms on Linux,
-# and `check_tz()` runs on every `dbConnect()`, twice:
-# once directly and once through `duckdb_convert_opts()`.
-# `TZDIR` does change within a session:
-# on macOS, loading lubridate points it from R's own database,
-# which lacks the `Factory` zone, to the system's.
-olson_names <- function() {
-  tzdir <- Sys.getenv("TZDIR")
-  if (!identical(the$olson_tzdir, tzdir)) {
-    the$olson_names <- OlsonNames()
-    the$olson_tzdir <- tzdir
-  }
-  the$olson_names
-}
-
 check_tz <- function(timezone) {
   if (!is.null(timezone) && timezone == "") {
     return("")
   }
 
-  if (is.null(timezone) || !timezone %in% olson_names()) {
+  if (is.null(timezone) || !timezone %in% OlsonNames()) {
     warning(
       "Invalid time zone '",
       timezone,
@@ -504,21 +463,22 @@ has_extension_prefix <- function(path) {
   grepl("^[[:alnum:]_]{2,}:(?!//)", path, perl = TRUE)
 }
 
-# The wrapper's default names the frame that called this helper, `duckdb()` in an error resolving the path.
 path_normalize <- function(path) {
   if (path == "" || path == DBDIR_MEMORY) {
     return(DBDIR_MEMORY)
   }
 
-  # The prefix guard stays on this side: `CanonicalizePath()` does not make it,
-  # the engine's cache-key function does, and that is not what is called here.
   if (has_extension_prefix(path)) {
     return(path)
   }
 
-  # The engine resolves this the same way whether or not the database exists
-  # yet, so nothing has to be created to get a stable key. `~` stays R's to
-  # expand: DuckDB has its own idea of the home directory, and on Windows it is
-  # not R's.
-  rethrow_rapi_canonicalize_path(path.expand(path))
+  out <- normalizePath(path, mustWork = FALSE)
+
+  # Stable results are only guaranteed if the file exists
+  if (!file.exists(out)) {
+    on.exit(unlink(out))
+    writeLines(character(), out)
+    out <- normalizePath(out, mustWork = TRUE)
+  }
+  out
 }
