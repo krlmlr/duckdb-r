@@ -26,4 +26,6 @@ and the tree holds every fact once.
   CI, releases, the site
 * [`contributors/`](contributors/) — setup, workflow, where to help
 * [`meta/`](meta/) — the rules, the authoring checklist,
-  the plans, the glossary
+  the forms and the growth moves, the style rules,
+  the plans, the evidence convention, the glossary,
+  and what this repository decides for itself
