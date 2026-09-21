@@ -1,5 +1,24 @@
 # Changelog
 
+## duckdb 1.5.5.9025
+
+### Bug fixes
+
+#### preview-prefix
+
+- Report no prefix owed for a line a release already names
+  ([\#2762](https://github.com/duckdb/duckdb-r/issues/2762)).
+
+#### driver
+
+- `dbIsValid()` on a driver object no longer connects to the database
+  ([\#2754](https://github.com/duckdb/duckdb-r/issues/2754)).
+
+### Chore
+
+- Point the shared handbook pages at `cynkra/handbook-tools` and carry
+  its checks ([\#2758](https://github.com/duckdb/duckdb-r/issues/2758)).
+
 ## duckdb 1.5.5.9024
 
 ### Bug fixes
