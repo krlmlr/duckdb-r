@@ -34,6 +34,9 @@ nothing runs until R touches the values, materialization is budgeted by
 `n_rows` and `n_cells`, and an execution error is stored and re-raised at
 every later access.
 `rel_from_altrep_df()` is the way back.
+What materialization allocates on either side of the boundary,
+and when each copy is freed, is
+[`memory/reading/`](/handbook/usage/memory/reading/README.md)'s.
 The C++ side of that, and its known weak point around raising an R error
 from inside an ALTREP method, is
 [`architecture/glue/`](/handbook/architecture/glue/README.md)'s.

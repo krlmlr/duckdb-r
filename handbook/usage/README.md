@@ -21,7 +21,7 @@ and is what turns the announcement off.
 * [`statements/`](statements/) — queries, transactions, tables, quoting
 * [`types/`](types/) — the R ↔ DuckDB type mapping
 * [`extensions/`](extensions/) — what ships, what installs
-* [`memory/`](memory/) — limits, spill, streaming
+* [`memory/`](memory/) — the engine's budget, reading, writing
 * [`data-import/`](data-import/) — CSV and Parquet ingestion
 * [`storage/`](storage/) — where extensions and secrets live
 * [`integrations/`](integrations/) — dbplyr, duckplyr, and Arrow
