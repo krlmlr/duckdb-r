@@ -11,7 +11,8 @@
 
 #### driver
 
-- `dbIsValid()` on a driver object no longer connects to the database
+- [`dbIsValid()`](https://dbi.r-dbi.org/reference/dbIsValid.html) on a
+  driver object no longer connects to the database
   ([\#2754](https://github.com/duckdb/duckdb-r/issues/2754)).
 
 ### Chore
@@ -871,8 +872,9 @@
 
 #### connections
 
-- State where the instance’s settings bind, and both ways `dbConnect()`
-  gets them wrong ([\#83](https://github.com/duckdb/duckdb-r/issues/83),
+- State where the instance’s settings bind, and both ways
+  [`dbConnect()`](https://dbi.r-dbi.org/reference/dbConnect.html) gets
+  them wrong ([\#83](https://github.com/duckdb/duckdb-r/issues/83),
   [\#171](https://github.com/duckdb/duckdb-r/issues/171),
   [\#2553](https://github.com/duckdb/duckdb-r/issues/2553)).
 
@@ -1567,8 +1569,10 @@ CRAN release: 2026-06-19
 - Update to DuckDB v1.5.4, see
   <https://github.com/duckdb/duckdb/releases/tag/v1.5.4> for details.
 
-- Support writing `MAP` columns via `dbAppendTable()` and
-  `dbWriteTable()`
+- Support writing `MAP` columns via
+  [`dbAppendTable()`](https://dbi.r-dbi.org/reference/dbAppendTable.html)
+  and
+  [`dbWriteTable()`](https://dbi.r-dbi.org/reference/dbWriteTable.html)
   ([\#2354](https://github.com/duckdb/duckdb-r/issues/2354)).
 
 - Add native `VARIANT` ([@thohan88](https://github.com/thohan88),
@@ -1578,7 +1582,9 @@ CRAN release: 2026-06-19
   [\#2336](https://github.com/duckdb/duckdb-r/issues/2336)) data type
   support.
 
-- Implement DBI Arrow API with `dbSendQueryArrow()` and streaming
+- Implement DBI Arrow API with
+  [`dbSendQueryArrow()`](https://dbi.r-dbi.org/reference/dbSendQueryArrow.html)
+  and streaming
   ([\#2347](https://github.com/duckdb/duckdb-r/issues/2347),
   [\#2355](https://github.com/duckdb/duckdb-r/issues/2355)).
 
@@ -1911,8 +1917,8 @@ CRAN release: 2025-09-10
   progress bar handler or other callbacks
   ([\#1475](https://github.com/duckdb/duckdb-r/issues/1475)).
 
-- `dbGetInfo()` gets the version from a hard-coded value and not from a
-  DuckDB query
+- [`dbGetInfo()`](https://dbi.r-dbi.org/reference/dbGetInfo.html) gets
+  the version from a hard-coded value and not from a DuckDB query
   ([\#1481](https://github.com/duckdb/duckdb-r/issues/1481)).
 
 - Package uses two cores by default for compilation
@@ -2432,9 +2438,11 @@ CRAN release: 2024-04-02
 - Fix shutdown semantics for the driver object created by
   [`duckdb()`](https://r.duckdb.org/reference/duckdb.md). A database
   file is closed (and available to be opened from another session) after
-  the last connection that uses this file calls `dbDisconnect()` . The
-  `shutdown` argument to `dbDisconnect()` or the
-  [`duckdb_shutdown()`](https://r.duckdb.org/reference/duckdb.md)
+  the last connection that uses this file calls
+  [`dbDisconnect()`](https://dbi.r-dbi.org/reference/dbDisconnect.html)
+  . The `shutdown` argument to
+  [`dbDisconnect()`](https://dbi.r-dbi.org/reference/dbDisconnect.html)
+  or the [`duckdb_shutdown()`](https://r.duckdb.org/reference/duckdb.md)
   functions are no longer necessary. Two database connections from the
   same R session can access the same file concurrently in read-write
   mode ([\#124](https://github.com/duckdb/duckdb-r/issues/124)).
@@ -2477,8 +2485,9 @@ CRAN release: 2024-03-13
   ([\#67](https://github.com/duckdb/duckdb-r/issues/67),
   [\#92](https://github.com/duckdb/duckdb-r/issues/92)).
 
-- Align the argument order of `dbWriteTable()` with the DBI specs
-  ([@eitsupi](https://github.com/eitsupi),
+- Align the argument order of
+  [`dbWriteTable()`](https://dbi.r-dbi.org/reference/dbWriteTable.html)
+  with the DBI specs ([@eitsupi](https://github.com/eitsupi),
   [\#43](https://github.com/duckdb/duckdb-r/issues/43),
   [\#49](https://github.com/duckdb/duckdb-r/issues/49)).
 
