@@ -2,7 +2,7 @@
 # Does a forward series still carry the same package as the series it replaces?
 #
 # A forward series is the same series rebuilt on a newer `main`
-# (.claude/skills/series-forward.md). Its *history* differs by construction -- a
+# (.claude/skills/series-forward/SKILL.md). Its *history* differs by construction -- a
 # regenerated seed, version counters renumbered as a true counter, the ported
 # commits the replay leaves behind -- and its *content* must not. So the
 # statement a cutover rests on is about trees, not ancestry:
@@ -30,10 +30,13 @@
 #   * `DESCRIPTION` -- but only its `Version:` line. The replay renumbers the
 #     fifth component as a counter of its own chain, so the versions differ by
 #     construction. Anything else in that file is a real difference, and the
-#     file is diffed line-wise to tell the two apart.
+#     file is diffed line-wise to tell the two apart. Both versions are named
+#     where the difference is explained: "renumbered" accounts for a counter
+#     that restarted, and for nothing that happened to the four components
+#     above it.
 #   * `NEWS.md` -- the release paperwork a `fledge:` commit carries, and stage 4
 #     never ports a VERSION commit: `main`'s R-client counter is not a series'
-#     (.claude/skills/series-loop.md). So the two branches hold whatever their
+#     (.claude/skills/series-loop/SKILL.md). So the two branches hold whatever their
 #     seeds' release lines held, and the file is fledge-maintained, never edited
 #     by hand.
 #   * The **vendored strand** -- `src/duckdb/`, `patch/`, `R/version.R`,
@@ -46,16 +49,24 @@
 #     them. Once both sit on the same upstream SHA every one of them must agree:
 #     the forward regenerates the vendored tree from its own patch stack, and
 #     series-forward-build.sh verifies exactly that at replay time.
-#   * The **flavored docs** -- `README.md` and `.github/README.md`. These are
-#     per-branch by design: `.github/README.md` is the front page GitHub renders
-#     and scripts/series-port.sh excludes it from the tooling sync by name, for
-#     the reason #2517 and #2518 were filed, and `README.md` is in no ported
-#     path at all. So each branch carries the wording its seed was made with,
-#     and a forward -- whose seed is regenerated on today's `main` -- carries
-#     `main`'s current wording while the base carries its own seed's. Observed
-#     on all three live series, 2026-08-15, and the same difference on each:
-#     the base still described itself as "the LTS version 1.3 of DuckDB" where
-#     the forward names its flavor.
+#   * The **flavored docs** -- `README.Rmd`, `README.md` and `.github/README.md`.
+#     These are per-branch by design: `.github/README.md` is the front page
+#     GitHub renders and scripts/series-port.sh excludes it from the tooling sync
+#     by name, for the reason #2517 and #2518 were filed, and the two READMEs are
+#     in no ported path at all. So each branch carries the wording its seed was
+#     made with, and a forward -- whose seed is regenerated on today's `main` --
+#     carries `main`'s current wording while the base carries its own seed's.
+#     Observed on all three live series, 2026-08-15, and the same difference on
+#     each: the base still described itself as "the LTS version 1.3 of DuckDB"
+#     where the forward names its flavor.
+#
+#     `README.Rmd` is the source the other two are knitted from, and it is the
+#     one `scripts/flavor.patch` renames, so it carries the same difference
+#     ahead of them rather than a different one. Listing only the generated
+#     halves reported the source as unexplained on a forward whose every other
+#     path agreed -- `v1.5-variegata-fwd`, 2026-09-12, where `README.Rmd` was
+#     the sole DIVERGED line and its diff was the flavor rename plus the seed's
+#     wording, hunk for hunk the `README.md` difference the same run explained.
 #   * The **Windows export list**, `src/*-win.def` -- but only when each side
 #     carries the list its own package needs and the two then differ by the
 #     flavor rename alone. Both the file name and the single symbol in it are a
@@ -95,9 +106,12 @@
 # has not accounted for is worse than no check: it reads as a clean bill. When a
 # firing proves a new class benign, it adds it with the evidence.
 #
-# Usage: series-converge.sh <series> [remote] [--no-fetch]
+# Usage: series-converge.sh <series> [--remote <name>] [--no-fetch]
 #   series-converge.sh main            # the base name
 #   series-converge.sh main-fwd        # or the forward's; the same comparison
+#
+# --remote is spelled the same in every scripts/series-*.sh; see the shared
+# contract in handbook/operations/vendoring/series-loop/README.md.
 #
 # Exit status: 0 when nothing is unexplained, 1 when something is, 2 on a usage
 # or lookup error -- so a caller can gate on it. `--no-fetch` is for a caller
@@ -105,18 +119,22 @@
 
 set -euo pipefail
 
-usage='usage: series-converge.sh <series> [remote] [--no-fetch]'
-S=${1:?$usage}
-shift
-remote=origin
+usage='usage: series-converge.sh <series> [--remote <name>] [--no-fetch]'
+argerr() { echo "$usage" >&2; exit 2; }
+remote=${SERIES_REMOTE:-origin}
 fetch=1
-for a in "$@"; do
-  case "$a" in
-    --no-fetch) fetch= ;;
-    -*) echo "$usage" >&2; exit 2 ;;
-    *) remote=$a ;;
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --remote) [ $# -ge 2 ] || argerr; remote=$2; shift 2 ;;
+    --no-fetch) fetch=; shift ;;
+    -h | --help) echo "$usage"; exit 0 ;;
+    -*) argerr ;;
+    *) args+=("$1"); shift ;;
   esac
 done
+[ ${#args[@]} -eq 1 ] || argerr
+S=${args[0]}
 
 # Either name asks the same question, so neither is wrong to type.
 S=${S%-fwd}
@@ -161,6 +179,11 @@ def_expected() {
   local pkg
   pkg=$(git show "$1:DESCRIPTION" | sed -n 's/^Package: *//p' | head -n 1)
   echo "src/$pkg-win.def R_init_${pkg//./_}"
+}
+
+# The version a branch declares, for naming the two the explanation covers.
+desc_version() {
+  git show "$1:DESCRIPTION" 2>/dev/null | sed -n 's/^Version: *//p' | head -n 1 || true
 }
 
 # True when each branch's Windows export list is the one its own package needs,
@@ -231,13 +254,15 @@ while IFS=$'\t' read -r add del f; do
       if [ -n "$other" ]; then
         unexplained+=("$f|$add/$del|differs beyond its Version: line")
       else
-        explained+=("$f|$add/$del|version counter, renumbered by the replay")
+        renumbered="version counter, renumbered by the replay:"
+        renumbered="$renumbered $(desc_version "$dev") -> $(desc_version "$fwd")"
+        explained+=("$f|$add/$del|$renumbered")
       fi
       ;;
     NEWS.md)
       explained+=("$f|$add/$del|release paperwork; stage 4 never ports a VERSION commit")
       ;;
-    README.md | .github/README.md)
+    README.Rmd | README.md | .github/README.md)
       explained+=("$f|$add/$del|flavored doc, never ported; each branch carries its seed's wording")
       ;;
     src/*-win.def)
@@ -298,5 +323,5 @@ echo "DIVERGED: ${#unexplained[@]} path(s) the forwarding does not explain."
 echo "  Each is a difference somebody has to account for before the swap:"
 echo "  a fix folded on one branch and not the other, a port that reached one"
 echo "  of them, or a carry that stage 5 could not make. See"
-echo "  .claude/skills/series-forward.md."
+echo "  .claude/skills/series-forward/SKILL.md."
 exit 1
