@@ -5,7 +5,7 @@
 #
 # This is the gate set that the `rcc-smoke` job of `.github/workflows/
 # R-CMD-check.yaml` applies on its per-commit `workflow_dispatch` path -- the
-# path `scripts/each-rcc.sh` drives today -- expressed as a script so that
+# path the retired per-commit dispatcher drove -- expressed as a script so that
 # `scripts/each-shard.sh` can run it many times in one job. A workflow cannot
 # loop over composite actions, so the gates have to be callable from a shell
 # loop; this file is that seam.
@@ -17,6 +17,7 @@
 #   |-----------------------|-------------------------------------------------|
 #   | versions-matrix       | skipped upstream too (workflow_dispatch, no opt-in) |
 #   | dep-suggests-matrix   | skipped upstream too                            |
+#   | flavor-package-name   | gate `flavor`, the two flavor-only scans of it   |
 #   | style                 | gate `style`                                    |
 #   | update-snapshots      | gate `snapshots`, incl. the snapshot-<sha> branch |
 #   | roxygenize            | gate `roxygen`                                  |
@@ -47,18 +48,26 @@
 #                           in <dir>/<stage>.log and its verdict appended to
 #                           <dir>/outcomes.tsv, so scripts/each-shard.sh can
 #                           quote the failing stage into the run summary
+#   CLANG_FORMAT          - the C++ formatter the style gate runs
+#                           (default: clang-format-21, what CI installs)
 #   RCMDCHECK_ERROR_ON    - passed through to rcmdcheck (default: note)
+#   DUCKDB_R_RUN_TESTS    - read by tests/testthat.R; the `check` gate defaults
+#                           it to true so the suite runs outside Actions too,
+#                           and never overrides a value the caller set
+#   EACH_TIMEOUT_<STAGE>  - seconds a stage may take before it is presumed stuck
+#                           and killed (see stage_budget below); 0 disables the
+#                           bound for that stage
 
 set -uo pipefail
 
-ALL_GATES="style snapshots roxygen clean check pkgdown"
+ALL_GATES="flavor style snapshots roxygen clean check pkgdown"
 GATES="${EACH_GATES:-${ALL_GATES}}"
 SNAPSHOT_BRANCH="${EACH_SNAPSHOT_BRANCH:-${GITHUB_ACTIONS:-false}}"
 STAGE_DIR="${EACH_STAGE_DIR:-}"
 
 # peter-evans/create-pull-request commits as this identity by default, not as
 # the repository's git config. Reproduced verbatim so the published branches stay
-# byte-comparable with the ~950 the dispatch path already created.
+# byte-comparable with the ~950 the retired dispatch path created.
 CPR_NAME="github-actions[bot]"
 CPR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
 CPR_MESSAGE="[create-pull-request] automated change"
@@ -66,11 +75,67 @@ CPR_MESSAGE="[create-pull-request] automated change"
 rscript_dir="$(mktemp -d)"
 trap 'rm -rf "${rscript_dir}"' EXIT
 
+# How a bounded stage re-enters this script; see run_stage. Resolved before
+# anything can change directory, so the child is found from wherever it runs.
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+STAGE_ONLY="${EACH_STAGE_ONLY:-}"
+
 names=()
 outcomes=()
 status=0
 
-if [ -n "${STAGE_DIR}" ]; then
+# The leg has a timeout of its own (scripts/each-shard.sh), and it kills the
+# process group this script runs in. A bounded stage is not in that group: the
+# nested `timeout` moved it into one of its own, which is what lets it take a
+# stuck `Rscript` down with it. So a leg that runs out of budget kills this
+# script and leaves the stage running -- measured, not feared: an orphaned
+# `R CMD INSTALL` kept compiling after its leg was gone, and it would still be
+# writing into src/ while the shard checks out the next commit.
+#
+# Forward the signal so the stage goes when we go.
+#
+# Signalling the nested `timeout` is not enough: on a signal it *receives* it
+# passes it to its direct child only, so `R CMD INSTALL` dies and the `make`,
+# `ccache` and `cc1plus` below it are reparented and carry on compiling. Kill
+# the stage's process group instead -- the one `timeout` created for it, which
+# is every process the stage spawned.
+
+# `R CMD INSTALL` holds a 00LOCK directory for the length of an install and
+# removes it on the way out, which a killed install never reaches. The library
+# lives outside the workspace, so the shard's `git clean` does not take it
+# either, and the next commit's install fails on a lock left by a commit that is
+# already decided. Ours is the only install in this workspace, so any 00LOCK
+# still standing is the one we just killed.
+drop_install_lock() {
+  local lib
+  lib="$(Rscript -e 'cat(.libPaths()[1])' 2>/dev/null || true)"
+  [ -n "${lib}" ] && rm -rf "${lib}"/00LOCK-*
+  return 0
+}
+
+stage_pid=
+stage_name=
+forward_term() {
+  trap - TERM INT
+  if [ -n "${stage_pid}" ]; then
+    local pgid
+    pgid="$(ps -o pgid= --ppid "${stage_pid}" 2>/dev/null | tr -d ' ' | head -n 1)"
+    kill -TERM "${stage_pid}" 2>/dev/null
+    if [ -n "${pgid}" ]; then
+      kill -TERM -- "-${pgid}" 2>/dev/null
+      sleep 5
+      kill -KILL -- "-${pgid}" 2>/dev/null
+    fi
+    wait "${stage_pid}" 2>/dev/null
+    [ "${stage_name}" = install ] && drop_install_lock
+  fi
+  exit 143
+}
+trap forward_term TERM INT
+
+# Not in a stage child: it shares the parent's STAGE_DIR, and truncating the
+# file here would throw away the verdicts of every stage that already ran.
+if [ -n "${STAGE_DIR}" ] && [ -z "${STAGE_ONLY}" ]; then
   mkdir -p "${STAGE_DIR}"
   : > "${STAGE_DIR}/outcomes.tsv"
 fi
@@ -79,6 +144,43 @@ has_gate() {
   case " ${GATES} " in
     *" $1 "*) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+# What a stage is allowed to take before it is presumed stuck.
+#
+# The leg already has a `timeout`, but it is the whole shard budget (5 h), so a
+# stage that hangs eats every commit the shard had left and takes its own
+# evidence with it: run_stage buffers a stage's output and only prints it once
+# the stage returns, and a killed rcc-one.sh never returns. That is how a hung
+# `snapshots` gate came back as a bare "no test phase in log" and read like a
+# cancelled leg.
+#
+# A per-stage bound turns that into an ordinary failure: the stage is killed,
+# rcc-one.sh survives to print the partial log and mark the stage FAIL, and the
+# remaining commits in the shard still get built. The numbers are the observed
+# cost with plenty of headroom -- a full commit takes 313-2624 s all-in, and a
+# cold-ccache build about 21 min of that -- so an honest stage never sees them
+# and a stuck one is cut off in minutes rather than hours. Their sum stays under
+# the shard budget, which keeps the leg's timeout the backstop it is meant to be.
+# Override any of them with EACH_TIMEOUT_<STAGE> (seconds; 0 disables).
+stage_budget() {
+  local override
+  override="EACH_TIMEOUT_$(echo "$1" | tr '[:lower:]' '[:upper:]')"
+  if [ -n "${!override:-}" ]; then
+    echo "${!override}"
+    return
+  fi
+  case "$1" in
+    install) echo 3600 ;;    # cold ccache, no reuse at all
+    flavor) echo 300 ;;      # a base-R scan of the checkout
+    style) echo 600 ;;
+    snapshots) echo 3600 ;;  # the full test suite
+    roxygen) echo 900 ;;
+    clean) echo 900 ;;
+    check) echo 5400 ;;      # rebuilds the package, then the suite again
+    pkgdown) echo 1800 ;;
+    *) echo 3600 ;;
   esac
 }
 
@@ -104,16 +206,42 @@ record() {
 # over, so there is no live stream here to interleave with. What is gained is a
 # log that begins and ends at the stage boundary, which is what makes a useful
 # excerpt -- slicing the combined log back apart would mean parsing it.
+
+#
+# The stage also runs under its own timeout. `timeout` wants a command, and a
+# gate is a shell function closing over this script's state, so the bound
+# re-enters the script for that one stage: EACH_STAGE_ONLY names the function
+# and the child defines everything exactly as the parent did, because it is the
+# same script. `install` already passes a real command and is run directly.
+#
+# `timeout` then does the hard part itself -- it puts the command in a process
+# group of its own and signals the group, so a stuck `Rscript` and everything
+# below it goes too, and --kill-after covers a stage that ignores SIGTERM.
 run_stage() {
   local name="$1"
   shift
-  local rc=0
+  local rc=0 budget
+  budget="$(stage_budget "${name}")"
+  local -a cmd=("$@")
+  [ "$(type -t "$1")" = function ] && cmd=(env "EACH_STAGE_ONLY=$1" bash "${self}")
+  [ "${budget}" -gt 0 ] && cmd=(timeout --kill-after=30s "${budget}" "${cmd[@]}")
+  # Backgrounded and waited on rather than run in the foreground, so forward_term
+  # below can fire at all: bash defers a trap until the foreground command it is
+  # running returns, which for a stuck stage is never.
   if [ -z "${STAGE_DIR}" ]; then
-    "$@" || rc=$?
-    return "${rc}"
+    "${cmd[@]}" &
+  else
+    "${cmd[@]}" > "${STAGE_DIR}/${name}.log" 2>&1 &
   fi
-  "$@" > "${STAGE_DIR}/${name}.log" 2>&1 || rc=$?
-  cat "${STAGE_DIR}/${name}.log"
+  stage_pid=$!
+  stage_name="${name}"
+  wait "${stage_pid}" || rc=$?
+  stage_pid=
+  [ -n "${STAGE_DIR}" ] && cat "${STAGE_DIR}/${name}.log"
+  if [ "${rc}" -eq 124 ] || [ "${rc}" -eq 137 ]; then
+    echo "stage ${name}: exceeded its ${budget}s budget -- presumed stuck, killed"
+    [ "${name}" = install ] && drop_install_lock
+  fi
   return "${rc}"
 }
 
@@ -146,30 +274,97 @@ rscript() {
 # Not a gate: `rcc-smoke` installs before the continue-on-error block, so an
 # install failure ends the commit right there. Everything downstream needs the
 # package loadable anyway (roxygen2, testthat, pkgdown).
-echo "::group::install"
-if ! run_stage install env _R_SHLIB_STRIP_=true R CMD INSTALL .; then
-  note_stage install failure
+# A stage child is on its way to one gate and the package is already installed;
+# reinstalling it here would cost the parent's whole budget before the gate it
+# was called for even started.
+if [ -z "${STAGE_ONLY}" ]; then
+  echo "::group::install"
+  if ! run_stage install env _R_SHLIB_STRIP_=true R CMD INSTALL .; then
+    note_stage install failure
+    echo "::endgroup::"
+    echo "install: failure -- skipping the remaining gates"
+    echo "| install | failure |"
+    exit 1
+  fi
+  note_stage install success
   echo "::endgroup::"
-  echo "install: failure -- skipping the remaining gates"
-  echo "| install | failure |"
-  exit 1
 fi
-note_stage install success
-echo "::endgroup::"
 
 # -------------------------------------------------------------------- gates --
 
+# The half of `.github/workflows/custom/after-install/action.yml`'s flavor-rename
+# guard that only a flavored checkout can answer.
+#
+# That step runs `if: github.job == 'rcc-smoke'`, and `rcc-smoke` runs on `main`
+# and on pull requests to it. Two of its three scans return early when
+# `DESCRIPTION` says `Package: duckdb` -- so on the only job that runs them they
+# are no-ops by construction, and on the branches where they could find
+# something, the per-commit gate is the only thing judging and it did not run
+# them. `flavor_unflavored_paths()` reported `src/duckdb-win.def` on
+# `v1.5-variegata-dev` for a fortnight while every commit on that branch was
+# judged green.
+#
+# `flavor_package_name_offenders()` is deliberately not here: it does not return
+# early, so `rcc-smoke` already exercises it on every commit that reaches `main`.
+# Running it per commit would also red the frozen v1.4 series at once, over four
+# seed-era lines its R code is not ported away from -- a separate question from
+# a file that arrived under the wrong name and nothing rewrote.
+gate_flavor() {
+  rscript <<'EOF'
+source("scripts/flavor-package-name.R")
+
+unflavored <- flavor_unflavored_paths(".")
+if (length(unflavored) > 0) {
+  writeLines(unflavored)
+  stop(
+    "A file scripts/flavor.patch renames still carries the mainline name; ",
+    "see scripts/flavor-package-name.R for how to resolve this."
+  )
+}
+writeLines("No file left under the mainline name.")
+
+readmes <- flavor_mainline_readme_offenders(".")
+if (length(readmes) > 0) {
+  writeLines(readmes)
+  stop(
+    "A generated README still tells a reader to install the mainline package; ",
+    "see scripts/flavor-package-name.R for how to resolve this."
+  )
+}
+writeLines("No generated README pointing at the mainline package.")
+EOF
+}
+
 # Mirrors .github/workflows/style/action.yml. Tool installation is the caller's
 # job; this only runs the formatters.
+#
+# A formatter that is not installed is not a style violation, and it used to read
+# as one: `clang-format-21` absent leaves `git status --short` empty and still
+# returns 1, so the gate reports `style failure` about a tree it never looked at
+# (duckdb/duckdb-r#2669). Say which of the two it is.
+#
+# The name stays pinned. CI installs clang-format-21, different majors format
+# differently, and falling back to whatever `clang-format` resolves to would
+# trade a legible failure for a verdict that is not CI's -- either reformatting
+# code CI is happy with, or passing code CI will reject. `CLANG_FORMAT` is for a
+# host that has the right major under another name, not for using another major.
 gate_style() {
-  local rc=0
+  local rc=0 clang_format="${CLANG_FORMAT:-clang-format-21}"
   if [ -f air.toml ]; then
     air format . || rc=1
   fi
   if [ -f .clang-format ]; then
-    shopt -s nullglob
-    clang-format-21 -i src/*.{c,cc,cpp,h,hpp} || rc=1
-    shopt -u nullglob
+    if ! command -v "${clang_format}" >/dev/null 2>&1; then
+      echo "Error: ${clang_format} is not on PATH, so the C++ sources were not" \
+        "formatted -- this says nothing about the tree." >&2
+      echo "  Install it (see .github/workflows/style/action.yml), or set" \
+        "CLANG_FORMAT to a build of the same major." >&2
+      rc=1
+    else
+      shopt -s nullglob
+      "${clang_format}" -i src/*.{c,cc,cpp,h,hpp} || rc=1
+      shopt -u nullglob
+    fi
   fi
   git status --short
   return "${rc}"
@@ -293,6 +488,11 @@ gate_check() {
 # package is not on CRAN, so every commit picks up a "New submission" NOTE.
 if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
 if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+# `tests/testthat.R` falls back to GITHUB_ACTIONS / MY_UNIVERSE when this is
+# unset, so the suite runs in CI and silently does not run anywhere else. Opt in
+# here, without overriding a value the caller already set: the versions matrix
+# forces it to `false` under engine poisoning.
+if (Sys.getenv("DUCKDB_R_RUN_TESTS", "") == "") Sys.setenv("DUCKDB_R_RUN_TESTS" = "true")
 rcmdcheck::rcmdcheck(
   args = c("--no-manual", "--as-cran", "--no-multiarch"),
   build_args = "--no-manual",
@@ -314,7 +514,20 @@ pkgdown::build_site()
 EOF
 }
 
-for gate in style snapshots roxygen clean check pkgdown; do
+# A bounded stage re-enters here, having defined every gate exactly as the
+# parent did. It runs the one it was called for and nothing else -- no summary
+# table, no outcomes line: the parent owns both, and records this stage's
+# verdict from the exit code below.
+if [ -n "${STAGE_ONLY}" ]; then
+  if [ "$(type -t "${STAGE_ONLY}")" != function ]; then
+    echo "rcc-one.sh: EACH_STAGE_ONLY=${STAGE_ONLY} is not a stage" >&2
+    exit 2
+  fi
+  "${STAGE_ONLY}"
+  exit $?
+fi
+
+for gate in flavor style snapshots roxygen clean check pkgdown; do
   run_gate "${gate}"
 done
 
