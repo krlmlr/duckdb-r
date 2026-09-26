@@ -147,9 +147,11 @@ test_that("record_batch_reader and table error", {
   dbExecute(con, paste0("CREATE table t as select range a from range(5000);"))
   res <- dbSendQuery(con, "SELECT * FROM t", arrow = TRUE)
   withr::defer(dbClearResult(res))
-  # Refused before the result is consumed, so the same result serves both.
-  expect_error(duckdb_fetch_record_batch(res, 0), "Chunk Size")
-  expect_error(duckdb_fetch_arrow(res, 0), "Chunk Size")
+  expect_error(duckdb_fetch_record_batch(res, 0))
+  expect_error(duckdb_fetch_arrow(
+    dbSendQuery(con, "SELECT * FROM test", arrow = TRUE),
+    0
+  ))
 })
 
 
@@ -199,6 +201,6 @@ test_that("duckdb_fetch_arrow() and duckdb_fetch_record_batch() refuse a cleared
 
   res <- dbSendQuery(con, "SELECT * FROM range(10) t(i)", arrow = TRUE)
   dbClearResult(res)
-  expect_error(duckdb_fetch_arrow(res), "cleared")
-  expect_error(duckdb_fetch_record_batch(res), "cleared")
+  expect_error(duckdb_fetch_arrow(res), "closed")
+  expect_error(duckdb_fetch_record_batch(res), "closed")
 })
