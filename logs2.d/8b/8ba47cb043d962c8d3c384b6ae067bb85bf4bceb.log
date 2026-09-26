@@ -1,0 +1,612 @@
+::group::install
+* installing to library ‘/home/runner/work/_temp/Library’
+* installing *source* package ‘duckdb.2.0.dev’ ...
+** this is package ‘duckdb.2.0.dev’ version ‘1.99.99.9000.1801’
+** using staged installation
++ dirname ./configure
++ cd .
++ [ -z  ]
++ Rscript tools/setup-makeflags.R
++ makeflags_value=-j4
++ makeflags_digits=4
++ [ -n -j4 ]
++ export MAKEFLAGS=-j4
++ echo Setting MAKEFLAGS=-j4 for parallel compilation
+Setting MAKEFLAGS=-j4 for parallel compilation
++ echo Set NOT_CRAN or MAKEFLAGS to override
+Set NOT_CRAN or MAKEFLAGS to override
++ dirname ./configure
++ PKG_ROOT=.
++ cd ./src
++ echo DUCKDB_RSTRTMGR=1
++ echo DUCKDB_RSTRTMGR_LIB=
++ rm -f Makevars.system-lib
++ [  = 1 ]
++ [  = true ]
++ [ -f  ]
++ cp include/to-tar.mk Makevars.duckdb
++ [ -f duckdb.tar.xz ]
+** libs
+specified C++17
+using C++ compiler: ‘g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0’
+using C++17
+ccache-g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -Ivendor -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -Ivendor -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c rfuns.cpp -o rfuns.o
+ccache-g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -Ivendor -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -Ivendor -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c database.cpp -o database.o
+ccache-g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -Ivendor -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -Ivendor -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c connection.cpp -o connection.o
+ccache-g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -Ivendor -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -Ivendor -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c statement.cpp -o statement.o
+ccache-g++ -std=gnu++17 -I"/opt/R/4.6.1/lib/R/include" -DNDEBUG -Iinclude -Ivendor -DDUCKDB_DISABLE_PRINT -DDUCKDB_R_BUILD -DBROTLI_ENCODER_CLEANUP_ON_OOM -DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT -DDUCKDB_RSTRTMGR=1 -Iduckdb/src/include -Iduckdb/third_party/concurrentqueue -Iduckdb/third_party/fast_float -Iduckdb/third_party/fastpforlib -Iduckdb/third_party/fmt/include -Iduckdb/third_party/fsst -Iduckdb/third_party/httplib -Iduckdb/third_party/hyperloglog -Iduckdb/third_party/jaro_winkler -Iduckdb/third_party/jaro_winkler/details -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/mbedtls/library -Iduckdb/third_party/miniz -Iduckdb/third_party/pcg -Iduckdb/third_party/pdqsort -Iduckdb/third_party/re2 -Iduckdb/third_party/ska_sort -Iduckdb/third_party/skiplist -Iduckdb/third_party/tdigest -Iduckdb/third_party/utf8proc -Iduckdb/third_party/utf8proc/include -Iduckdb/third_party/vergesort -Iduckdb/third_party/yyjson/include -Iduckdb/third_party/zstd/include -Iduckdb/third_party/jemalloc/include -Iduckdb/extension/parquet/include -Iduckdb/third_party/parquet -Iduckdb/third_party/thrift -Iduckdb/third_party/lz4 -Iduckdb/third_party/brotli/include -Iduckdb/third_party/brotli/common -Iduckdb/third_party/brotli/dec -Iduckdb/third_party/brotli/enc -Iduckdb/third_party/snappy -Iduckdb/third_party/mbedtls -Iduckdb/third_party/mbedtls/include -Iduckdb/third_party/zstd/include -Iduckdb/extension/core_functions/include -Ivendor -Iduckdb -DDUCKDB_EXTENSION_PARQUET_LINKED -DDUCKDB_BUILD_LIBRARY -DDUCKDB_EXTENSION_CORE_FUNCTIONS_LINKED -DDUCKDB_BUILD_LIBRARY  -I/usr/local/include    -fpic  -g -O2   -c arrow_export.cpp -o arrow_export.o
+In file included from include/r_progress_bar_display.hpp:3,
+                 from connection.cpp:3:
+include/rapi.hpp: In constructor ‘duckdb::RQueryResult::RQueryResult(duckdb::unique_ptr<duckdb::QueryResult>)’:
+include/rapi.hpp:229:58: error: ‘duckdb::vector<duckdb::LogicalType> duckdb::BaseQueryResult::types’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                          ^~~~~
+In file included from duckdb/src/include/duckdb/execution/executor.hpp:16,
+                 from duckdb/src/include/duckdb/common/progress_bar/progress_bar.hpp:11,
+                 from duckdb/src/include/duckdb/main/client_config.hpp:16,
+                 from duckdb/src/include/duckdb/main/client_context.hpp:22,
+                 from connection.cpp:2:
+duckdb/src/include/duckdb/main/query_result.hpp:71:29: note: declared private here
+   71 |         vector<LogicalType> types;
+      |                             ^~~~~
+include/rapi.hpp:229:80: error: ‘duckdb::vector<duckdb::Identifier> duckdb::BaseQueryResult::names’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                                ^~~~~
+duckdb/src/include/duckdb/main/query_result.hpp:73:28: note: declared private here
+   73 |         vector<Identifier> names;
+      |                            ^~~~~
+include/rapi.hpp:229:66: error: no matching function for call to ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<duckdb::Identifier>&)’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+include/rapi.hpp:229:66: note: there are 15 candidates
+In file included from /usr/include/c++/15/vector:68,
+                 from duckdb/src/include/duckdb/common/exception_format_value.hpp:16,
+                 from duckdb/src/include/duckdb/common/exception.hpp:12,
+                 from duckdb/src/include/duckdb/common/unique_ptr.hpp:4,
+                 from duckdb/src/include/duckdb/common/constants.hpp:14,
+                 from duckdb/src/include/duckdb/common/common.hpp:11,
+                 from duckdb/src/include/duckdb/catalog/catalog_entry.hpp:11,
+                 from duckdb/src/include/duckdb/catalog/catalog_entry/schema_catalog_entry.hpp:11,
+                 from duckdb/src/include/duckdb/main/client_context.hpp:11:
+/usr/include/c++/15/bits/stl_vector.h:736:9: note: candidate 1: ‘template<class _InputIterator, class> std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with <template-parameter-2-2> = _InputIterator; _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  736 |         vector(_InputIterator __first, _InputIterator __last,
+      |         ^~~~~~
+In file included from duckdb/src/include/duckdb/common/common.hpp:13:
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: candidate 2: ‘template<bool INTERNAL_SAFE> duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(duckdb::vector<DATA_TYPE, INTERNAL_SAFE>&&) [with bool INTERNAL_SAFE = INTERNAL_SAFE; DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   65 |         vector(vector<DATA_TYPE, INTERNAL_SAFE> &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: template argument deduction/substitution failed:
+include/rapi.hpp:229:66: note:   mismatched types ‘std::__cxx11::basic_string<char>’ and ‘duckdb::Identifier’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:7: note: candidate 3: ‘std::vector<_Tp, _Alloc>::vector(const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:36: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::allocator_type&’ {aka ‘const std::allocator<std::__cxx11::basic_string<char> >&’}
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |              ~~~~~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:586:7: note: candidate 4: ‘std::vector<_Tp, _Alloc>::vector(size_type, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:586:24: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::size_type’ {aka ‘long unsigned int’}
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |              ~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:599:7: note: candidate 5: ‘std::vector<_Tp, _Alloc>::vector(size_type, const value_type&, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; value_type = std::__cxx11::basic_string<char>; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  599 |       vector(size_type __n, const value_type& __value,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:631:7: note: candidate 6: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  631 |       vector(const vector& __x)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: an inherited constructor is not a candidate for initialization from an expression of the same or derived type
+/usr/include/c++/15/bits/stl_vector.h:654:7: note: candidate 7: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  654 |       vector(const vector& __x, const __type_identity_t<allocator_type>& __a)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:665:7: note: candidate 8: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::true_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::true_type = std::true_type]’
+  665 |       vector(vector&& __rv, const allocator_type& __m, true_type) noexcept
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:670:7: note: candidate 9: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::false_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::false_type = std::false_type]’
+  670 |       vector(vector&& __rv, const allocator_type& __m, false_type)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:689:7: note: candidate 10: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  689 |       vector(vector&& __rv, const __type_identity_t<allocator_type>& __m)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:708:7: note: candidate 11: ‘std::vector<_Tp, _Alloc>::vector(std::initializer_list<_Tp>, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  708 |       vector(initializer_list<value_type> __l,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:708:43: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::initializer_list<std::__cxx11::basic_string<char> >’
+  708 |       vector(initializer_list<value_type> __l,
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+duckdb/src/include/duckdb/common/vector.hpp:62:9: note: candidate 12: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(original&&) [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >; original = std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >]’
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:62:27: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >::original&&’ {aka ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >&&’}
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |                ~~~~~~~~~~~^~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate 13: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector() [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   61 |         vector() = default;
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate expects 0 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 14: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(const duckdb::vector<std::__cxx11::basic_string<char> >&)’
+   21 | class vector : public std::vector<DATA_TYPE, ALLOCATOR> { // NOLINT: matching name of std
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const duckdb::vector<std::__cxx11::basic_string<char> >&’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 15: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<std::__cxx11::basic_string<char> >&&)’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >&&’
+make: *** [/opt/R/4.6.1/lib/R/etc/Makeconf:199: connection.o] Error 1
+make: *** Waiting for unfinished jobs....
+In file included from database.cpp:8:
+include/rapi.hpp: In constructor ‘duckdb::RQueryResult::RQueryResult(duckdb::unique_ptr<duckdb::QueryResult>)’:
+include/rapi.hpp:229:58: error: ‘duckdb::vector<duckdb::LogicalType> duckdb::BaseQueryResult::types’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                          ^~~~~
+In file included from duckdb/src/include/duckdb/execution/executor.hpp:16,
+                 from duckdb/src/include/duckdb/common/progress_bar/progress_bar.hpp:11,
+                 from duckdb/src/include/duckdb/main/client_config.hpp:16,
+                 from duckdb/src/include/duckdb/main/client_context.hpp:22,
+                 from database.cpp:5:
+duckdb/src/include/duckdb/main/query_result.hpp:71:29: note: declared private here
+   71 |         vector<LogicalType> types;
+      |                             ^~~~~
+include/rapi.hpp:229:80: error: ‘duckdb::vector<duckdb::Identifier> duckdb::BaseQueryResult::names’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                                ^~~~~
+duckdb/src/include/duckdb/main/query_result.hpp:73:28: note: declared private here
+   73 |         vector<Identifier> names;
+      |                            ^~~~~
+include/rapi.hpp:229:66: error: no matching function for call to ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<duckdb::Identifier>&)’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+include/rapi.hpp:229:66: note: there are 15 candidates
+In file included from /usr/include/c++/15/vector:68,
+                 from duckdb/src/include/duckdb/common/exception_format_value.hpp:16,
+                 from duckdb/src/include/duckdb/common/exception.hpp:12,
+                 from duckdb/src/include/duckdb/common/unique_ptr.hpp:4,
+                 from duckdb/src/include/duckdb/common/constants.hpp:14,
+                 from duckdb/src/include/duckdb/common/common.hpp:11,
+                 from duckdb/src/include/duckdb/catalog/catalog_entry.hpp:11,
+                 from duckdb/src/include/duckdb/catalog/catalog.hpp:11,
+                 from database.cpp:1:
+/usr/include/c++/15/bits/stl_vector.h:736:9: note: candidate 1: ‘template<class _InputIterator, class> std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with <template-parameter-2-2> = _InputIterator; _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  736 |         vector(_InputIterator __first, _InputIterator __last,
+      |         ^~~~~~
+In file included from duckdb/src/include/duckdb/common/common.hpp:13:
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: candidate 2: ‘template<bool INTERNAL_SAFE> duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(duckdb::vector<DATA_TYPE, INTERNAL_SAFE>&&) [with bool INTERNAL_SAFE = INTERNAL_SAFE; DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   65 |         vector(vector<DATA_TYPE, INTERNAL_SAFE> &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: template argument deduction/substitution failed:
+include/rapi.hpp:229:66: note:   mismatched types ‘std::__cxx11::basic_string<char>’ and ‘duckdb::Identifier’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:7: note: candidate 3: ‘std::vector<_Tp, _Alloc>::vector(const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:36: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::allocator_type&’ {aka ‘const std::allocator<std::__cxx11::basic_string<char> >&’}
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |              ~~~~~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:586:7: note: candidate 4: ‘std::vector<_Tp, _Alloc>::vector(size_type, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:586:24: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::size_type’ {aka ‘long unsigned int’}
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |              ~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:599:7: note: candidate 5: ‘std::vector<_Tp, _Alloc>::vector(size_type, const value_type&, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; value_type = std::__cxx11::basic_string<char>; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  599 |       vector(size_type __n, const value_type& __value,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:631:7: note: candidate 6: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  631 |       vector(const vector& __x)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: an inherited constructor is not a candidate for initialization from an expression of the same or derived type
+/usr/include/c++/15/bits/stl_vector.h:654:7: note: candidate 7: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  654 |       vector(const vector& __x, const __type_identity_t<allocator_type>& __a)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:665:7: note: candidate 8: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::true_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::true_type = std::true_type]’
+  665 |       vector(vector&& __rv, const allocator_type& __m, true_type) noexcept
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:670:7: note: candidate 9: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::false_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::false_type = std::false_type]’
+  670 |       vector(vector&& __rv, const allocator_type& __m, false_type)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:689:7: note: candidate 10: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  689 |       vector(vector&& __rv, const __type_identity_t<allocator_type>& __m)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:708:7: note: candidate 11: ‘std::vector<_Tp, _Alloc>::vector(std::initializer_list<_Tp>, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  708 |       vector(initializer_list<value_type> __l,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:708:43: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::initializer_list<std::__cxx11::basic_string<char> >’
+  708 |       vector(initializer_list<value_type> __l,
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+duckdb/src/include/duckdb/common/vector.hpp:62:9: note: candidate 12: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(original&&) [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >; original = std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >]’
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:62:27: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >::original&&’ {aka ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >&&’}
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |                ~~~~~~~~~~~^~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate 13: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector() [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   61 |         vector() = default;
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate expects 0 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 14: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(const duckdb::vector<std::__cxx11::basic_string<char> >&)’
+   21 | class vector : public std::vector<DATA_TYPE, ALLOCATOR> { // NOLINT: matching name of std
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const duckdb::vector<std::__cxx11::basic_string<char> >&’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 15: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<std::__cxx11::basic_string<char> >&&)’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >&&’
+make: *** [/opt/R/4.6.1/lib/R/etc/Makeconf:199: database.o] Error 1
+In file included from arrow_export.cpp:7:
+include/rapi.hpp: In constructor ‘duckdb::RQueryResult::RQueryResult(duckdb::unique_ptr<duckdb::QueryResult>)’:
+include/rapi.hpp:229:58: error: ‘duckdb::vector<duckdb::LogicalType> duckdb::BaseQueryResult::types’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                          ^~~~~
+In file included from duckdb/src/include/duckdb/common/arrow/result_arrow_wrapper.hpp:11,
+                 from arrow_export.cpp:5:
+duckdb/src/include/duckdb/main/query_result.hpp:71:29: note: declared private here
+   71 |         vector<LogicalType> types;
+      |                             ^~~~~
+include/rapi.hpp:229:80: error: ‘duckdb::vector<duckdb::Identifier> duckdb::BaseQueryResult::names’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                                ^~~~~
+duckdb/src/include/duckdb/main/query_result.hpp:73:28: note: declared private here
+   73 |         vector<Identifier> names;
+      |                            ^~~~~
+include/rapi.hpp:229:66: error: no matching function for call to ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<duckdb::Identifier>&)’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+include/rapi.hpp:229:66: note: there are 15 candidates
+In file included from /usr/include/c++/15/vector:68,
+                 from duckdb/src/include/duckdb/common/exception_format_value.hpp:16,
+                 from duckdb/src/include/duckdb/common/exception.hpp:12,
+                 from duckdb/src/include/duckdb/common/unique_ptr.hpp:4,
+                 from duckdb/src/include/duckdb/common/constants.hpp:14,
+                 from duckdb/src/include/duckdb/common/helper.hpp:12,
+                 from duckdb/src/include/duckdb/common/allocator.hpp:12,
+                 from duckdb/src/include/duckdb/common/types/data_chunk.hpp:11,
+                 from duckdb/src/include/duckdb/common/arrow/arrow_converter.hpp:11,
+                 from arrow_export.cpp:2:
+/usr/include/c++/15/bits/stl_vector.h:736:9: note: candidate 1: ‘template<class _InputIterator, class> std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with <template-parameter-2-2> = _InputIterator; _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  736 |         vector(_InputIterator __first, _InputIterator __last,
+      |         ^~~~~~
+In file included from duckdb/src/include/duckdb/common/common.hpp:13,
+                 from duckdb/src/include/duckdb/common/types/data_chunk.hpp:12:
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: candidate 2: ‘template<bool INTERNAL_SAFE> duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(duckdb::vector<DATA_TYPE, INTERNAL_SAFE>&&) [with bool INTERNAL_SAFE = INTERNAL_SAFE; DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   65 |         vector(vector<DATA_TYPE, INTERNAL_SAFE> &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: template argument deduction/substitution failed:
+include/rapi.hpp:229:66: note:   mismatched types ‘std::__cxx11::basic_string<char>’ and ‘duckdb::Identifier’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:7: note: candidate 3: ‘std::vector<_Tp, _Alloc>::vector(const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:36: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::allocator_type&’ {aka ‘const std::allocator<std::__cxx11::basic_string<char> >&’}
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |              ~~~~~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:586:7: note: candidate 4: ‘std::vector<_Tp, _Alloc>::vector(size_type, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:586:24: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::size_type’ {aka ‘long unsigned int’}
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |              ~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:599:7: note: candidate 5: ‘std::vector<_Tp, _Alloc>::vector(size_type, const value_type&, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; value_type = std::__cxx11::basic_string<char>; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  599 |       vector(size_type __n, const value_type& __value,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:631:7: note: candidate 6: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  631 |       vector(const vector& __x)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: an inherited constructor is not a candidate for initialization from an expression of the same or derived type
+/usr/include/c++/15/bits/stl_vector.h:654:7: note: candidate 7: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  654 |       vector(const vector& __x, const __type_identity_t<allocator_type>& __a)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:665:7: note: candidate 8: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::true_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::true_type = std::true_type]’
+  665 |       vector(vector&& __rv, const allocator_type& __m, true_type) noexcept
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:670:7: note: candidate 9: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::false_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::false_type = std::false_type]’
+  670 |       vector(vector&& __rv, const allocator_type& __m, false_type)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:689:7: note: candidate 10: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  689 |       vector(vector&& __rv, const __type_identity_t<allocator_type>& __m)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:708:7: note: candidate 11: ‘std::vector<_Tp, _Alloc>::vector(std::initializer_list<_Tp>, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  708 |       vector(initializer_list<value_type> __l,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:708:43: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::initializer_list<std::__cxx11::basic_string<char> >’
+  708 |       vector(initializer_list<value_type> __l,
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+duckdb/src/include/duckdb/common/vector.hpp:62:9: note: candidate 12: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(original&&) [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >; original = std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >]’
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:62:27: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >::original&&’ {aka ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >&&’}
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |                ~~~~~~~~~~~^~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate 13: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector() [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   61 |         vector() = default;
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate expects 0 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 14: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(const duckdb::vector<std::__cxx11::basic_string<char> >&)’
+   21 | class vector : public std::vector<DATA_TYPE, ALLOCATOR> { // NOLINT: matching name of std
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const duckdb::vector<std::__cxx11::basic_string<char> >&’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 15: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<std::__cxx11::basic_string<char> >&&)’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >&&’
+arrow_export.cpp: In member function ‘bool duckdb::RArrowArrayStreamWrapper::Invalidated()’:
+arrow_export.cpp:121:20: error: ‘duckdb::QueryResultType duckdb::BaseQueryResult::type’ is private within this context
+  121 |         if (result.type != QueryResultType::STREAM_RESULT || result.HasError()) {
+      |                    ^~~~
+duckdb/src/include/duckdb/main/query_result.hpp:65:25: note: declared private here
+   65 |         QueryResultType type;
+      |                         ^~~~
+arrow_export.cpp:121:45: error: ‘STREAM_RESULT’ is not a member of ‘duckdb::QueryResultType’
+  121 |         if (result.type != QueryResultType::STREAM_RESULT || result.HasError()) {
+      |                                             ^~~~~~~~~~~~~
+arrow_export.cpp:124:43: error: ‘StreamQueryResult’ was not declared in this scope; did you mean ‘stream_result’?
+  124 |         auto &stream_result = result.Cast<StreamQueryResult>();
+      |                                           ^~~~~~~~~~~~~~~~~
+      |                                           stream_result
+arrow_export.cpp:124:61: error: no matching function for call to ‘duckdb::QueryResult::Cast<<expression error> >()’
+  124 |         auto &stream_result = result.Cast<StreamQueryResult>();
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+arrow_export.cpp:124:61: note: there are 2 candidates
+duckdb/src/include/duckdb/main/query_result.hpp:112:17: note: candidate 1: ‘template<class TARGET> TARGET& duckdb::QueryResult::Cast()’
+  112 |         TARGET &Cast() {
+      |                 ^~~~
+duckdb/src/include/duckdb/main/query_result.hpp:112:17: note: template argument deduction/substitution failed:
+arrow_export.cpp:124:61: error: template argument 1 is invalid
+  124 |         auto &stream_result = result.Cast<StreamQueryResult>();
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+duckdb/src/include/duckdb/main/query_result.hpp:120:23: note: candidate 2: ‘template<class TARGET> const TARGET& duckdb::QueryResult::Cast() const’
+  120 |         const TARGET &Cast() const {
+      |                       ^~~~
+duckdb/src/include/duckdb/main/query_result.hpp:120:23: note: template argument deduction/substitution failed:
+arrow_export.cpp:124:61: error: template argument 1 is invalid
+  124 |         auto &stream_result = result.Cast<StreamQueryResult>();
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+make: *** [/opt/R/4.6.1/lib/R/etc/Makeconf:199: arrow_export.o] Error 1
+In file included from statement.cpp:6:
+include/rapi.hpp: In constructor ‘duckdb::RQueryResult::RQueryResult(duckdb::unique_ptr<duckdb::QueryResult>)’:
+include/rapi.hpp:229:58: error: ‘duckdb::vector<duckdb::LogicalType> duckdb::BaseQueryResult::types’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                          ^~~~~
+In file included from duckdb/src/include/duckdb/execution/executor.hpp:16,
+                 from duckdb/src/include/duckdb/common/progress_bar/progress_bar.hpp:11,
+                 from duckdb/src/include/duckdb/main/profiler/gathered_metrics.hpp:13,
+                 from duckdb/src/include/duckdb/main/profiler/profiling_node.hpp:12,
+                 from duckdb/src/include/duckdb/main/query_profiler.hpp:28,
+                 from statement.cpp:2:
+duckdb/src/include/duckdb/main/query_result.hpp:71:29: note: declared private here
+   71 |         vector<LogicalType> types;
+      |                             ^~~~~
+include/rapi.hpp:229:80: error: ‘duckdb::vector<duckdb::Identifier> duckdb::BaseQueryResult::names’ is private within this context
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                                ^~~~~
+duckdb/src/include/duckdb/main/query_result.hpp:73:28: note: declared private here
+   73 |         vector<Identifier> names;
+      |                            ^~~~~
+include/rapi.hpp:229:66: error: no matching function for call to ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<duckdb::Identifier>&)’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+include/rapi.hpp:229:66: note: there are 15 candidates
+In file included from /usr/include/c++/15/vector:68,
+                 from duckdb/src/include/duckdb/common/exception_format_value.hpp:16,
+                 from duckdb/src/include/duckdb/common/exception.hpp:12,
+                 from duckdb/src/include/duckdb/common/unique_ptr.hpp:4,
+                 from duckdb/src/include/duckdb/common/constants.hpp:14,
+                 from duckdb/src/include/duckdb/common/string_util.hpp:11,
+                 from duckdb/src/include/duckdb/common/types/timestamp.hpp:11,
+                 from statement.cpp:1:
+/usr/include/c++/15/bits/stl_vector.h:736:9: note: candidate 1: ‘template<class _InputIterator, class> std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with <template-parameter-2-2> = _InputIterator; _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  736 |         vector(_InputIterator __first, _InputIterator __last,
+      |         ^~~~~~
+In file included from duckdb/src/include/duckdb/common/identifier.hpp:16,
+                 from duckdb/src/include/duckdb/common/types.hpp:13,
+                 from duckdb/src/include/duckdb/common/limits.hpp:13,
+                 from duckdb/src/include/duckdb/common/numeric_utils.hpp:15,
+                 from duckdb/src/include/duckdb/common/string_util.hpp:13:
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: candidate 2: ‘template<bool INTERNAL_SAFE> duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(duckdb::vector<DATA_TYPE, INTERNAL_SAFE>&&) [with bool INTERNAL_SAFE = INTERNAL_SAFE; DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   65 |         vector(vector<DATA_TYPE, INTERNAL_SAFE> &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:65:9: note: template argument deduction/substitution failed:
+include/rapi.hpp:229:66: note:   mismatched types ‘std::__cxx11::basic_string<char>’ and ‘duckdb::Identifier’
+  229 |             : result(std::move(result_p)), types(result->types), names(result->names),
+      |                                                                  ^~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:7: note: candidate 3: ‘std::vector<_Tp, _Alloc>::vector(const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:572:36: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::allocator_type&’ {aka ‘const std::allocator<std::__cxx11::basic_string<char> >&’}
+  572 |       vector(const allocator_type& __a) _GLIBCXX_NOEXCEPT
+      |              ~~~~~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:586:7: note: candidate 4: ‘std::vector<_Tp, _Alloc>::vector(size_type, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:586:24: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >::size_type’ {aka ‘long unsigned int’}
+  586 |       vector(size_type __n, const allocator_type& __a = allocator_type())
+      |              ~~~~~~~~~~^~~
+/usr/include/c++/15/bits/stl_vector.h:599:7: note: candidate 5: ‘std::vector<_Tp, _Alloc>::vector(size_type, const value_type&, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; size_type = long unsigned int; value_type = std::__cxx11::basic_string<char>; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  599 |       vector(size_type __n, const value_type& __value,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:631:7: note: candidate 6: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >]’
+  631 |       vector(const vector& __x)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: an inherited constructor is not a candidate for initialization from an expression of the same or derived type
+/usr/include/c++/15/bits/stl_vector.h:654:7: note: candidate 7: ‘std::vector<_Tp, _Alloc>::vector(const std::vector<_Tp, _Alloc>&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  654 |       vector(const vector& __x, const __type_identity_t<allocator_type>& __a)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:665:7: note: candidate 8: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::true_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::true_type = std::true_type]’
+  665 |       vector(vector&& __rv, const allocator_type& __m, true_type) noexcept
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:670:7: note: candidate 9: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, const allocator_type&, std::false_type) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >; std::false_type = std::false_type]’
+  670 |       vector(vector&& __rv, const allocator_type& __m, false_type)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 3 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:689:7: note: candidate 10: ‘std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>&&, std::__type_identity_t<_Alloc>&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; std::__type_identity_t<_Alloc> = std::allocator<std::__cxx11::basic_string<char> >]’
+  689 |       vector(vector&& __rv, const __type_identity_t<allocator_type>& __m)
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: candidate expects 2 arguments, 1 provided
+/usr/include/c++/15/bits/stl_vector.h:708:7: note: candidate 11: ‘std::vector<_Tp, _Alloc>::vector(std::initializer_list<_Tp>, const allocator_type&) [with _Tp = std::__cxx11::basic_string<char>; _Alloc = std::allocator<std::__cxx11::basic_string<char> >; allocator_type = std::allocator<std::__cxx11::basic_string<char> >]’
+  708 |       vector(initializer_list<value_type> __l,
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:24:25: note: inherited here
+   24 |         using original::original;
+      |                         ^~~~~~~~
+/usr/include/c++/15/bits/stl_vector.h:708:43: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘std::initializer_list<std::__cxx11::basic_string<char> >’
+  708 |       vector(initializer_list<value_type> __l,
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+duckdb/src/include/duckdb/common/vector.hpp:62:9: note: candidate 12: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector(original&&) [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >; original = std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >]’
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:62:27: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >::original&&’ {aka ‘std::vector<std::__cxx11::basic_string<char>, std::allocator<std::__cxx11::basic_string<char> > >&&’}
+   62 |         vector(original &&other) : original(std::move(other)) { // NOLINT: allow implicit conversion
+      |                ~~~~~~~~~~~^~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate 13: ‘duckdb::vector<DATA_TYPE, SAFE, ALLOCATOR>::vector() [with DATA_TYPE = std::__cxx11::basic_string<char>; bool SAFE = true; ALLOCATOR = std::allocator<std::__cxx11::basic_string<char> >]’
+   61 |         vector() = default;
+      |         ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:61:9: note: candidate expects 0 arguments, 1 provided
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 14: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(const duckdb::vector<std::__cxx11::basic_string<char> >&)’
+   21 | class vector : public std::vector<DATA_TYPE, ALLOCATOR> { // NOLINT: matching name of std
+      |       ^~~~~~
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘const duckdb::vector<std::__cxx11::basic_string<char> >&’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: candidate 15: ‘duckdb::vector<std::__cxx11::basic_string<char> >::vector(duckdb::vector<std::__cxx11::basic_string<char> >&&)’
+duckdb/src/include/duckdb/common/vector.hpp:21:7: note: no known conversion for argument 1 from ‘duckdb::vector<duckdb::Identifier>’ to ‘duckdb::vector<std::__cxx11::basic_string<char> >&&’
+make: *** [/opt/R/4.6.1/lib/R/etc/Makeconf:199: statement.o] Error 1
+ERROR: compilation failed for package ‘duckdb.2.0.dev’
+* removing ‘/home/runner/work/_temp/Library/duckdb.2.0.dev’
+* restoring previous ‘/home/runner/work/_temp/Library/duckdb.2.0.dev’
+::endgroup::
+install: failure -- skipping the remaining gates
+| install | failure |
