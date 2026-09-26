@@ -120,11 +120,14 @@ so the paths differ by which copies they hold and when each is freed.
   `dbFetchArrow()` hands over the whole stream,
   and what materializes from it is the consumer's choice.
   The stream pins the connection —
-  any other statement invalidates it —
-  `dbClearResult()` frees it eagerly,
-  and a multi-row bind falls back to one materialized result per row
+  any other statement invalidates it,
+  [`architecture/glue/objects/`](/handbook/architecture/glue/objects/README.md) says why.
+  `dbClearResult()` frees it eagerly, ending its query as the connection's next statement would
+  (`rapi_release_arrow_result()`, [`src/arrow_export.cpp`](/src/arrow_export.cpp)).
+  A multi-row bind falls back to one materialized result per row
   (`rapi_bind()`, [`src/statement.cpp`](/src/statement.cpp)).
   `dbFetchArrowChunk()` frees each result it has read to the end and keeps only its columns.
+  `dbClearResult()` frees the ones not read yet.
   The surfaces, that a stream drains once, and what reading an invalidated one does, are
   [`integrations/`](/handbook/usage/integrations/README.md)'s.
 * **ADBC.**
