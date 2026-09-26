@@ -12,7 +12,8 @@
 #' @aliases duckdb_result
 #' @keywords internal
 #' @export
-setClass("duckdb_result",
+setClass(
+  "duckdb_result",
   contains = "DBIResult",
   slots = list(
     connection = "duckdb_connection",
@@ -34,7 +35,8 @@ setClass("duckdb_result",
 #' @aliases duckdb_result_arrow
 #' @keywords internal
 #' @export
-setClass("duckdb_result_arrow",
+setClass(
+  "duckdb_result_arrow",
   contains = "DBIResultArrow",
   slots = list(
     connection = "duckdb_connection",
@@ -66,7 +68,11 @@ duckdb_result_arrow <- function(connection, stmt_lst) {
 duckdb_execute_arrow <- function(res) {
   rethrow_rapi_execute(
     res@stmt_lst$ref,
-    duckdb_convert_opts_impl(res@connection@convert_opts, arrow = TRUE, streaming = TRUE)
+    duckdb_convert_opts_impl(
+      res@connection@convert_opts,
+      arrow = TRUE,
+      allow_stream_result = TRUE
+    )
   )
 }
 
@@ -85,7 +91,13 @@ duckdb_result <- function(connection, stmt_lst, arrow) {
   env$open <- TRUE
   env$rows_affected <- 0
 
-  res <- new("duckdb_result", connection = connection, stmt_lst = stmt_lst, env = env, arrow = arrow)
+  res <- new(
+    "duckdb_result",
+    connection = connection,
+    stmt_lst = stmt_lst,
+    env = env,
+    arrow = arrow
+  )
 
   if (stmt_lst$n_param == 0) {
     if (arrow) {
@@ -140,7 +152,9 @@ duckdb_post_execute <- function(res, out) {
 }
 
 # as per is.integer documentation
-is_wholenumber <- function(x, tol = .Machine$double.eps^0.5) abs(x - round(x)) < tol
+is_wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
+  abs(x - round(x)) < tol
+}
 
 #' @rdname duckdb_result-class
 #' @param res Query result to be converted to an Arrow Table
@@ -153,7 +167,7 @@ duckdb_fetch_arrow <- function(res, chunk_size = 1000000) {
     abort("result set was closed")
   }
   if (chunk_size <= 0) {
-    stop("Chunk Size must be higher than 0")
+    abort("Chunk Size must be higher than 0")
   }
   rethrow_rapi_execute_arrow(res@query_result, chunk_size)
 }
@@ -169,7 +183,7 @@ duckdb_fetch_record_batch <- function(res, chunk_size = 1000000) {
     abort("result set was closed")
   }
   if (chunk_size <= 0) {
-    stop("Chunk Size must be higher than 0")
+    abort("Chunk Size must be higher than 0")
   }
   rethrow_rapi_record_batch(res@query_result, chunk_size)
 }
