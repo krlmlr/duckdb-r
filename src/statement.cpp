@@ -79,14 +79,31 @@ void RCallbackScope::Drain() {
 // and a finalizer cannot know whether the client context lock is held where it runs.
 // The statement is parked instead, so a finalizer never takes that lock.
 RStatement::~RStatement() {
+	if (conn) {
+		conn->statements.erase(this);
+	}
 	if (stmt) {
 		RCallbackScope::Defer(std::move(stmt));
 	}
 }
 
+// Deallocating the prepared statement takes the client context lock, as dbClearResult() does,
+// so inside a callback it is parked instead.
+void RStatement::Close() {
+	if (stmt && RCallbackScope::Active()) {
+		RCallbackScope::Defer(std::move(stmt));
+	}
+	stmt.reset();
+	parameters.clear();
+	conn = nullptr;
+}
+
 // A query result not run to its end ends its query on destruction, which takes the client context lock.
 // Parked in this order, the stream and the result go before the context they read.
 RQueryResult::~RQueryResult() {
+	if (conn) {
+		conn->query_results.erase(this);
+	}
 	Untrack();
 	if (RCallbackScope::Active()) {
 		if (stream_wrapper) {
@@ -99,6 +116,28 @@ RQueryResult::~RQueryResult() {
 			RCallbackScope::Defer(std::move(context));
 		}
 	}
+}
+
+// The same order as the destructor's, and parked the same way inside a callback.
+// The stream over the result leaves the connection's streams as it is destroyed.
+void RQueryResult::Close() {
+	Untrack();
+	if (RCallbackScope::Active()) {
+		if (stream_wrapper) {
+			RCallbackScope::Defer(std::move(stream_wrapper));
+		}
+		if (result) {
+			RCallbackScope::Defer(std::move(result));
+		}
+		if (context) {
+			RCallbackScope::Defer(std::move(context));
+		}
+	}
+	stream_wrapper.reset();
+	result.reset();
+	context.reset();
+	client_properties.client_context = nullptr;
+	conn = nullptr;
 }
 
 void RQueryResult::EndForAnotherStatement() {
@@ -123,20 +162,24 @@ void RQueryResult::EndForAnotherStatement() {
 	}
 }
 
-// Every entry point that takes a statement asks this first: the pointer may have been released by dbClearResult().
+// A released pointer is one dbClearResult() has been through; a statement without its prepared statement is one
+// whose connection has closed, which closed the result with it (ConnWrapper::~ConnWrapper()).
 static void CheckStatement(const duckdb::stmt_eptr_t &stmt, const char *context) {
-	if (!stmt || !stmt.get() || !stmt->stmt) {
+	if (!stmt || !stmt.get()) {
 		rapi_error_with_context(context, "Invalid statement");
+	}
+	if (!stmt->stmt) {
+		rapi_error_with_context(context, "The connection this result was sent on has been closed.");
 	}
 }
 
-static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt, const string &query, idx_t n_param,
-                                     SEXP registered_dfs = R_NilValue) {
+static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt, ConnWrapper &conn, const string &query,
+                                     idx_t n_param, SEXP registered_dfs = R_NilValue) {
 	cpp11::writable::list retlist;
 	retlist.reserve(8);
 	retlist.push_back({"str"_nm = query});
 
-	auto stmtholder = make_uniq<RStatement>(std::move(stmt));
+	auto stmtholder = make_uniq<RStatement>(std::move(stmt), conn);
 
 	retlist.push_back({"type"_nm = StatementTypeToString(stmtholder->stmt->GetStatementType())});
 	retlist.push_back({"names"_nm = cpp11::as_sexp(IdentifiersToStrings(stmtholder->stmt->GetNames()))});
@@ -279,7 +322,7 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 		rapi_error_with_context("rapi_prepare", error);
 	}
 	auto n_param = stmt->GetParameterCount();
-	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs);
+	return construct_retlist(std::move(stmt), *conn.get(), query, n_param, conn->db->registered_dfs);
 }
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result);
@@ -495,7 +538,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	}
 
 	if (convert_opts.arrow == ConvertOpts::ArrowConversion::ENABLED) {
-		auto query_result = make_uniq<RQueryResult>(std::move(context), std::move(generic_result), streamed);
+		auto query_result = make_uniq<RQueryResult>(std::move(context), std::move(generic_result), streamed, stmt->conn);
 		rqry_eptr_t query_resultsexp(query_result.release());
 		return query_resultsexp;
 	} else {

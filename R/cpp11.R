@@ -33,7 +33,7 @@ rapi_connect <- function(dual, convert_opts) {
 }
 
 rapi_disconnect <- function(conn) {
-  invisible(.Call(`_duckdb_rapi_disconnect`, conn))
+  .Call(`_duckdb_rapi_disconnect`, conn)
 }
 
 rapi_connection_in_transaction <- function(conn) {

@@ -6,7 +6,10 @@ skip_if_not_installed("nanoarrow")
 test_that("to_arrow_stream() returns what arrow::to_arrow() returns", {
   # arrow::to_arrow() calls the mainline package by name.
   skip_on_flavor()
-  con <- local_con()
+  con <- dbConnect(duckdb())
+  # arrow::to_arrow() sends its query through dbSendQuery() and never clears
+  # the result, which dbDisconnect() closes with a warning.
+  withr::defer(suppressWarnings(dbDisconnect(con)))
   dbWriteTable(con, "t", data.frame(g = c("a", "b", "a"), x = 1:3))
 
   lazy <- dplyr::filter(dplyr::tbl(con, "t"), x > 1)
