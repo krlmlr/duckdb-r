@@ -47,8 +47,10 @@ void RProgressBarDisplay::Initialize() {
 	// with it a garbage collection.
 	RCallbackScope callback_scope;
 
-	cpp11::function getNamespace = RStrings::get().getNamespace_sym;
-	cpp11::environment duckdb_namespace(getNamespace(RStrings::get().duckdb_str));
+	SEXP duckdb_namespace = rapi_package_namespace();
+	if (duckdb_namespace == R_NilValue) {
+		return;
+	}
 	cpp11::sexp get_progress_display(Rf_lang1(RStrings::get().get_progress_display_sym));
 	auto progress_display = cpp11::safe[Rf_eval](get_progress_display, duckdb_namespace);
 

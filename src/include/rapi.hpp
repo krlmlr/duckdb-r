@@ -55,6 +55,10 @@
 #define DUCKDB_R_POISON_GUARD() ((void)0)
 #endif
 
+// The package's namespace, read from R's registry without evaluating anything,
+// or R_NilValue if it is not loaded.
+SEXP rapi_package_namespace();
+
 // ALTREP re-entrancy guard.
 //
 // R calls ALTREP methods from arbitrary points inside the interpreter, and
@@ -459,7 +463,6 @@ struct RStrings {
 	SEXP difftime_str;
 	SEXP secs_str;
 	SEXP arrow_str; // StringsToSexp
-	SEXP duckdb_str;
 	SEXP POSIXct_POSIXt_str;
 	SEXP integer64_str;
 	SEXP tbl_df_tbl_dataframe_str;
