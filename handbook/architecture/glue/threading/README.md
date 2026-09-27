@@ -112,28 +112,15 @@ a producer thread ends the blocking that underwrites it,
 which is why #2583 guards per connection
 rather than trusting this list.
 
-**An error goes through R only on R's thread.**
-Wherever the engine may be underneath,
-the glue reports an error through `rapi_error_with_context()` ([`src/utils.cpp`](/src/utils.cpp)),
-and reporting means calling the R function `rapi_error()`.
+**An error touches R only on R's thread.**
+`rapi_error_with_context()` leaves its error pending in `the` for R to raise ([`conventions/`](/handbook/architecture/glue/conventions/README.md)),
+and that is a write into R.
+A list column is what reaches it mid-scan,
+through a cell `SexpToValue()` cannot convert, such as a matrix or a string in another encoding.
 So the helper asks `OnRThread()` first,
-and anywhere else throws the error as an engine exception instead:
-the engine carries it to the thread that issued the query,
-whose entry point then reports it through R.
-A list column is what reaches the helper mid-scan,
-through a cell `SexpToValue()` cannot convert, such as a matrix;
-scanned at four threads, such a column used to kill the session.
-That covers the thread, not the engine.
-On R's thread the helper still calls R when the engine is underneath,
-at bind or in a scan task R's thread happens to take.
-The condition's R code then runs while task threads may still be reading R objects,
-and the engine's own `catch (std::exception &)` keeps nothing of cpp11's unwind but its name:
-`dbWriteTable()` of a data frame with a complex column answers the engine's JSON around `std::exception`,
-and the list column of matrices answers `std::exception` when one thread scans it.
-`SexpToValue()` throws its encoding check, for a string in an encoding other than UTF-8, outright for that reason,
-and its entry-point callers report it through R with `SexpToValueAt()`
-([`tests/testthat/test-scan-errors.R`](/tests/testthat/test-scan-errors.R) pins both).
-[#2816](https://github.com/duckdb/duckdb-r/pull/2816) takes the call into R out of the helper instead.
+and anywhere else only throws:
+the engine carries the exception to the thread that issued the query,
+whose entry point reports it again, on R's thread, and that report is the one R raises.
 
 **The engine runs R code while it holds the client context lock.**
 The replacement scans and the Arrow stream factory in
