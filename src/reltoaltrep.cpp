@@ -5,7 +5,6 @@
 #include "altrepdataframe_relation.hpp"
 #include "cpp11/declarations.hpp"
 #include "duckdb/common/unique_ptr.hpp"
-#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_result.hpp"
@@ -262,7 +261,7 @@ void AltrepRelationWrapper::Materialize() {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", local_res->GetError().c_str());
 		return;
 	}
-	D_ASSERT(local_res->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
+	D_ASSERT(local_res->type == QueryResultType::MATERIALIZED_RESULT);
 
 	auto local_mat_res = (MaterializedQueryResult *)local_res.get();
 
@@ -309,28 +308,6 @@ struct AltrepRownamesWrapper {
 	duckdb::shared_ptr<AltrepRelationWrapper> rel;
 };
 
-// Allocate a column's R vector from inside an ALTREP method.
-// Failing for want of memory is the R error such a method meets in practice,
-// and R raises it by long-jumping, which must unwind ~AltrepGuard() on its way
-// (handbook/architecture/glue/altrep/README.md): cpp11::unwind_protect() turns the jump into an exception here.
-// duckdb_r_allocate() also throws, which must not cross R's frames inside that call, so it is carried across.
-static SEXP AllocateAltrepColumn(const LogicalType &type, idx_t nrows, const string &name,
-                                 const ConvertOpts &convert_opts) {
-	std::exception_ptr error;
-	SEXP out = cpp11::unwind_protect([&]() -> SEXP {
-		try {
-			return duckdb_r_allocate(type, nrows, name, convert_opts, "Dataptr");
-		} catch (...) {
-			error = std::current_exception();
-			return R_NilValue;
-		}
-	});
-	if (error) {
-		std::rethrow_exception(error);
-	}
-	return out;
-}
-
 struct AltrepVectorWrapper {
 	// In the absence of nested types, parent_column_index is empty.
 	// For nested types, it contains the sequence of parent indices to reach
@@ -354,26 +331,26 @@ struct AltrepVectorWrapper {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->GetNames()[column_index].GetIdentifierName();
+			return res->names[column_index];
 		}
 
-		auto child_type = res->GetTypes()[parent_column_index[0]];
+		auto child_type = res->types[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
 		}
 
-		return StructType::GetChildName(child_type, column_index).GetIdentifierName();
+		return StructType::GetChildName(child_type, column_index);
 	}
 
 	string FullName() {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->GetNames()[column_index].GetIdentifierName();
+			return res->names[column_index];
 		}
 
-		string res_name = res->GetNames()[parent_column_index[0]].GetIdentifierName();
-		auto child_type = res->GetTypes()[parent_column_index[0]];
+		string res_name = res->names[parent_column_index[0]];
+		auto child_type = res->types[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			res_name += "$" + StructType::GetChildName(child_type, parent_column_index[i]);
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
@@ -386,10 +363,10 @@ struct AltrepVectorWrapper {
 		auto res = rel->GetQueryResult();
 
 		if (parent_column_index.empty()) {
-			return res->GetTypes()[column_index];
+			return res->types[column_index];
 		}
 
-		auto child_type = res->GetTypes()[parent_column_index[0]];
+		auto child_type = res->types[parent_column_index[0]];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
 			child_type = StructType::GetChildType(child_type, parent_column_index[i]);
 		}
@@ -413,28 +390,23 @@ struct AltrepVectorWrapper {
 
 		auto struct_vector = &chunk.data[0];
 		for (idx_t i = 1; i < parent_column_index.size(); i++) {
-			struct_vector = &StructVector::GetEntries(*struct_vector)[parent_column_index[i]];
+			struct_vector = &*StructVector::GetEntries(*struct_vector)[parent_column_index[i]];
 		}
 
-		return StructVector::GetEntries(*struct_vector)[column_index];
+		return *StructVector::GetEntries(*struct_vector)[column_index];
 	}
 
 	void *Dataptr() {
 		if (transformed_vector.data() == R_NilValue) {
 			const auto &convert_opts = rel->rel_eptr->convert_opts;
 
-			transformed_vector = AllocateAltrepColumn(Type(), RowCount(), Name(), convert_opts);
-			// A conversion that throws part way leaves the vector partly filled:
-			// drop it, so that the next access converts again instead of returning it.
-			// It stays set while converting, which is what a nested access sees.
-			duckdb_httplib::detail::scope_exit drop_partial([&]() { transformed_vector = R_NilValue; });
+			transformed_vector = duckdb_r_allocate(Type(), RowCount(), Name(), convert_opts, "Dataptr");
 			idx_t dest_offset = 0;
 			for (const auto &chunk : Chunks()) {
 				SEXP dest = transformed_vector.data();
 				duckdb_r_transform(ChunkData(chunk), dest, dest_offset, chunk.size(), convert_opts, FullName());
 				dest_offset += chunk.size();
 			}
-			drop_partial.release();
 
 			rel->MarkColumnAsTransformed();
 		}
@@ -544,9 +516,7 @@ SEXP RelToAltrep::RownamesMin(SEXP x, Rboolean na_rm) {
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto n = rownames_wrapper->RowCount();
 	if (n == 0) {
-		// cpp11::warning(), not Rf_warning(): a warning turned into an error long-jumps,
-		// which must unwind ~AltrepGuard() (handbook/architecture/glue/altrep/README.md)
-		cpp11::warning("no non-missing arguments to min; returning Inf");
+		Rf_warning("no non-missing arguments to min; returning Inf");
 		return Rf_ScalarReal(R_PosInf);
 	}
 	return Rf_ScalarInteger(1);
@@ -559,7 +529,7 @@ SEXP RelToAltrep::RownamesMax(SEXP x, Rboolean na_rm) {
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto n = rownames_wrapper->RowCount();
 	if (n == 0) {
-		cpp11::warning("no non-missing arguments to max; returning -Inf");
+		Rf_warning("no non-missing arguments to max; returning -Inf");
 		return Rf_ScalarReal(R_NegInf);
 	}
 	if (n > (idx_t)NumericLimits<int32_t>::Maximum()) {
@@ -638,7 +608,7 @@ R_xlen_t RelToAltrep::StructLength(SEXP x) {
 	auto const *wrapper = AltrepVectorWrapper::Get(x);
 	auto const column_index = wrapper->column_index;
 	auto const &res = wrapper->rel->GetQueryResult();
-	auto const &type = res->GetTypes()[column_index];
+	auto const &type = res->types[column_index];
 
 	return static_cast<R_xlen_t>(StructType::GetChildTypes(type).size());
 	END_CPP11_EX(0)
@@ -665,7 +635,7 @@ static R_altrep_class_t LogicalTypeToAltrepType(const LogicalType &type, const d
 		return RelToAltrep::string_class;
 #if defined(R_HAS_ALTLIST)
 	case VECSXP:
-		if (StructType::IsStruct(type)) {
+		if (type.id() == LogicalTypeId::STRUCT) {
 			return RelToAltrep::struct_class;
 		} else {
 			return RelToAltrep::list_class;
@@ -740,7 +710,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 
 	for (size_t col_idx = 0; col_idx < ncols; col_idx++) {
 		auto &col_name = types[col_idx].first;
-		names.push_back(col_name.GetIdentifierName());
+		names.push_back(col_name);
 
 		auto &col_type = types[col_idx].second;
 
@@ -748,8 +718,8 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 
 		// Special case: Only STRUCTs have a redundant row names attribute
 		// Moving this logic into duckdb_r_decorate() would add too much noise elsewhere
-		if (StructType::IsStruct(col_type)) {
-			auto child_types = RApiTypes::StructLikeChildTypes(col_type);
+		if (col_type.id() == LogicalTypeId::STRUCT) {
+			auto &child_types = StructType::GetChildTypes(col_type);
 			std::vector<idx_t> child_col_idx = parent_col_idx;
 			child_col_idx.push_back(col_idx);
 			vector_sexp =
@@ -762,8 +732,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 			// Register the vector so that the relation wrapper knows
 			// when all ALTREP columns have been transformed
 			relation_wrapper->RegisterAltrepColumn();
-			vector_sexp =
-			    R_new_altrep(LogicalTypeToAltrepType(col_type, col_name.GetIdentifierName()), ptr, R_NilValue);
+			vector_sexp = R_new_altrep(LogicalTypeToAltrepType(col_type, col_name), ptr, R_NilValue);
 			duckdb_r_decorate(col_type, vector_sexp, convert_opts);
 		}
 
