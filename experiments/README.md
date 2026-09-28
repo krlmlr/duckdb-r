@@ -153,6 +153,9 @@ This file is what names the contents, so nothing here is an orphan.
   to which CRS can be named in a type without `spatial`.
   Supports [`usage/types/`](/handbook/usage/types/README.md), [`usage/arrow-types/`](/handbook/usage/arrow-types/README.md)
   and [`usage/integrations/`](/handbook/usage/integrations/README.md).
+* [`2026-09-28-relational-convert-opts/`](2026-09-28-relational-convert-opts/):
+  which routes from a relation to R follow the connection's conversion options, with every option set away from its default.
+  Supports [`usage/relational/`](/handbook/usage/relational/README.md).
 
 * [`2026-10-14-exists-table-transaction/`](2026-10-14-exists-table-transaction/):
   whether `dbExistsTable()` leaves an open transaction usable on DuckDB 1.5.6 and 2.0,
