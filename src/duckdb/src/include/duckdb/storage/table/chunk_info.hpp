@@ -63,8 +63,7 @@ public:
 	//! Gets up to max_count entries from the chunk info. If the ret is 0>ret>max_count, the selection vector is filled
 	//! with the tuples
 	idx_t GetSelVector(ScanOptions options, optional_ptr<SelectionVector> sel_vector, idx_t max_count) const;
-	idx_t GetCheckpointRowCount(TransactionData transaction, idx_t max_count);
-	idx_t GetCommittedDeletedCount(idx_t max_count) const;
+	idx_t GetRowCount(ScanOptions options, idx_t max_count);
 	//! Returns whether or not a single row in the ChunkVectorInfo should be used or not for the given transaction
 	bool Fetch(TransactionData transaction, row_t row);
 	void CommitAppend(transaction_t commit_id, idx_t start, idx_t end);
@@ -94,6 +93,7 @@ public:
 	void VerifyCachedCompressionState() const;
 
 	bool HasDeletes(transaction_t transaction_id = MAX_TRANSACTION_ID) const;
+	bool HasUncommittedChanges() const;
 	bool AnyDeleted() const;
 	bool HasConstantInsertionId() const;
 	transaction_t ConstantInsertId() const;

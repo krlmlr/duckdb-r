@@ -2,6 +2,7 @@
 
 #include "duckdb/transaction/transaction.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/transaction/delete_info.hpp"
@@ -53,17 +54,7 @@ ChunkVectorInfo::ChunkVectorInfo(FixedSizeAllocator &allocator_p, idx_t start, t
     : start(start), allocator(allocator_p), constant_insert_id(insert_id_p), constant_delete_id(delete_id_p) {
 }
 
-idx_t ChunkVectorInfo::GetCommittedDeletedCount(idx_t max_count) const {
-	ScanOptions options(TransactionData(0, TRANSACTION_ID_START));
-	options.insert_type = InsertedScanType::ALL_ROWS;
-	options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
-	idx_t not_deleted_count = GetSelVector(options, nullptr, max_count);
-	return max_count - not_deleted_count;
-}
-
-idx_t ChunkVectorInfo::GetCheckpointRowCount(TransactionData transaction, idx_t max_count) {
-	ScanOptions options(transaction);
-	options.delete_type = DeletedScanType::INCLUDE_ALL_DELETED;
+idx_t ChunkVectorInfo::GetRowCount(ScanOptions options, idx_t max_count) {
 	return GetSelVector(options, nullptr, max_count);
 }
 
@@ -268,7 +259,7 @@ bool ChunkVectorInfo::Fetch(TransactionData transaction, row_t row) {
 		fetch_deleted_id = ConstantDeleteId();
 		break;
 	case DeleteIdState::MASKED:
-		fetch_deleted_id = deleted_mask.RowIsValid(row) ? mask_delete_id : NOT_DELETED_ID;
+		fetch_deleted_id = deleted_mask.RowIsValid(NumericCast<idx_t>(row)) ? mask_delete_id : NOT_DELETED_ID;
 		break;
 	case DeleteIdState::ARRAY: {
 		auto delete_segment = allocator.GetHandle(GetDeletedPointer());
@@ -687,6 +678,42 @@ bool ChunkVectorInfo::HasDeletes(transaction_t transaction_id) const {
 	}
 }
 
+bool ChunkVectorInfo::HasUncommittedChanges() const {
+	if (HasConstantInsertionId()) {
+		if (ConstantInsertId() >= TRANSACTION_ID_START) {
+			return true;
+		}
+	} else {
+		auto insert_segment = allocator.GetHandle(GetInsertedPointer());
+		auto inserted = insert_segment.GetPtr<transaction_t>();
+		for (idx_t i = 0; i < STANDARD_VECTOR_SIZE; i++) {
+			if (inserted[i] >= TRANSACTION_ID_START) {
+				return true;
+			}
+		}
+	}
+	switch (delete_state) {
+	case DeleteIdState::CONSTANT:
+		return ConstantDeleteId() != NOT_DELETED_ID && ConstantDeleteId() >= TRANSACTION_ID_START;
+	case DeleteIdState::MASKED:
+		// the mask is only ever folded from committed deletes, so mask_delete_id is always committed
+		D_ASSERT(mask_delete_id < TRANSACTION_ID_START);
+		return false;
+	case DeleteIdState::ARRAY: {
+		auto delete_segment = allocator.GetHandle(GetDeletedPointer());
+		auto deleted = delete_segment.GetPtr<transaction_t>();
+		for (idx_t i = 0; i < STANDARD_VECTOR_SIZE; i++) {
+			if (deleted[i] != NOT_DELETED_ID && deleted[i] >= TRANSACTION_ID_START) {
+				return true;
+			}
+		}
+		return false;
+	}
+	default:
+		throw InternalException("Unknown DeleteIdState in HasUncommittedChanges");
+	}
+}
+
 bool ChunkVectorInfo::AnyDeleted() const {
 	switch (delete_state) {
 	case DeleteIdState::CONSTANT:
@@ -817,7 +844,7 @@ unique_ptr<ChunkVectorInfo> ChunkVectorInfo::Read(FixedSizeAllocator &allocator,
 	case ChunkInfoType::CONSTANT_INFO: {
 		// a fully deleted vector - the constant insert and delete ids of 0 are visible to all transactions
 		auto start = reader.Read<idx_t>();
-		auto result = make_uniq<ChunkVectorInfo>(allocator, start, 0, 0);
+		auto result = make_uniq<ChunkVectorInfo>(allocator, start, transaction_t(0), transaction_t(0));
 		// both ids are constant - there is nothing left to compress
 		result->recheck_compression = false;
 		return result;
@@ -834,7 +861,7 @@ unique_ptr<ChunkVectorInfo> ChunkVectorInfo::Read(FixedSizeAllocator &allocator,
 		// deleted (valid) and one alive (invalid) bit - never all-valid, never all-invalid.
 		if (result->deleted_mask.CheckAllValid(STANDARD_VECTOR_SIZE) ||
 		    result->deleted_mask.CheckAllInvalid(STANDARD_VECTOR_SIZE)) {
-			throw SerializationException(
+			throw DataCorruptionException(
 			    "Partial-delete vector info mask marks either all rows deleted or all rows alive, but a "
 			    "VECTOR_INFO block must always encode a partial delete. The database file may be corrupted.");
 		}

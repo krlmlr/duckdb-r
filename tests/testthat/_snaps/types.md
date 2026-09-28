@@ -1,10 +1,10 @@
 # test_all_types() output
 
     Code
-      bad <- c("timestamp_tz", "timestamp_ns", "timestamp_array", "timestamptz_array",
-        "bit", "\"union\"", "fixed_nested_int_array", "fixed_nested_varchar_array",
-        "fixed_struct_array", "fixed_array_of_int_list", "bignum", "time_ns",
-        "geometry", NULL)
+      bad <- c("timestamp_tz", "timestamp_ns", "timestamp_tz_ns", "timestamp_array",
+        "timestamptz_array", "bit", "\"union\"", "fixed_nested_int_array",
+        "fixed_nested_varchar_array", "fixed_struct_array", "fixed_array_of_int_list",
+        "bignum", "time_ns", "geometry", NULL)
       as.list(dbGetQuery(con, paste0("SELECT * EXCLUDE (", paste(bad, collapse = ", "),
       ") REPLACE(replace(varchar, chr(0), '') AS varchar) FROM test_all_types(use_large_enum=true)")))
     Output
@@ -194,6 +194,9 @@
       2 42 🦆🦆🦆🦆🦆🦆
       3 NA         <NA>
       
+      $empty_struct
+      data frame with 0 columns and 3 rows
+      
       $struct_of_arrays
                            a                         b
       1                 NULL                      NULL
@@ -263,5 +266,11 @@
       $list_of_fixed_int_array[[3]]
       NULL
       
+      
+      $tuple
+        element1     element2
+      1       NA         <NA>
+      2       42 🦆🦆🦆🦆🦆🦆
+      3       NA         <NA>
       
 
