@@ -1,4 +1,5 @@
 #include "duckdb/transaction/duck_transaction_manager.hpp"
+#include "duckdb/logging/log_manager.hpp"
 
 #include "duckdb/main/client_data.hpp"
 
@@ -74,9 +75,9 @@ DuckTransactionManager &DuckTransactionManager::Get(AttachedDatabase &db) {
 Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	// obtain the transaction lock during this function
 	auto &meta_transaction = MetaTransaction::Get(context);
-	unique_ptr<lock_guard<mutex>> start_lock;
+	unique_lock<mutex> start_lock(start_transaction_lock, std::defer_lock);
 	if (!meta_transaction.IsReadOnly()) {
-		start_lock = make_uniq<lock_guard<mutex>>(start_transaction_lock);
+		start_lock.lock();
 	}
 	lock_guard<mutex> lock(transaction_lock);
 	if (current_start_timestamp >= TRANSACTION_ID_START) { // LCOV_EXCL_START
@@ -101,29 +102,11 @@ Transaction &DuckTransactionManager::StartTransaction(ClientContext &context) {
 	return transaction_ref;
 }
 
-ActiveCheckpointWrapper::ActiveCheckpointWrapper(DuckTransactionManager &manager)
-    : manager(manager), is_cleared(false) {
+void DuckTransactionManager::SetActiveCheckpoint(transaction_t checkpoint_id) {
+	active_checkpoint = checkpoint_id;
 }
 
-void ActiveCheckpointWrapper::Clear() {
-	if (is_cleared) {
-		return;
-	}
-	is_cleared = true;
-	manager.ResetCheckpointId();
-}
-
-transaction_t DuckTransactionManager::GetNewCheckpointId() {
-	if (active_checkpoint != MAX_TRANSACTION_ID) {
-		throw InternalException(
-		    "DuckTransactionManager::GetNewCheckpointId requested a new id but active_checkpoint was already set");
-	}
-	auto result = last_commit.load();
-	active_checkpoint = result;
-	return result;
-}
-
-void DuckTransactionManager::ResetCheckpointId() {
+void DuckTransactionManager::ResetActiveCheckpoint() {
 	active_checkpoint = MAX_TRANSACTION_ID;
 }
 
@@ -256,9 +239,7 @@ void DuckTransactionManager::Checkpoint(ClientContext &context, bool force) {
 		lock_guard<mutex> start_lock(start_transaction_lock);
 		// wait until any active transactions are finished
 		while (!lock) {
-			if (context.interrupted) {
-				throw InterruptException();
-			}
+			context.InterruptCheck();
 			lock = checkpoint_lock.TryGetExclusiveLock();
 		}
 	}
@@ -316,6 +297,8 @@ void DuckTransactionManager::CleanupTransactions() {
 
 ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Transaction &transaction_p) {
 	auto &transaction = transaction_p.Cast<DuckTransaction>();
+	// flush the transaction-local blocks of bulk appends before taking any commit locks (see PreFlushOptimisticBlocks)
+	ErrorData error = transaction.PreFlushOptimisticBlocks(db);
 	unique_lock<mutex> t_lock(transaction_lock);
 	if (!db.IsSystem() && !db.IsTemporary()) {
 		if (transaction.ChangesMade()) {
@@ -330,8 +313,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	unique_ptr<StorageLockKey> lock;
 	auto undo_properties = transaction.GetUndoProperties();
 	auto checkpoint_decision = CanCheckpoint(transaction, lock, undo_properties);
-	ErrorData error;
-	unique_ptr<lock_guard<mutex>> held_wal_lock;
+	unique_lock<mutex> held_wal_lock;
 	unique_ptr<StorageCommitState> commit_state;
 	bool skip_wal_write_due_to_checkpoint = false;
 	bool wal_written = false;
@@ -348,7 +330,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 			skip_wal_write_due_to_checkpoint = true;
 		}
 	}
-	bool should_write_to_wal = transaction.ShouldWriteToWAL(db);
+	bool should_write_to_wal = !error.HasError() && transaction.ShouldWriteToWAL(db);
 	if (should_write_to_wal) {
 		auto &storage_manager = db.GetStorageManager().Cast<SingleFileStorageManager>();
 		// if we are committing changes and we are not doing a "checkpoint instead of WAL write"
@@ -378,7 +360,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		if (should_write_to_wal && skip_wal_write_due_to_checkpoint && !checkpoint_decision.can_checkpoint) {
 			// we have not written to the WAL but we have now realized we can't checkpoint after all
 			// in order to commit we need backpeddle and write to the WAL after all
-			D_ASSERT(held_wal_lock);
+			D_ASSERT(held_wal_lock.owns_lock());
 			// unlock the transaction lock while we are writing to the WAL
 			t_lock.unlock();
 			error = transaction.WriteToWAL(context, db, commit_state);
@@ -444,7 +426,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	                         undo_properties.has_catalog_changes || error.HasError();
 
 	// Remove the transaction from the list of active transactions and gather cleanup information.
-	auto cleanup_info = RemoveTransaction(transaction, store_transaction);
+	auto cleanup_info = RemoveTransaction(transaction, store_transaction, CreateCleanupInfo());
 	if (cleanup_info->ScheduleCleanup()) {
 		lock_guard<mutex> q_lock(cleanup_queue_lock);
 		cleanup_queue.emplace(std::move(cleanup_info));
@@ -455,8 +437,8 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 	t_lock.unlock();
 	// if we have skipped the WAL write due to checkpoint, we keep the WAL lock while checkpointing
 	// this prevents any concurrent transactions from happening during this time
-	if (!skip_wal_write_due_to_checkpoint) {
-		held_wal_lock.reset();
+	if (!skip_wal_write_due_to_checkpoint && held_wal_lock.owns_lock()) {
+		held_wal_lock.unlock();
 	}
 
 	CleanupTransactions();
@@ -472,7 +454,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		CheckpointOptions options;
 		options.action = CheckpointAction::ALWAYS_CHECKPOINT;
 		options.type = checkpoint_decision.type;
-		options.wal_lock = held_wal_lock.get();
+		options.wal_lock = held_wal_lock.owns_lock() ? &held_wal_lock : nullptr;
 		auto &storage_manager = db.GetStorageManager();
 		try {
 			storage_manager.CreateCheckpoint(context, options);
@@ -500,7 +482,7 @@ void DuckTransactionManager::RollbackTransaction(Transaction &transaction_p) {
 		error = transaction.Rollback();
 
 		// Remove the transaction from the list of active transactions and gather cleanup information.
-		auto cleanup_info = RemoveTransaction(transaction);
+		auto cleanup_info = RemoveTransaction(transaction, CreateCleanupInfo());
 		if (cleanup_info->ScheduleCleanup()) {
 			lock_guard<mutex> q_lock(cleanup_queue_lock);
 			cleanup_queue.emplace(std::move(cleanup_info));
@@ -514,20 +496,32 @@ void DuckTransactionManager::RollbackTransaction(Transaction &transaction_p) {
 	}
 }
 
-unique_ptr<DuckCleanupInfo> DuckTransactionManager::RemoveTransaction(DuckTransaction &transaction) noexcept {
-	return RemoveTransaction(transaction, transaction.ChangesMade());
+unique_ptr<DuckCleanupInfo> DuckTransactionManager::CreateCleanupInfo() {
+	auto cleanup_info = make_uniq<DuckCleanupInfo>();
+	// RemoveTransaction moves the transaction out of active_transactions before re-homing it in one of these
+	// lists. It is noexcept, so a failure to allocate there would terminate the process and lose the transaction;
+	// reserve everything it can need here instead, where throwing is safe and modifies nothing.
+	cleanup_info->transactions.reserve(recently_committed_transactions.size() + 1);
+	recently_committed_transactions.reserve(recently_committed_transactions.size() + 1);
+	return cleanup_info;
 }
 
-unique_ptr<DuckCleanupInfo> DuckTransactionManager::RemoveTransaction(DuckTransaction &transaction,
-                                                                      bool store_transaction) noexcept {
-	auto cleanup_info = make_uniq<DuckCleanupInfo>();
+unique_ptr<DuckCleanupInfo>
+DuckTransactionManager::RemoveTransaction(DuckTransaction &transaction,
+                                          unique_ptr<DuckCleanupInfo> cleanup_info) noexcept {
+	return RemoveTransaction(transaction, transaction.ChangesMade(), std::move(cleanup_info));
+}
+
+unique_ptr<DuckCleanupInfo>
+DuckTransactionManager::RemoveTransaction(DuckTransaction &transaction, bool store_transaction,
+                                          unique_ptr<DuckCleanupInfo> cleanup_info) noexcept {
+	// Nothing here may allocate: CreateCleanupInfo has reserved everything this needs (see its comment).
 
 	// Find the transaction in the active transactions,
 	// as well as the lowest start time, transaction id, and active query.
 	idx_t t_index = active_transactions.size();
 	auto lowest_start_time = TRANSACTION_ID_START;
 	auto lowest_transaction_id = MAX_TRANSACTION_ID;
-	auto active_checkpoint_id = active_checkpoint.load();
 	for (idx_t i = 0; i < active_transactions.size(); i++) {
 		if (active_transactions[i].get() == &transaction) {
 			t_index = i;
@@ -535,9 +529,6 @@ unique_ptr<DuckCleanupInfo> DuckTransactionManager::RemoveTransaction(DuckTransa
 		}
 		lowest_start_time = MinValue(lowest_start_time, active_transactions[i]->start_time);
 		lowest_transaction_id = MinValue(lowest_transaction_id, active_transactions[i]->transaction_id);
-	}
-	if (active_checkpoint_id != MAX_TRANSACTION_ID && active_checkpoint_id < lowest_start_time) {
-		lowest_start_time = active_checkpoint_id;
 	}
 	lowest_active_start = lowest_start_time;
 	lowest_active_id = lowest_transaction_id;
