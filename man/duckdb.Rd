@@ -40,7 +40,8 @@ duckdb_adbc()
   array = "none",
   geometry = "blob",
   map = "data.frame",
-  time = c("difftime", "hms")
+  time = c("difftime", "hms"),
+  blob = c("list", "blob")
 )
 
 \S4method{dbDisconnect}{duckdb_connection}(conn, ..., shutdown = TRUE)
@@ -166,6 +167,12 @@ and an \code{hms} column or parameter writes \code{INTERVAL}.
 If \code{"hms"} is selected, they are returned as \code{\link[hms:hms]{hms::hms()}} vectors,
 which requires the \pkg{hms} package,
 and an \code{hms} column or parameter writes \code{TIME}.}
+
+\item{blob}{How \code{BLOB} columns should be returned.
+There are two options: \code{"list"} and \code{"blob"}.
+If \code{"list"} is selected (the default), they are returned as a list of raw vectors.
+If \code{"blob"} is selected, they are returned as \code{\link[blob:blob]{blob::blob()}} vectors,
+which requires the \pkg{blob} package.}
 
 \item{conn}{A \code{duckdb_connection} object}
 
