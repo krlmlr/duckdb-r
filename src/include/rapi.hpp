@@ -467,7 +467,8 @@ struct RStrings {
 	SEXP wk_wkb_wk_vctr_str;
 	SEXP vctrs_list_of_str;
 	SEXP blob_vctrs_list_of_str;
-	SEXP empty_raw; // Rf_allocVector
+	SEXP empty_raw;  // Rf_allocVector
+	SEXP period_str; // with its `package` attribute, as an S4 class is spelled
 	SEXP cxx_stdlib_libstdcxx_str;
 	SEXP cxx_stdlib_libcxx_str;
 	SEXP cxx_stdlib_unknown_str;
@@ -488,6 +489,8 @@ struct RStrings {
 	SEXP duckdb_vector_sym;
 	SEXP crs_sym;
 	SEXP geodesic_sym;
+	// The slots of a lubridate Period, in the order lubridate gives them
+	SEXP period_slot_syms[5];
 
 	static const RStrings &get() {
 		// On demand
@@ -543,6 +546,11 @@ SEXP duckdb_r_allocate(const duckdb::LogicalType &type, duckdb::idx_t nrows, con
 void duckdb_r_df_decorate_impl(SEXP dest, SEXP rownames, SEXP class_);
 void duckdb_r_df_decorate(SEXP dest, duckdb::idx_t nrows, SEXP class_ = R_NilValue);
 void duckdb_r_decorate(const duckdb::LogicalType &type, SEXP dest, const duckdb::ConvertOpts &convert_opts);
+void duckdb_r_check_period_arrays(const duckdb::LogicalType &type, const duckdb::string &name,
+                                  const duckdb::ConvertOpts &convert_opts, const char *caller);
+// One slot of the lubridate Period an INTERVAL reads as, by its index in RStrings::period_slot_syms
+void duckdb_r_transform_period_slot(const duckdb::Vector &src_vec, SEXP dest, duckdb::idx_t dest_offset,
+                                    duckdb::idx_t n, duckdb::idx_t slot_idx);
 void duckdb_r_transform(const duckdb::Vector &src_vec, SEXP dest, duckdb::idx_t dest_offset, duckdb::idx_t n,
                         const duckdb::ConvertOpts &convert_opts, const duckdb::string &name);
 

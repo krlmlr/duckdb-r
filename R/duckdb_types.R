@@ -12,8 +12,9 @@
 #' # The routes
 #'
 #' **Reading.**
-#' [dbGetQuery()] converts each column by its type, and six [dbConnect()] arguments change the shape,
-#' with defaults `bigint = "numeric"`, `array = "none"`, `map = "data.frame"`, `geometry = "blob"`, `time = "difftime"` and `blob = "list"`.
+#' [dbGetQuery()] converts each column by its type, and seven [dbConnect()] arguments change the shape.
+#' Their defaults are `bigint = "numeric"`, `array = "none"`, `map = "data.frame"`, `geometry = "blob"`,
+#' `time = "difftime"`, `blob = "list"` and `interval = "difftime"`.
 #' [dbGetQueryArrow()] hands out the engine's own Arrow export instead,
 #' and what each type becomes there, and in the R readers that convert the stream, is documented in [duckdb_types_arrow].
 #' A cast to `VARCHAR` in the query reads any type as text.
@@ -68,11 +69,11 @@
 #'
 #' * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
 #' * **`TIME`** reads as `difftime` in seconds, or with `time = "hms"` as `hms::hms`.
-#'   With `time = "hms"`, an `hms` column, data frame field or parameter writes it, to the nearest microsecond, a tie to even,
-#'   and a `difftime` that is not an `hms` keeps writing `INTERVAL`.
+#'   With `time = "hms"`, an `hms` column, data frame field or parameter writes it,
+#'   and a `difftime` that is not an `hms` keeps writing `INTERVAL`; [dbQuoteLiteral()] quotes an `hms` as a `TIME` there.
 #'   Its text writes it through `field.types`, and so does Arrow (see [duckdb_types_arrow]).
-#' * **`TIME_NS`** reads through Arrow, and to the microsecond through a cast to `TIME` in the query.
-#'   Its text writes it, and so does Arrow.
+#' * **`TIME_NS`** reads as `TIME` does, in seconds to the nanosecond.
+#'   Its text writes it through `field.types`, and so does Arrow.
 #' * **`TIMETZ`** (`TIME WITH TIME ZONE`) reads as `TIME` does, as its local time.
 #'   The offset it drops is a [limitation](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations).
 #'   Its text writes it.
@@ -83,7 +84,15 @@
 #' * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
 #'   `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
 #'   and Arrow writes it directly.
-#' * **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours.
+#' * **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours,
+#'   a [limitation](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations).
+#'   With `interval = "Period"` it reads as a `lubridate::Period` that keeps the months, the days and the time apart,
+#'   the time as whole hours and minutes and the seconds left over, which a double holds to the microsecond.
+#'   lubridate's `%m+%` adds its months and days to a date as DuckDB adds an `INTERVAL`'s,
+#'   and to a `POSIXct` as DuckDB does to a `TIMESTAMPTZ` in a session `TimeZone` of the `POSIXct`'s zone.
+#'   Under that option a `Period` column, data frame field or parameter writes it part for part, `NA` in any part as `NULL`,
+#'   and `dbQuoteLiteral()` quotes a `Period` as that `INTERVAL`;
+#'   under the default, a `Period` of seconds alone writes them, a `DOUBLE`, or an `INTEGER` if they are integers.
 #'   A `difftime` in any unit, or an `hms` under the default `time`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
 #'
 #' # Enums and nested types

@@ -391,6 +391,63 @@ test_that("dbQuoteLiteral() keeps sub-second precision (#2646)", {
   )
 })
 
+test_that("dbQuoteLiteral() quotes an hms as TIME under `time = \"hms\"`, and as before otherwise", {
+  skip_if_not_installed("hms")
+
+  x <- hms::hms(c(3723.5, NA, 86400, 0.000001))
+
+  con <- local_con()
+  expect_equal(
+    as.character(dbQuoteLiteral(con, x)),
+    c(
+      "to_microseconds(3723500000)",
+      "NULL",
+      "to_microseconds(86400000000)",
+      "to_microseconds(1)"
+    )
+  )
+
+  con <- local_con(time = "hms")
+  expect_equal(
+    as.character(dbQuoteLiteral(con, x)),
+    c(
+      "'01:02:03.5'::TIME",
+      "NULL",
+      "'24:00:00'::TIME",
+      "'00:00:00.000001'::TIME"
+    )
+  )
+  data <- dbGetQuery(con, paste("SELECT", dbQuoteLiteral(con, x[1]), "AS a"))
+  expect_identical(data$a, x[1])
+  expect_error(dbQuoteLiteral(con, hms::hms(-1)), "to quote as `TIME`")
+  expect_error(dbQuoteLiteral(con, hms::hms(NaN)), "not NaN seconds")
+  expect_identical(dbQuoteLiteral(con, hms::hms()), SQL(character()))
+
+  # Half a microsecond rounds to even, in a literal as in a write
+  ties <- hms::hms(c(5e-7, 1.5e-6, 2.5e-6))
+  expect_equal(
+    as.character(dbQuoteLiteral(con, ties)),
+    c(
+      "'00:00:00'::TIME",
+      "'00:00:00.000002'::TIME",
+      "'00:00:00.000002'::TIME"
+    )
+  )
+  written <- dbGetQuery(con, "SELECT ?::VARCHAR AS a", params = list(ties))
+  expect_equal(written$a, c("00:00:00", "00:00:00.000002", "00:00:00.000002"))
+  # So half a microsecond before 00:00:00 or after 24:00:00 rounds into the range, as a write rounds it
+  expect_equal(
+    as.character(dbQuoteLiteral(con, hms::hms(c(-5e-7, 86400.0000005)))),
+    c("'00:00:00'::TIME", "'24:00:00'::TIME")
+  )
+  written <- dbGetQuery(
+    con,
+    "SELECT ?::VARCHAR AS a",
+    params = list(hms::hms(c(-5e-7, 86400.0000005)))
+  )
+  expect_equal(written$a, c("00:00:00", "24:00:00"))
+})
+
 test_that("dbQuoteLiteral() rounds a `POSIXct` to microseconds on both sides of the epoch", {
   con <- local_con()
 

@@ -75,6 +75,9 @@ static data_ptr_t GetColDataPtr(const RType &rtype, SEXP coldata) {
 	case RTypeId::STRUCT:
 		// Will bind child columns dynamically. Could also optimize by descending early and recording.
 		return (data_ptr_t)coldata;
+	case RType::INTERVAL_PERIOD:
+		// The parts, resolved where the type was detected
+		return ReadOnlyDataPtr(&rtype.GetPeriod());
 	default:
 		rapi_error_with_context("GetColDataPtr", "Unsupported column type for bind");
 	}
@@ -115,7 +118,21 @@ static bool WalkColumn(SEXP coldata, VISIT &&visit) {
 	}
 
 	// The `map_list_of` shape reads the names of a cell with STRING_ELT()
-	return WalkColumn(Rf_getAttrib(coldata, R_NamesSymbol), visit);
+	if (!WalkColumn(Rf_getAttrib(coldata, R_NamesSymbol), visit)) {
+		return false;
+	}
+
+	// A lubridate Period's parts are its slots, which the scan reads too.
+	// Only a double or an integer vector can be one, so nothing else is asked.
+	auto numeric = TYPEOF(coldata) == REALSXP || TYPEOF(coldata) == INTSXP;
+	if (numeric && Rf_isS4(coldata) && Rf_inherits(coldata, "Period")) {
+		for (auto slot_sym : RStrings::get().period_slot_syms) {
+			if (!WalkColumn(Rf_getAttrib(coldata, slot_sym), visit)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 // Materialize `x` through the accessor GetColDataPtr() takes it with. Runs an ALTREP class's code.
@@ -216,6 +233,21 @@ static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &res
 		} else {
 			auto result_data = FlatVector::GetDataMutable<DST>(result);
 			result_data[i] = RTYPE::Convert(val);
+		}
+	}
+}
+
+// Checked on R's thread before the scan (FindInvalidValue()), so what fails here got past it.
+// The parts were resolved at bind, on R's thread, so nothing here calls R.
+static void AppendPeriodColumnSegment(const RPeriodType &period, idx_t sexp_offset, Vector &result, idx_t count) {
+	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetDataMutable<interval_t>(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = R_xlen_t(sexp_offset + i);
+		if (period.IsNull(idx)) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = period.Convert(idx);
 		}
 	}
 }
@@ -444,6 +476,9 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 		AppendColumnSegment<double, dtime_t, RTimeType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
+	case RType::INTERVAL_PERIOD:
+		AppendPeriodColumnSegment(*(const RPeriodType *)coldata_ptr, sexp_offset, v, this_count);
+		break;
 	case RType::INTERVAL_SECONDS: {
 		auto data_ptr = (double *)coldata_ptr;
 		AppendColumnSegment<double, interval_t, RIntervalSecondsType>(data_ptr, sexp_offset, v, this_count);
@@ -588,6 +623,14 @@ static bool get_time_hms_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
+static bool get_interval_period_param(named_argument_map_t &named_parameters) {
+	auto entry = named_parameters.find("interval_period");
+	if (entry != named_parameters.end()) {
+		return BooleanValue::Get(entry->second);
+	}
+	return false;
+}
+
 static bool get_map_list_of_param(named_argument_map_t &named_parameters) {
 	auto entry = named_parameters.find("map_list_of");
 	if (entry != named_parameters.end()) {
@@ -710,6 +753,7 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	auto experimental = get_experimental_param(input.named_parameters);
 	auto map_list_of = get_map_list_of_param(input.named_parameters);
 	auto time_hms = get_time_hms_param(input.named_parameters);
+	auto interval_period = get_interval_period_param(input.named_parameters);
 
 	auto df_names = df.names();
 	vector<RType> rtypes;
@@ -741,7 +785,7 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		if (!error.empty()) {
 			throw InvalidInputException(error);
 		}
-		auto rtype = RApiTypes::DetectRType(coldata, integer64, time_hms);
+		auto rtype = RApiTypes::DetectRType(coldata, integer64, time_hms, interval_period);
 
 		bool is_named_list_map = false;
 		if (map_list_of && (rtype.id() == RTypeId::LIST || rtype.id() == RTypeId::LIST_OF_NULLS)) {
@@ -867,7 +911,8 @@ DataFrameScanFunction::DataFrameScanFunction()
 	    .AddKeywordOnly("integer64", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("experimental", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false))
-	    .AddKeywordOnly("time_hms", LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	    .AddKeywordOnly("time_hms", LogicalType::BOOLEAN, Value::BOOLEAN(false))
+	    .AddKeywordOnly("interval_period", LogicalType::BOOLEAN, Value::BOOLEAN(false));
 	projection_pushdown = true;
 	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }

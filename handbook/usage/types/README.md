@@ -17,9 +17,10 @@ Edit the leaves, re-run the script and then roxygen; its `--check`, which CI run
 ## The routes
 
 **Reading.**
-`dbGetQuery()` converts each column by its type, and six `dbConnect()` arguments change the shape,
-with defaults `bigint = "numeric"`, `array = "none"`, `map = "data.frame"`, `geometry = "blob"`, `time = "difftime"` and `blob = "list"`,
+`dbGetQuery()` converts each column by its type, and seven `dbConnect()` arguments change the shape,
 set in [`R/dbConnect__duckdb_driver.R`](/R/dbConnect__duckdb_driver.R).
+Their defaults are `bigint = "numeric"`, `array = "none"`, `map = "data.frame"`, `geometry = "blob"`,
+`time = "difftime"`, `blob = "list"` and `interval = "difftime"`.
 `dbGetQueryArrow()` hands out the engine's own Arrow export instead,
 and what each type becomes there, and in the R readers that convert the stream, is [`arrow-types/`](/handbook/usage/arrow-types/README.md)'s.
 A cast to `VARCHAR` in the query reads any type as text.
@@ -77,11 +78,12 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
 * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
 * **`TIME`** reads as `difftime` in seconds, or with `time = "hms"` as `hms::hms`,
   pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R).
-  With `time = "hms"`, an `hms` column, data frame field or parameter writes it, to the nearest microsecond, a tie to even,
-  and a `difftime` that is not an `hms` keeps writing `INTERVAL`.
+  With `time = "hms"`, an `hms` column, data frame field or parameter writes it,
+  and a `difftime` that is not an `hms` keeps writing `INTERVAL`; `dbQuoteLiteral()` quotes an `hms` as a `TIME` there.
   Its text writes it through `field.types`, and so does Arrow ([`arrow-types/`](/handbook/usage/arrow-types/README.md)).
-* **`TIME_NS`** reads through Arrow, and to the microsecond through a cast to `TIME` in the query.
-  Its text writes it, and so does Arrow.
+* **`TIME_NS`** reads as `TIME` does, in seconds to the nanosecond,
+  pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R).
+  Its text writes it through `field.types`, and so does Arrow.
 * **`TIMETZ`** (`TIME WITH TIME ZONE`) reads as `TIME` does, as its local time,
   pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R).
   The offset it drops is a limitation (below).
@@ -93,7 +95,15 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
 * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
   `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
   and Arrow writes it directly.
-* **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours.
+* **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours,
+  a limitation (below).
+  With `interval = "Period"` it reads as a `lubridate::Period` that keeps the months, the days and the time apart,
+  the time as whole hours and minutes and the seconds left over, which a double holds to the microsecond.
+  lubridate's `%m+%` adds its months and days to a date as DuckDB adds an `INTERVAL`'s,
+  and to a `POSIXct` as DuckDB does to a `TIMESTAMPTZ` in a session `TimeZone` of the `POSIXct`'s zone.
+  Under that option a `Period` column, data frame field or parameter writes it part for part, `NA` in any part as `NULL`,
+  and `dbQuoteLiteral()` quotes a `Period` as that `INTERVAL`;
+  under the default, a `Period` of seconds alone writes them, a `DOUBLE`, or an `INTEGER` if they are integers.
   A `difftime` in any unit, or an `hms` under the default `time`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
 
 ## Enums and nested types
@@ -168,7 +178,7 @@ and the `spatial` extension's own types:
 
 ## Limitations
 
-* `BIT`, `BIGNUM`, `TIME_NS` and `UNION` have no R vector,
+* `BIT`, `BIGNUM` and `UNION` have no R vector,
   so `dbGetQuery()` and `dbExecute()` refuse a column of one, or of anything nesting one, by name and before the statement runs.
   What that does to `dplyr::tbl()` is [`integrations/`](/handbook/usage/integrations/README.md)'s.
 * `dbCreateTable()` takes its column types from `dbDataType()`,
@@ -176,7 +186,8 @@ and the `spatial` extension's own types:
   where the write routes give `INTERVAL`, `BIGINT`, `ENUM` and `ARRAY`,
   so a `difftime` column fails to append to the table it created
   ([`plan/PLAN-type-documentation.md`](/plan/PLAN-type-documentation.md)).
-  Under `time = "hms"` the two agree on time, since a connection's `dbDataType()` then says `INTERVAL` for a `difftime` that is not an `hms`.
+  Under `time = "hms"` the two agree on time,
+  since a connection's `dbDataType()` then says `INTERVAL` for a `difftime` that is not an `hms`.
   For a data frame column, `dbDataType()` gives its field's type when it has one field and fails when it has several,
   and `dbCreateTable()` and `sqlCreateTable()` with it, where `dbWriteTable()` writes a `STRUCT`.
 * Attribute classes do not cross, in either direction, through Arrow too:
@@ -204,10 +215,32 @@ and the `spatial` extension's own types:
   Which is why the cheapest place to fix this is the reader.
 * A raw vector column is refused with a message naming neither the column nor its class
   ([`plan/PLAN-type-documentation.md`](/plan/PLAN-type-documentation.md)).
+* `TIME_NS` reads as a double of seconds, which holds a nanosecond up to 24:00:00 only to within 1/128 of one,
+  so `round(as.numeric(x) * 1e9)` recovers it, and an `hms` prints it to the microsecond.
 * `TIMESTAMP_NS` reads truncated to the microsecond, with a warning the first time in a session and never again,
   `TIMETZ` without its offset, pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R),
   and `infinity` and `-infinity` as a finite date millions of years away or a finite instant, not as `Inf`.
-  Which part of an `INTERVAL` was months or days is lost.
+  Read as a `difftime`, an `INTERVAL` counts a month as 30 days and a day as 24 hours,
+  so which part was months or days is lost, unless `interval = "Period"`.
+  Under it, an `ARRAY` of `INTERVAL` is refused before the statement runs,
+  and a `Period` whose parts do not fit is refused naming its column or parameter.
+  A `Period` built in R has its seconds rounded to the microsecond on write,
+  and a double of seconds past 2^33 of them, some 272 years, does not hold each microsecond.
+* lubridate adds a `Period`'s hours, minutes and seconds as clock time, where DuckDB adds an `INTERVAL`'s microseconds as elapsed time,
+  so across a daylight saving change `%m+%` lands an hour off, or on `NA` inside the skipped hour.
+  For a `POSIXct`, its months and days match DuckDB's only on a `TIMESTAMPTZ` in a session `TimeZone` of the `POSIXct`'s zone:
+  a `POSIXct` writes a plain `TIMESTAMP` of its clock in UTC, which a day or a month added in DuckDB keeps,
+  so a day is 24 hours there, and across the change both land an hour off `%m+%`
+  ([`experiments/2026-09-28-interval-mappings/`](/experiments/2026-09-28-interval-mappings/README.md)).
+* A `Period` with a year, month, day, hour or minute is refused without `interval = "Period"`, naming its column or parameter,
+  and so is one in a list cell or a map value under either `interval`, which writes the seconds alone there.
+* `INTERVAL` has no clock mapping, and `interval = "Period"` is the exact one:
+  one clock duration has one precision, so a month does not combine with a day and a month part has no exact form;
+  its days would be 86400 seconds, where DuckDB adds a calendar day to a `TIMESTAMPTZ` across a daylight saving change;
+  clock's constructors take 32-bit counts, and its arithmetic wraps past 64 bits without an error;
+  and `rel_to_altrep()` could build a duration lazily only through clock's undocumented fields.
+  Converting a `Period` to a clock duration is for clock and lubridate to offer, which neither does today,
+  and not for the package to bridge ([`experiments/2026-09-28-interval-mappings/`](/experiments/2026-09-28-interval-mappings/README.md)).
 * A `POSIXct` writes with its zone label dropped, and a `difftime` or `hms` without its unit.
 * `NaN`, `Inf` and `-Inf` in a `Date`, `difftime` or `POSIXct` stored as double write as far-off negative values, not as `NULL` or infinity:
   on x86_64, the `DATE` 5877642-06-23 (BC), an `INTERVAL` of -106751991 days, and a `TIMESTAMP` no cast to `VARCHAR` accepts,
@@ -217,10 +250,13 @@ and the `spatial` extension's own types:
   and `TIME` does only under `time = "hms"`, the one R route to it outside Arrow.
   Under the default `time`, `difftime` and `hms` write `INTERVAL`, which does not cast to `TIME`,
   so `field.types`, `dbAppendTable()` and a parameter all fail with that cast error.
-  Under `time = "hms"`, an `hms` in a list cell still writes `INTERVAL`,
+  Under `time = "hms"`, an `hms` writes `TIME` rounded to the microsecond, one in a list cell still writes `INTERVAL`,
   an `hms` no longer appends to an `INTERVAL` column, because `TIME` does not cast to `INTERVAL`,
   and a value outside 00:00:00 to 24:00:00, `NaN` and the infinities included, is refused naming its column or parameter.
   The list a `VARIANT` reads as writes as a `LIST` inside the variant.
+* No R class writes `TIME_NS`, because DuckDB casts neither `TIME` nor `INTERVAL` to it:
+  a `TIME_NS` read back does not append to its column, not even as an `hms` under `time = "hms"`,
+  and `field.types` naming it fails on an `hms` or a `difftime` the same way.
 * An `ordered` factor writes an unordered `ENUM`.
 * An `ARRAY` column under the default `array = "none"` is refused with a hint to `array = "matrix"`, and only once the statement has run,
   so an `INSERT ... RETURNING` of one has inserted its rows by the time it fails.

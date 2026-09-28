@@ -58,6 +58,7 @@ Suggests:
     dbplyr (>= 2.6.0),
     dplyr,
     hms,
+    lubridate,
     nanoarrow,
     rlang,
     sf,
