@@ -40,7 +40,7 @@ Not a series, and given no stage:
 a forward whose green is an ancestor of its base's green (cutover litter pending deletion),
 `<S>-rc-dev`, `<S>-alpha` and `<S>-rc-alpha` (derived strands),
 `<L>-land-*` (a landing),
-and `<S>-vendor` (the vendor strand the buffer is derived from, which stage 1 serves).
+and `<S>-fwd-vendor` (the forward's vendor strand).
 
 **All four refs exist from day one, and green contains the flavor change.**
 A forward's four start equal at the seed tip, topped by a separate `chore: Add fifth version component` commit;
@@ -63,6 +63,7 @@ prints one verdict each:
 ADVANCE / WAIT / RETRY `<sha>` / REPAIR `<sha>` / IDLE,
 plus a CUTOVER line for a forward series that has caught up —
 a suggestion for a human, stage 6,
+a LATE TAG line for a release the buffer vendored before upstream tagged it,
 and an UNSERVED block for an upstream release line no series covers,
 saying whether `series.yaml` declares its flavor yet,
 and the one the report ends with),
@@ -123,33 +124,28 @@ git fetch -q upstream main
 
 Reference: [`references/0-setup.md`](references/0-setup.md).
 
-### 1. Vendor onto `<S>-vendor`, and derive `<S>-build`
+### 1. Vendor onto `<S>-build`
 
-Run **`main`'s copy of the scripts**, against the strand worktree and then the buffer worktree,
+Run **`main`'s copy of the script**, against the buffer worktree,
 with the upstream clone checked out at the line the series tracks:
 
 ```sh
+git -C <upstream-clone> fetch --prune --tags origin
 git -C <upstream-clone> checkout --detach origin/<upstream branch of S>
-VENDOR_REPO=<S>-vendor-worktree \
-  <main-checkout>/scripts/vendor-one.sh --strand --commits 100 <upstream-clone>
-git -C <S>-vendor-worktree push origin HEAD:<S>-vendor
-(cd <S>-build-worktree && <main-checkout>/scripts/series-vendor.sh <S> --push)
+VENDOR_REPO=<S>-build-worktree \
+  <main-checkout>/scripts/vendor-one.sh --commits 100 <upstream-clone>
 ```
 
-* The strand takes the vendoring and nothing else: one commit per upstream commit, no counter, no glue gate.
-  The buffer is derived from it: each strand commit picked, the counter stamped, the glue gate run
-  ([`branches/model/`](/handbook/branches/model/README.md)).
-* The clone's HEAD picks the line; the script refuses a strand whose last vendored commit is off that line.
+* The fetch takes tags because the script reads them from the clone:
+  a commit upstream tagged after it was vendored is re-stamped as a second vendor commit for the same SHA before the walk goes on.
+* The clone's HEAD picks the line; the script refuses a buffer whose last vendored commit is off that line.
   Treat the refusal as the answer.
-* The pick **stops at the first glue failure**, the breaking pick at HEAD of the buffer worktree.
+* The script gates itself and **stops at the first glue failure**, the breaking commit at HEAD.
   Then: fix the glue (`src/*.cpp`, `src/include/`, never `src/duckdb/`),
   `clang-format -i src/*.{c,cc,cpp,h,hpp}`,
-  amend into HEAD with an `R-side fix` section, rerun to finish the picks. The strand commit stays as it is.
-* A `PATCH BROKEN` stop is the strand's: fix the patch in the strand commit, amend it there, and pick again.
+  amend into HEAD with an `R-side fix` section, rerun to finish the budget.
 * A vendored tree broken by upstream itself is vendored on and folded into the next commit that repairs it (stage 2's fold rule).
-* A series with no strand yet derives one from its buffer first, once: `scripts/series-vendor.sh <S> --init --push`,
-  which `series-check.sh` asks for as `VENDOR`.
-* Push `<S>-vendor` and `<S>-build` unconditionally; red never blocks the buffer.
+* Push `<S>-build` unconditionally; red never blocks the buffer.
 
 Reference: [`references/1-vendor.md`](references/1-vendor.md).
 
@@ -346,6 +342,8 @@ Reference: [`references/7-tooling-prs.md`](references/7-tooling-prs.md).
 * The flavor's declaration PR against `scripts/series.yaml`, opened once after searching open and closed PRs for it;
   cutting the refs stays `series-open/SKILL.md`'s and a human's.
 * A reading that failed, reported as one.
+* A `LATE TAG` line stage 1 did not clear: the buffer has vendored past the tag, and the release branch takes the re-stamp at CUT
+  ([`scripts/VENDORING.md`](/scripts/VENDORING.md#a-tag-upstream-pushed-late)); name the series, the tag and the commit.
 * A due cutover, above the `UNSERVED` block, as stage 6's block filled in.
 * Which source served the verdicts, and any record missing from the store and what it was for.
 
