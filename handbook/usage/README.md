@@ -20,10 +20,13 @@ and is what turns the announcement off.
 * [`connections/`](connections/) — `dbConnect()`, instances, shutdown
 * [`statements/`](statements/) — queries, transactions, tables, quoting
 * [`types/`](types/) — the R ↔ DuckDB type mapping
+* [`arrow-types/`](arrow-types/): every type through Arrow, in both directions, and which R functions keep it
+* [`timestamps/`](timestamps/) — timestamps, time zones, and their labels
+* [`spatial/`](spatial/): geometry, its CRS, and the `spatial` extension's types
 * [`extensions/`](extensions/) — what ships, what installs
 * [`memory/`](memory/) — the engine's budget, reading, writing
 * [`data-import/`](data-import/) — CSV and Parquet ingestion
 * [`storage/`](storage/) — where extensions and secrets live
 * [`integrations/`](integrations/) — dbplyr, duckplyr, and Arrow
 * [`relational/`](relational/) — the internal lazy-relation API
-* [`interactive/`](interactive/) — the progress display and the Connections pane
+* [`interactive/`](interactive/) — what a session does while you work
