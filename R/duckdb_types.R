@@ -12,8 +12,8 @@
 #' # The routes
 #'
 #' **Reading.**
-#' [dbGetQuery()] converts each column by its type, and four [dbConnect()] arguments change the shape,
-#' with defaults `bigint = "numeric"`, `array = "none"`, `map = "data.frame"` and `geometry = "blob"`.
+#' [dbGetQuery()] converts each column by its type, and five [dbConnect()] arguments change the shape,
+#' with defaults `bigint = "numeric"`, `array = "none"`, `map = "data.frame"`, `geometry = "blob"` and `time = "difftime"`.
 #' [dbGetQueryArrow()] hands out the engine's own Arrow export instead,
 #' and what each type becomes there, and in the R readers that convert the stream, is documented in [duckdb_types_arrow].
 #' A cast to `VARCHAR` in the query reads any type as text.
@@ -67,11 +67,13 @@
 #' [timestamp](https://duckdb.org/docs/current/sql/data_types/timestamp) and [interval](https://duckdb.org/docs/current/sql/data_types/interval) types:
 #'
 #' * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
-#' * **`TIME`** reads as `difftime` in seconds.
+#' * **`TIME`** reads as `difftime` in seconds, or with `time = "hms"` as `hms::hms`.
+#'   With `time = "hms"`, an `hms` column, data frame field or parameter writes it, to the nearest microsecond, a tie to even,
+#'   and a `difftime` that is not an `hms` keeps writing `INTERVAL`.
 #'   Its text writes it through `field.types`, and so does Arrow (see [duckdb_types_arrow]).
 #' * **`TIME_NS`** reads through Arrow, and to the microsecond through a cast to `TIME` in the query.
 #'   Its text writes it, and so does Arrow.
-#' * **`TIMETZ`** (`TIME WITH TIME ZONE`) reads as the `difftime` of its local time.
+#' * **`TIMETZ`** (`TIME WITH TIME ZONE`) reads as `TIME` does, as its local time.
 #'   The offset it drops is a [limitation](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations).
 #'   Its text writes it.
 #' * **`TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP`** (`DATETIME`) read as `POSIXct`.
@@ -81,8 +83,8 @@
 #' * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
 #'   `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
 #'   and Arrow writes it directly.
-#' * **`INTERVAL`** reads as `difftime` in seconds, counting a month as 30 days and a day as 24 hours.
-#'   A `difftime` in any unit, or an `hms`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
+#' * **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours.
+#'   A `difftime` in any unit, or an `hms` under the default `time`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
 #'
 #' # Enums and nested types
 #'

@@ -48,6 +48,13 @@
 #'   that records the SQL key/value types.
 #'   This enables MAP columns to round-trip through [dbWriteTable()] / [dbCreateTable()] without specifying `field.types`,
 #'   and lets scans accept named-list cells as MAP entries.
+#' @param time How `TIME` and `TIMETZ` columns should be returned, and what an `hms` writes.
+#'   There are two options: `"difftime"` and `"hms"`.
+#'   If `"difftime"` is selected (the default), they are returned as a `difftime` in seconds,
+#'   and an `hms` column or parameter writes `INTERVAL`.
+#'   If `"hms"` is selected, they are returned as [hms::hms()] vectors,
+#'   which requires the \pkg{hms} package,
+#'   and an `hms` column or parameter writes `TIME`.
 #'
 #' @return `dbConnect()` returns an object of class [duckdb_connection-class].
 #'
@@ -83,11 +90,13 @@ dbConnect__duckdb_driver <- function(
   bigint = "numeric",
   array = "none",
   geometry = "blob",
-  map = "data.frame"
+  map = "data.frame",
+  time = c("difftime", "hms")
 ) {
   check_flag(debug)
   timezone_out <- check_tz(timezone_out)
   tz_out_convert <- match.arg(tz_out_convert)
+  time <- match.arg(time)
 
   if (missing(dbdir)) {
     dbdir <- drv@dbdir
@@ -125,7 +134,8 @@ dbConnect__duckdb_driver <- function(
     bigint = bigint,
     array = array,
     geometry = geometry,
-    map = map
+    map = map,
+    time = time
   )
 
   config <- utils::modifyList(drv@config, config)

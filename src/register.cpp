@@ -51,6 +51,17 @@ using namespace duckdb;
 		}
 	}
 
+	auto time_hms = convert_opts.time == ConvertOpts::TimeConversion::HMS;
+	if (time_hms) {
+		// Checked on R's thread before the engine binds the scan, so that the error can name the column
+		for (R_xlen_t col_idx = 0; col_idx < value.size(); col_idx++) {
+			auto invalid = RApiTypes::FindInvalidTime(value[col_idx], string(df_names[col_idx]));
+			if (!invalid.empty()) {
+				rapi_error_with_context("rapi_register_df", "Column " + invalid);
+			}
+		}
+	}
+
 	EndOpenResults(*conn->conn->context);
 	ScopedInterruptHandler signal_handler(conn->conn->context);
 
@@ -62,6 +73,8 @@ using namespace duckdb;
 		parameter_map["experimental"] =
 		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
 		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
+		// An hms writes TIME rather than INTERVAL with `time = "hms"` (handbook/usage/types/README.md)
+		parameter_map["time_hms"] = Value::BOOLEAN(time_hms);
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
 		    ->CreateView(Identifier(name), overwrite, true);
