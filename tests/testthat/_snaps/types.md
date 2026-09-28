@@ -4,7 +4,7 @@
       bad <- c("timestamp_tz", "timestamp_ns", "timestamp_tz_ns", "timestamp_array",
         "timestamptz_array", "bit", "\"union\"", "fixed_nested_int_array",
         "fixed_nested_varchar_array", "fixed_struct_array", "fixed_array_of_int_list",
-        "bignum", "time_ns", NULL)
+        "bignum", NULL)
       as.list(dbGetQuery(con, paste0("SELECT * EXCLUDE (", paste(bad, collapse = ", "),
       ") REPLACE(replace(varchar, chr(0), '') AS varchar) FROM test_all_types(use_large_enum=true)")))
     Output
@@ -266,6 +266,10 @@
       $list_of_fixed_int_array[[3]]
       NULL
       
+      
+      $time_ns
+      Time differences in secs
+      [1]     0 86400    NA
       
       $geometry
       $geometry[[1]]

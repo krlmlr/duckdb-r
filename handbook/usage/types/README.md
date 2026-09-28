@@ -78,8 +78,8 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
 * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
 * **`TIME`** reads as `difftime` in seconds, or with `time = "hms"` as `hms::hms`,
   pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R).
-  With `time = "hms"`, an `hms` column, data frame field or parameter writes it,
-  and a `difftime` that is not an `hms` keeps writing `INTERVAL`; `dbQuoteLiteral()` quotes an `hms` as a `TIME` there.
+  With `time = "hms"`, an `hms` column, data frame field or parameter writes it, to the nearest microsecond, a tie to even,
+  and a `difftime` that is not an `hms` keeps writing `INTERVAL`.
   Its text writes it through `field.types`, and so does Arrow ([`arrow-types/`](/handbook/usage/arrow-types/README.md)).
 * **`TIME_NS`** reads as `TIME` does, in seconds to the nanosecond,
   pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R).
@@ -95,16 +95,23 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
 * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
   `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
   and Arrow writes it directly.
-* **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours,
-  a limitation (below).
-  With `interval = "Period"` it reads as a `lubridate::Period` that keeps the months, the days and the time apart,
-  the time as whole hours and minutes and the seconds left over, which a double holds to the microsecond.
-  lubridate's `%m+%` adds its months and days to a date as DuckDB adds an `INTERVAL`'s,
-  and to a `POSIXct` as DuckDB does to a `TIMESTAMPTZ` in a session `TimeZone` of the `POSIXct`'s zone.
-  Under that option a `Period` column, data frame field or parameter writes it part for part, `NA` in any part as `NULL`,
-  and `dbQuoteLiteral()` quotes a `Period` as that `INTERVAL`;
-  under the default, a `Period` of seconds alone writes them, a `DOUBLE`, or an `INTEGER` if they are integers.
+* **`INTERVAL`** reads as `difftime` in seconds whatever `time` says, counting a month as 30 days and a day as 24 hours.
+  With `interval = "Period"` it reads as a `lubridate::Period` that keeps the months, the days and the seconds apart,
+  which lubridate's `%m+%` adds to a date or a `POSIXct` as DuckDB adds an `INTERVAL`,
+  and there a `Period` column, data frame field or parameter writes it with each part exact;
+  under the default, a `Period` writes a `DOUBLE` of its seconds alone, a limitation (below).
   A `difftime` in any unit, or an `hms` under the default `time`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
+
+**`INTERVAL` has no clock mapping, and `interval = "Period"` is the exact one.**
+One clock duration has one precision, and months, a calendrical unit, do not combine with days or microseconds, chronological ones,
+so an `INTERVAL` with a month part would have no exact form, only an error or a 30-day month.
+Its days would be 86400 seconds, which is what DuckDB adds to a `DATE` or a `TIMESTAMP`,
+but not to a `TIMESTAMPTZ` across a daylight saving change, where DuckDB adds a calendar day.
+clock's constructors take 32-bit counts and its arithmetic wraps past 64 bits without an error,
+and `rel_to_altrep()` could build a duration lazily only by writing clock's undocumented fields.
+The package reads an `INTERVAL` into one exact representation, a `Period`,
+and converting that to a clock duration is for clock and lubridate to offer, which neither does today,
+and not for the package to bridge ([`experiments/2026-09-28-interval-mappings/`](/experiments/2026-09-28-interval-mappings/README.md)).
 
 ## Enums and nested types
 
@@ -220,27 +227,10 @@ and the `spatial` extension's own types:
 * `TIMESTAMP_NS` reads truncated to the microsecond, with a warning the first time in a session and never again,
   `TIMETZ` without its offset, pinned by [`tests/testthat/test-timestamp.R`](/tests/testthat/test-timestamp.R),
   and `infinity` and `-infinity` as a finite date millions of years away or a finite instant, not as `Inf`.
-  Read as a `difftime`, an `INTERVAL` counts a month as 30 days and a day as 24 hours,
-  so which part was months or days is lost, unless `interval = "Period"`.
-  Under it, an `ARRAY` of `INTERVAL` is refused before the statement runs,
-  and a `Period` whose parts do not fit is refused naming its column or parameter.
-  A `Period` built in R has its seconds rounded to the microsecond on write,
-  and a double of seconds past 2^33 of them, some 272 years, does not hold each microsecond.
-* lubridate adds a `Period`'s hours, minutes and seconds as clock time, where DuckDB adds an `INTERVAL`'s microseconds as elapsed time,
-  so across a daylight saving change `%m+%` lands an hour off, or on `NA` inside the skipped hour.
-  For a `POSIXct`, its months and days match DuckDB's only on a `TIMESTAMPTZ` in a session `TimeZone` of the `POSIXct`'s zone:
-  a `POSIXct` writes a plain `TIMESTAMP` of its clock in UTC, which a day or a month added in DuckDB keeps,
-  so a day is 24 hours there, and across the change both land an hour off `%m+%`
-  ([`experiments/2026-09-28-interval-mappings/`](/experiments/2026-09-28-interval-mappings/README.md)).
-* A `Period` with a year, month, day, hour or minute is refused without `interval = "Period"`, naming its column or parameter,
-  and so is one in a list cell or a map value under either `interval`, which writes the seconds alone there.
-* `INTERVAL` has no clock mapping, and `interval = "Period"` is the exact one:
-  one clock duration has one precision, so a month does not combine with a day and a month part has no exact form;
-  its days would be 86400 seconds, where DuckDB adds a calendar day to a `TIMESTAMPTZ` across a daylight saving change;
-  clock's constructors take 32-bit counts, and its arithmetic wraps past 64 bits without an error;
-  and `rel_to_altrep()` could build a duration lazily only through clock's undocumented fields.
-  Converting a `Period` to a clock duration is for clock and lubridate to offer, which neither does today,
-  and not for the package to bridge ([`experiments/2026-09-28-interval-mappings/`](/experiments/2026-09-28-interval-mappings/README.md)).
+  Which part of an `INTERVAL` was months or days is lost, unless `interval = "Period"`;
+  under it, an `ARRAY` of `INTERVAL` is refused, and so is a `Period` whose parts do not fit, naming its column or parameter.
+  Under the default `interval`, a `Period` writes a `DOUBLE` of its seconds,
+  without its minutes, hours, days, months or years, and nothing warns.
 * A `POSIXct` writes with its zone label dropped, and a `difftime` or `hms` without its unit.
 * `NaN`, `Inf` and `-Inf` in a `Date`, `difftime` or `POSIXct` stored as double write as far-off negative values, not as `NULL` or infinity:
   on x86_64, the `DATE` 5877642-06-23 (BC), an `INTERVAL` of -106751991 days, and a `TIMESTAMP` no cast to `VARCHAR` accepts,
@@ -250,13 +240,13 @@ and the `spatial` extension's own types:
   and `TIME` does only under `time = "hms"`, the one R route to it outside Arrow.
   Under the default `time`, `difftime` and `hms` write `INTERVAL`, which does not cast to `TIME`,
   so `field.types`, `dbAppendTable()` and a parameter all fail with that cast error.
-  Under `time = "hms"`, an `hms` writes `TIME` rounded to the microsecond, one in a list cell still writes `INTERVAL`,
+  Under `time = "hms"`, an `hms` in a list cell still writes `INTERVAL`,
   an `hms` no longer appends to an `INTERVAL` column, because `TIME` does not cast to `INTERVAL`,
   and a value outside 00:00:00 to 24:00:00, `NaN` and the infinities included, is refused naming its column or parameter.
   The list a `VARIANT` reads as writes as a `LIST` inside the variant.
-* No R class writes `TIME_NS`, because DuckDB casts neither `TIME` nor `INTERVAL` to it:
-  a `TIME_NS` read back does not append to its column, not even as an `hms` under `time = "hms"`,
-  and `field.types` naming it fails on an `hms` or a `difftime` the same way.
+* No R class writes `TIME_NS` exactly.
+  DuckDB casts `TIME` to it but not `INTERVAL`, so under `time = "hms"` an `hms` appends to a `TIME_NS` column through the `TIME` it writes,
+  to the microsecond, and under the default `time` a `TIME_NS` read back does not append to its column at all.
 * An `ordered` factor writes an unordered `ENUM`.
 * An `ARRAY` column under the default `array = "none"` is refused with a hint to `array = "matrix"`, and only once the statement has run,
   so an `INSERT ... RETURNING` of one has inserted its rows by the time it fails.

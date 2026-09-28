@@ -68,8 +68,8 @@ The \href{https://duckdb.org/docs/current/sql/data_types/date}{date}, \href{http
 \itemize{
 \item \strong{\code{DATE}} reads as \code{Date}, and a \code{Date} writes it, stored as double or as integer.
 \item \strong{\code{TIME}} reads as \code{difftime} in seconds, or with \code{time = "hms"} as \code{hms::hms}.
-With \code{time = "hms"}, an \code{hms} column, data frame field or parameter writes it,
-and a \code{difftime} that is not an \code{hms} keeps writing \code{INTERVAL}; \code{\link[DBI:dbQuoteLiteral]{dbQuoteLiteral()}} quotes an \code{hms} as a \code{TIME} there.
+With \code{time = "hms"}, an \code{hms} column, data frame field or parameter writes it, rounded to the microsecond,
+and a \code{difftime} that is not an \code{hms} keeps writing \code{INTERVAL}.
 Its text writes it through \code{field.types}, and so does Arrow.
 \item \strong{\code{TIME_NS}} reads as \code{TIME} does, in seconds to the nanosecond.
 Its text writes it through \code{field.types}, and so does Arrow.
@@ -82,17 +82,24 @@ Its text writes it.
 \item \strong{\code{TIMESTAMPTZ}} (\verb{TIMESTAMP WITH TIME ZONE}) reads as \code{POSIXct}.
 \code{POSIXct} writes the plain \code{TIMESTAMP} of the same instant; \code{field.types} makes it \code{TIMESTAMPTZ},
 and Arrow writes it directly.
-\item \strong{\code{INTERVAL}} reads as \code{difftime} in seconds whatever \code{time} says, counting a month as 30 days and a day as 24 hours,
-a \href{https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations}{limitation}.
-With \code{interval = "Period"} it reads as a \code{lubridate::Period} that keeps the months, the days and the time apart,
-the time as whole hours and minutes and the seconds left over, which a double holds to the microsecond.
-lubridate's \verb{\%m+\%} adds its months and days to a date as DuckDB adds an \code{INTERVAL}'s,
-and to a \code{POSIXct} as DuckDB does to a \code{TIMESTAMPTZ} in a session \code{TimeZone} of the \code{POSIXct}'s zone.
-Under that option a \code{Period} column, data frame field or parameter writes it part for part, \code{NA} in any part as \code{NULL},
-and \code{dbQuoteLiteral()} quotes a \code{Period} as that \code{INTERVAL};
-under the default, a \code{Period} of seconds alone writes them, a \code{DOUBLE}, or an \code{INTEGER} if they are integers.
+\item \strong{\code{INTERVAL}} reads as \code{difftime} in seconds whatever \code{time} says, counting a month as 30 days and a day as 24 hours.
+With \code{interval = "Period"} it reads as a \code{lubridate::Period} that keeps the months, the days and the seconds apart,
+which lubridate's \verb{\%m+\%} adds to a date or a \code{POSIXct} as DuckDB adds an \code{INTERVAL},
+and there a \code{Period} column, data frame field or parameter writes it with each part exact;
+under the default, a \code{Period} writes a \code{DOUBLE} of its seconds alone, a \href{https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations}{limitation}.
 A \code{difftime} in any unit, or an \code{hms} under the default \code{time}, writes \code{INTERVAL}.
 }
+
+\strong{\code{INTERVAL} has no clock mapping, and \code{interval = "Period"} is the exact one.}
+One clock duration has one precision, and months, a calendrical unit, do not combine with days or microseconds, chronological ones,
+so an \code{INTERVAL} with a month part would have no exact form, only an error or a 30-day month.
+Its days would be 86400 seconds, which is what DuckDB adds to a \code{DATE} or a \code{TIMESTAMP},
+but not to a \code{TIMESTAMPTZ} across a daylight saving change, where DuckDB adds a calendar day.
+clock's constructors take 32-bit counts and its arithmetic wraps past 64 bits without an error,
+and \code{rel_to_altrep()} could build a duration lazily only by writing clock's undocumented fields.
+The package reads an \code{INTERVAL} into one exact representation, a \code{Period},
+and converting that to a clock duration is for clock and lubridate to offer, which neither does today,
+and not for the package to bridge.
 }
 
 \section{Enums and nested types}{
