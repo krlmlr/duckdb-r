@@ -41,9 +41,10 @@ using namespace duckdb;
 
 	try {
 		named_parameter_map_t parameter_map;
-		parameter_map["integer64"] = convert_opts.bigint == ConvertOpts::BigIntType::INTEGER64;
-		parameter_map["experimental"] = convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED;
-		parameter_map["map_list_of"] = convert_opts.map == ConvertOpts::MapShape::LIST_OF;
+		parameter_map["integer64"] = Value::BOOLEAN(convert_opts.bigint == ConvertOpts::BigIntType::INTEGER64);
+		parameter_map["experimental"] =
+		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
+		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
 		    ->CreateView(Identifier(name), overwrite, true);
