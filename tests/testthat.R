@@ -7,7 +7,7 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(duckdb)
+library(duckdb.1.5.dev)
 
 # CRAN guard
 #
