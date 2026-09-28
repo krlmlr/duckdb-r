@@ -1,4 +1,4 @@
-Package: duckdb
+Package: duckdb.2.0.dev
 Title: DBI Package for the DuckDB Database Management System
 Version: 1.5.6
 Authors@R: c(
