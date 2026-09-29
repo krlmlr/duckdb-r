@@ -15,6 +15,8 @@
 
 ## duckdb 1.5.6
 
+CRAN release: 2026-09-29
+
 ### Features
 
 - Update to DuckDB v1.5.6, see
