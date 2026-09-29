@@ -1,0 +1,45 @@
+::group::install
+* installing to library ‘/home/runner/work/_temp/Library’
+* installing *source* package ‘duckdb’ ...
+** this is package ‘duckdb’ version ‘1.5.5.9900’
+** using staged installation
++ dirname ./configure
++ cd .
++ [ -z  ]
++ Rscript tools/setup-makeflags.R
++ makeflags_value=-j4
++ makeflags_digits=4
++ [ -n -j4 ]
++ export MAKEFLAGS=-j4
++ echo Setting MAKEFLAGS=-j4 for parallel compilation
+Setting MAKEFLAGS=-j4 for parallel compilation
++ echo Set NOT_CRAN or MAKEFLAGS to override
+Set NOT_CRAN or MAKEFLAGS to override
++ dirname ./configure
++ PKG_ROOT=.
++ cd ./src
++ echo DUCKDB_RSTRTMGR=1
++ echo DUCKDB_RSTRTMGR_LIB=
++ rm -f Makevars.system-lib
++ [  = 1 ]
++ [  = true ]
++ [ -f  ]
++ cp include/to-tar.mk Makevars.duckdb
++ [ -f duckdb.tar.xz ]
+Error : Invalid DESCRIPTION file
+
+Malformed Depends or Suggests or Imports or Enhances field.
+Offending entries:
+  adbcdrivermanager.
+arrow (>= 13.0.0)
+Entries must be names of packages optionally followed by '<=' or '>=',
+white space, and a valid version number in parentheses.
+
+See section 'The DESCRIPTION file' in the 'Writing R Extensions'
+manual.
+ERROR: installing package DESCRIPTION failed for package ‘duckdb’
+* removing ‘/home/runner/work/_temp/Library/duckdb’
+* restoring previous ‘/home/runner/work/_temp/Library/duckdb’
+::endgroup::
+install: failure -- skipping the remaining gates
+| install | failure |
