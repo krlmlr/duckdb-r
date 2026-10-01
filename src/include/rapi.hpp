@@ -16,7 +16,9 @@
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/error_data.hpp"
-#include "duckdb/common/arrow/result_arrow_wrapper.hpp"
+#include "duckdb/common/arrow/arrow.hpp"
+#include "duckdb/main/query_result_stream.hpp"
+#include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 
 #include "convert.hpp"
 
@@ -169,9 +171,56 @@ typedef cpp11::external_pointer<RelationWrapper> rel_extptr_t;
 
 typedef cpp11::external_pointer<ParsedExpression> expr_extptr_t;
 
+//! Pulls chunks from a query result and converts them to Arrow arrays of at most batch_size rows.
+//! A result that can be drained is streamed; any other is read from its collection
+class RArrowChunkSource {
+public:
+	explicit RArrowChunkSource(unique_ptr<QueryResult> result);
+	explicit RArrowChunkSource(QueryResult &result);
+
+public:
+	//! The number of rows written to out, 0 at the end. Throws on an execution error
+	idx_t FetchArray(idx_t batch_size, ArrowArray &out);
+	void FetchSchema(ArrowSchema &out);
+
+private:
+	void Initialize();
+	bool LoadNextChunk();
+
+private:
+	unique_ptr<QueryResult> owned_result;
+	optional_ptr<QueryResult> result;
+	unique_ptr<QueryResultStream<>> stream_result;
+	ClientProperties client_properties;
+	vector<LogicalType> types;
+	vector<string> names;
+	unordered_map<idx_t, const shared_ptr<ArrowTypeExtensionData>> extension_types;
+	unique_ptr<DataChunk> current_chunk;
+	idx_t offset = 0;
+	bool finished = false;
+};
+
+//! Exports a query result as an Arrow C stream, converting on the consumer thread
+class RArrowStreamWrapper {
+public:
+	RArrowStreamWrapper(unique_ptr<QueryResult> result, idx_t batch_size);
+
+public:
+	ArrowArrayStream stream;
+	RArrowChunkSource source;
+	idx_t batch_size;
+	ErrorData last_error;
+
+private:
+	static int GetSchema(struct ArrowArrayStream *stream, struct ArrowSchema *out);
+	static int GetNext(struct ArrowArrayStream *stream, struct ArrowArray *out);
+	static void Release(struct ArrowArrayStream *stream);
+	static const char *GetLastError(struct ArrowArrayStream *stream);
+};
+
 struct RQueryResult {
 	duckdb::unique_ptr<QueryResult> result;
-	duckdb::unique_ptr<ResultArrowArrayStreamWrapper> stream_wrapper;
+	duckdb::unique_ptr<RArrowStreamWrapper> stream_wrapper;
 };
 
 typedef cpp11::external_pointer<RQueryResult> rqry_eptr_t;
