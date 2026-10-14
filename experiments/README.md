@@ -99,6 +99,11 @@ This file is what names the contents, so nothing here is an orphan.
   [`patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch`](/patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch)
   and [`usage/connections/`](/handbook/usage/connections/README.md).
 
+* [`2026-10-14-exists-table-transaction/`](2026-10-14-exists-table-transaction/):
+  whether `dbExistsTable()` leaves an open transaction usable on DuckDB 1.5.6 and 2.0,
+  and how a relaxed policy, a second connection, a catalog lookup and the two combined answer eighteen names inside one.
+  Supports [`usage/statements/`](/handbook/usage/statements/README.md).
+
 Adding one: create the directory, name it for the date and the topic,
 open its `README.md` with what and when and on what,
 and link it from the leaf that relies on it.
