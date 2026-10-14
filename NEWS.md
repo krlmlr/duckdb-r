@@ -1,5 +1,78 @@
 <!-- NEWS.md is maintained by https://fledge.cynkra.com, contributors should not edit this file -->
 
+# duckdb 1.5.6.9004
+
+## Bug fixes
+
+- A `POSIXct` or `difftime` halfway between two microseconds writes rounded to even, as `dbQuoteLiteral()` quotes it (#2887).
+
+### series
+
+- Keep a zero fifth version component through the `ours-version` merge driver (#2886).
+
+## Features
+
+### series
+
+- Carry `patch/` entries onto the buffer as part of porting (#2660).
+
+
+# duckdb 1.5.6.9003
+
+## Chore
+
+- Auto-update from GitHub Actions (#2884).
+
+
+# duckdb 1.5.6.9002
+
+## Bug fixes
+
+### series-advance
+
+- Look a carry's twin up above the forward's green (@krlmlr, #2877).
+
+### series-advance
+
+- Compile the glue after a carry that touches it (@krlmlr, #2880).
+
+## Documentation
+
+### series-loop
+
+- Record how to resolve the cpp11 binding conflict a port brings (#2851).
+
+### series-loop
+
+- Record the cpp11 include path the buffers still generate (#2847).
+
+
+# duckdb 1.5.6.9001
+
+## Features
+
+### series
+
+- Rebuild the rewind at the foot of a forward, gate the glue, and mirror `-dev` without its flavor (@krlmlr, #2875).
+
+## Continuous integration
+
+- Key the build caches by architecture (@krlmlr, #2876).
+
+
+# duckdb 1.5.6.9000
+
+## Bug fixes
+
+### series
+
+- Read `main` from the canonical repository, not the fork's mirror (#2865).
+
+## Uncategorized
+
+- Merge remote-tracking branch 'upstream/cran-1.5.6'.
+
+
 # duckdb 1.5.6
 
 ## Features
