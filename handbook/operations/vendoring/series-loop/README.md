@@ -124,7 +124,7 @@ flowchart TD
   S3["3 advance #60;S#62;-green over successes,<br>set -build-base, mirror green,<br>read r-universe"] --> S4
   S4["4 port main onto #60;S#62;-dev,<br>sync tooling onto both"] --> S5
   S5["5 extend #60;S#62;-dev from the buffer,<br>carry the base's fixes, realign rc and alpha"] --> S6
-  S6["6 read the forwarding;<br>report a generation ready to publish"] --> S7
+  S6["6 read the forwarding;<br>report a caught-up forward, suggest the cutover"] --> S7
   S7["7 open a pull request for what<br>the tooling got wrong"]
   CI["per-commit CI judges<br>#60;S#62;-green..#60;S#62;-dev"] -.-> S2
   S5 -.->|push| CI
@@ -205,10 +205,11 @@ Everything else is an option, spelled identically in all of them:
   Default `$SERIES_CANONICAL`, then `upstream`, which is what a `gh` clone of a
   fork calls the repository it was forked from.
   An empty `SERIES_CANONICAL` turns the mirroring off; an unset one does not.
-  Only `series-advance.sh` and `series-cutover.sh` write one; `series-port.sh`
-  and `series-check.sh` read `main` from it, and fall back to the fork's mirror
-  with a word on stderr when they cannot, and `series-prune.sh` reads the
-  forward green's copy from it
+  Only `series-advance.sh`, `series-cutover.sh` and `series-land.sh` (its
+  `--review --push`, and the fast-forward of `main` it prints) write one;
+  `series-port.sh`, `series-check.sh` and `series-land.sh` read `main` from it,
+  and fall back to the fork's mirror with a word on stderr when they cannot,
+  and `series-prune.sh` reads the forward green's copy from it
   ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 * `-h`, `--help` — the usage, on stdout, exit 0, before the script
   touches git.
@@ -259,6 +260,6 @@ release branch was cut from: below the fork point the two are one history.
 So an opening cuts that series' strands there rather than walking, and the walk
 is only what the release branch has of its own
 ([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)).
-Opening `v2.0-cyanoptera` this way left 193 commits to walk, where a replay from the parent's seed
-would have walked every commit since the fork point
+Opening `v2.0-cyanoptera` this way left the release branch's own commits to walk, a week's worth on the day,
+where a replay from the parent's seed would have walked every commit since the fork point
 ([`plan/PLAN-v2-series-open.md`](/plan/PLAN-v2-series-open.md)).

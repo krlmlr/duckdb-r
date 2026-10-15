@@ -90,21 +90,25 @@ a reader on another flavor substitutes its name.
 
 ## Where r-universe is told
 
-A cutover, from the generation that is published to the one that has caught up:
+A cutover, once the forward has caught up with the series it replaces.
+The universe is not in the picture: the entry's branch is `<S>-green` before and after:
 
 ```mermaid
 sequenceDiagram
   participant SL as series loop
   participant H as a human
-  participant U as universe repository
-  participant M as duckdb/duckdb-r main
-  SL->>H: CUTOVER line: #60;G#62;-green covers the published green
-  H->>H: series-cutover.sh #60;G#62;: coverage, convergence, review diff
-  H->>U: pull request: branch of the flavor becomes #60;G#62;-green
-  H->>M: pull request: publishes_from becomes #60;G#62;-green
-  U-->>SL: r-universe builds #60;G#62;-green
-  M-->>SL: the loop serves #60;G#62; as the published generation
-  Note over SL,M: No ref moved. The old generation freezes, and a human prunes it later
+  participant F as fork
+  participant C as duckdb/duckdb-r
+  SL->>H: CUTOVER line: #60;S#62;-fwd-green covers #60;S#62;-green
+  H->>H: series-cutover.sh #60;S#62; --prepare: coverage, convergence, review diff
+  H->>F: draft pull requests, closed at once: #60;S#62;-dev and #60;S#62;-build as they stand
+  H->>C: draft pull request, closed at once: the copy of #60;S#62;-green as it stands
+  H->>F: one atomic leased push: the four refs take the forward's tips
+  H->>C: #60;S#62;-green forced to the new green, under a lease
+  H->>F: the -fwd refs, strands and ledger deleted
+  H->>C: #60;S#62;-fwd-green deleted
+  C-->>SL: r-universe builds #60;S#62;-green, now the forward's history
+  Note over SL,C: The replaced history is each closed pull request's head. What a refused deletion leaves, series-prune.sh lists
 ```
 
 A universe is a repository of its own, `<user>/<user>.r-universe.dev`,

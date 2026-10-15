@@ -60,17 +60,19 @@ flowchart LR
   build -.->|"stage 5 consumes, 100 at a time"| dev
 ```
 
-The generations of a line, each a series of its own, built from the newest one before it;
-r-universe builds from the published one, and the loop serves the two newest and the published one:
+A series and its forward, and what a cutover does with them;
+r-universe builds `<S>-green` throughout, and the names never change:
 
 ```mermaid
 flowchart LR
-  L["#60;L#62;-*: the first refs"] -->|forward| G0["#60;L#62;-v000-*<br>(spelled -fwd today)"]
-  G0 -->|forward| G1["#60;L#62;-v001-*"]
-  G1 -->|forward| G2["#60;L#62;-v002-*"]
-  P["publishes_from in scripts/series.yaml,<br>and the universe's packages.json"] -.->|"a cutover moves this pointer<br>by pull request; no ref moves"| G1
-  classDef frozen stroke-dasharray: 4 3
-  class L frozen
+  S["#60;S#62;-*: serving,<br>on an older main"]
+  F["#60;S#62;-fwd-*: the forward,<br>rebuilt on current main"]
+  S -->|"series-forward: replay -dev,<br>the loop verifies again"| F
+  S -->|"archive: closed pull requests<br>keep -dev, -build and the canonical green"| A["refs/pull/#60;n#62;/head"]
+  F -->|"one atomic leased push:<br>the four refs take the forward's tips"| S2["#60;S#62;-*: serving,<br>on current main"]
+  F -.->|"deleted afterwards;<br>litter goes by series-prune.sh"| X[" "]
+  classDef gone stroke-dasharray: 4 3
+  class X gone
 ```
 
 All four exist from a series' first day, so there is never a "no green yet" state.
@@ -127,7 +129,7 @@ The pair exists only while a landing is in flight, and has no buffer, so the loo
 which a draft pull request shows for review and never merges
 ([`series-land`](/.claude/skills/series-land/SKILL.md)).
 **`retry-<S>-dev` is the rerun ledger**: pushed at one commit of `<S>-dev` to have it judged again on its own SHA,
-one per series, and never deleted
+one per series, and never deleted while its series serves; a forward's goes with the forward's refs at the cutover
 ([`series-loop`](/.claude/skills/series-loop/SKILL.md), *Rerun one commit*).
 **The badges in the root [`README.md`](/README.md) count the gaps between these refs**,
 and both counts stay linear by construction —
