@@ -220,6 +220,7 @@ That engine gate names the engine that brings the behaviour back,
 so the test runs again there whether or not the gate's removal travels with the forward.
 
 **A forward that re-roots is a graft, and grafts nothing but a tree.**
+Its subject starts with `graft:`, which is how `series-forward-build.sh` recognises one.
 Where the point is to drop history below a fork point — an opening leaves the
 parent carrying it ([`series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)) — the new root is
 one commit whose tree *is* the fork-point commit's, verbatim, parented on
@@ -265,7 +266,7 @@ and the replay has nowhere to put it.
 The script names each one and stops before writing anything.
 Work through them in this order:
 
-1. **Read it.** The refusal rests on two cheap tests,
+1. **Read it.** The refusal rests on three cheap tests,
    so a change the new base carries in a shape neither recognises
    is listed too; confirm by reading the base for its effect.
    If it is there, the commit is done.
@@ -309,25 +310,24 @@ a red there gets the smallest fix that answers it, folded into the commit that i
 and mirrored onto `-fwd-build` where it is glue (`series-loop/SKILL.md`, stage 2).
 Do not put a snapshot or a test fix onto `-fwd-build` by hand ahead of a verdict.
 
-**Write the vendor strand, and read the forward against it.**
+**Carry the vendor strand, and read the forward against it.**
 The report above compared `-dev` with `-build` on the old base.
-The judgement is better made on the new one, where `main`'s delta and the replay's adaptations have met every fix,
-and it is worth keeping: a fresh vendoring of the same commits onto today's `main`
-costs [`vendor-one.sh`](/scripts/vendor-one.sh) about fifteen seconds per commit, two thousand times.
-So the old buffer is replayed onto the same seed once, as `<S>-fwd-vendor`,
-pure vendoring's diffs on the new base
+The judgement is better made on the new one, where `main`'s delta and the replay's adaptations have met every fix.
+The series' vendor strand is vendored once and carried, never replayed
 ([`branches/model/`](/handbook/branches/model/README.md)):
 
 ```sh
-git checkout --detach <seed>                                   # the commit -fwd-build stands on
-scripts/series-forward-build.sh <S>-build <old-base> [--placed <sha>]...
-git branch -f <S>-fwd-vendor HEAD
-scripts/series-learned.sh <S>-fwd --vendor          # per commit, what -fwd-build carries beyond pure vendoring
-scripts/series-learned.sh <S>-fwd --vendor --diff   # the changes themselves
+scripts/series-vendor.sh <S> --forward <seed> --push   # <S>-fwd-vendor: the strand onto the commit -fwd-build stands on
+scripts/series-learned.sh <S>-fwd --vendor             # per commit, what -fwd-build carries beyond pure vendoring
+scripts/series-learned.sh <S>-fwd --vendor --diff      # the changes themselves
 ```
 
-Its vendored strand equals `-fwd-build`'s at every twin, by construction;
-what differs is what `-dev` taught, and the report is that difference, commit by commit, with the `R-side fix` prose each repair left.
+Where the seed vendors an engine the strand has, the commits above it are rebased onto the seed,
+each a `git apply` of a pure vendoring diff;
+where it does not, a rewind, the strand's first commit is written on the seed whole and the rest cherry-picked above it.
+A conflict is patch drift between the strand and the seed's tree, and the script stops with the worktree kept.
+Its vendored strand equals `-fwd-build`'s at every twin;
+what differs is what `-dev` taught, and the glue the gate demanded, commit by commit, with the `R-side fix` prose each repair left.
 Read each by its merits, as above:
 a fix that still holds stays;
 one `main`'s delta has made redundant, or one that was expedient,
@@ -335,5 +335,5 @@ is answered with a correction committed on the forward commit that carries it an
 [`scripts/series-fold.sh`](/scripts/series-fold.sh),
 so that `-fwd-build` is the better buffer before the loop starts verifying it.
 The strand is pushed beside the four `-fwd` refs, force-pushed like any WIP ref,
-given no stage by the loop, rebased with the forward or rewritten from the base's `-build` when the forward moves (`series-rebase/SKILL.md`),
-and deleted at the cutover, archived like the rest (the playbook's cutover section).
+extended by stage 1 like the series' own, rebased again when the forward moves (`series-rebase/SKILL.md`),
+and swapped with the four at the cutover, the replaced one archived like the rest (the playbook's cutover section).

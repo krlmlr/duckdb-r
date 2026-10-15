@@ -69,16 +69,15 @@ the replay then populates `<S>-fwd-build`.
      and a test asking for behaviour the engine lacks is gated, never rewound.
      Everything else the forward learns, it learns from CI once `-fwd-dev` is extended, folded with
      [`scripts/series-fold.sh`](/scripts/series-fold.sh) and mirrored onto `-fwd-build` where it is glue.
-   * **Write the vendor strand, and read the forward against it:**
+   * **Carry the vendor strand, and read the forward against it:**
 
      ```sh
-     git checkout --detach <seed>                                   # the commit -fwd-build stands on
-     scripts/series-forward-build.sh <S>-build <old-base> [--placed <sha>]...
-     git branch -f <S>-fwd-vendor HEAD
-     scripts/series-learned.sh <S>-fwd --vendor          # per commit, what -fwd-build carries beyond pure vendoring
-     scripts/series-learned.sh <S>-fwd --vendor --diff   # the changes themselves
+     scripts/series-vendor.sh <S> --forward <seed> --push   # <S>-fwd-vendor: the strand onto the commit -fwd-build stands on
+     scripts/series-learned.sh <S>-fwd --vendor             # per commit, what -fwd-build carries beyond pure vendoring
+     scripts/series-learned.sh <S>-fwd --vendor --diff      # the changes themselves
      ```
 
+     The strand is vendored once and carried by a rebase, a rewind's foot written on the seed whole; nothing is replayed.
      A fix found wanting on the new base is answered with a correction on the forward commit that carries it,
      folded with `series-fold.sh`, so that `-fwd-build` is the better buffer before the loop starts verifying it.
 
@@ -170,6 +169,8 @@ prints the difference and sorts it into the two.
 What is explicable is a short, evidenced list —
 `DESCRIPTION`'s `Version:` line, which the replay renumbers;
 `NEWS.md`, the release paperwork stage 4 never ports;
+the flavored docs, `README.Rmd`, `README.md` and `.github/README.md`, which are per-branch by design;
+the Windows export list, `src/*-win.def`, while the two vendor different engines;
 and the **vendored strand** —
 `src/duckdb/`, `patch/`, `R/version.R`, `src/include/sources.mk`
 and the Makevars —
@@ -184,7 +185,7 @@ a forward regenerates the vendored tree from its own patch stack,
 which is what step 1's tree check verifies at replay time.
 
 Everything else is a finding —
-glue, tests, R code, the READMEs, the tooling directories —
+glue, tests, R code, the tooling directories —
 and it belongs to whichever stage should have moved it:
 a carry stage 5 could not make,
 a port that reached one branch and not the other,

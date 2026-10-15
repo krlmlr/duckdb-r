@@ -40,11 +40,13 @@ Not a series, and given no stage:
 a forward whose green is an ancestor of its base's green (cutover litter pending deletion),
 `<S>-rc-dev`, `<S>-alpha` and `<S>-rc-alpha` (derived strands),
 `<L>-land-*` (a landing),
-and `<S>-fwd-vendor` (the forward's vendor strand).
+and `<S>-vendor` (the vendor strand the buffer is derived from, which stage 1 serves).
 
-**All four refs exist from day one, equal, at the seed tip, and green contains the flavor change**,
-topped by a separate `chore: Add fifth version component` commit;
-there is never a "no green yet" state, and every walk below is bounded by `<S>-green`.
+**All four refs exist from day one, and green contains the flavor change.**
+A forward's four start equal at the seed tip, topped by a separate `chore: Add fifth version component` commit;
+an opening cuts the build pair and the dev pair from the parent's strands, each at its own cut
+([`series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)).
+There is never a "no green yet" state, and every walk below is bounded by `<S>-green`.
 
 Reference: [`references/series.md`](references/series.md).
 
@@ -68,7 +70,8 @@ and the one the report ends with),
 (stages 3 and 5 — fast-forwards `-green`,
 sets `-build-base` to the vendored-SHA match,
 extends `-dev` by ≤ 100;
-refuses on any failure, and on a `-green` that would not fast-forward),
+advances `-green` over the verified prefix and then stops on a red above it,
+and refuses a `-green` that would not fast-forward),
 `scripts/series-port.sh <S>`
 (stage 4 — brings `<S>-dev` level with `main`:
 cherry-picks plus a tooling sync),
@@ -120,25 +123,33 @@ git fetch -q upstream main
 
 Reference: [`references/0-setup.md`](references/0-setup.md).
 
-### 1. Vendor onto `<S>-build`
+### 1. Vendor onto `<S>-vendor`, and derive `<S>-build`
 
-Run **`main`'s copy of the script**, against the buffer worktree,
+Run **`main`'s copy of the scripts**, against the strand worktree and then the buffer worktree,
 with the upstream clone checked out at the line the series tracks:
 
 ```sh
 git -C <upstream-clone> checkout --detach origin/<upstream branch of S>
-VENDOR_REPO=<S>-build-worktree \
-  <main-checkout>/scripts/vendor-one.sh --commits 100 <upstream-clone>
+VENDOR_REPO=<S>-vendor-worktree \
+  <main-checkout>/scripts/vendor-one.sh --strand --commits 100 <upstream-clone>
+git -C <S>-vendor-worktree push origin HEAD:<S>-vendor
+(cd <S>-build-worktree && <main-checkout>/scripts/series-vendor.sh <S> --push)
 ```
 
-* The clone's HEAD picks the line; the script refuses a buffer whose last vendored commit is off that line.
+* The strand takes the vendoring and nothing else: one commit per upstream commit, no counter, no glue gate.
+  The buffer is derived from it: each strand commit picked, the counter stamped, the glue gate run
+  ([`branches/model/`](/handbook/branches/model/README.md)).
+* The clone's HEAD picks the line; the script refuses a strand whose last vendored commit is off that line.
   Treat the refusal as the answer.
-* The script gates itself and **stops at the first glue failure**, the breaking commit at HEAD.
+* The pick **stops at the first glue failure**, the breaking pick at HEAD of the buffer worktree.
   Then: fix the glue (`src/*.cpp`, `src/include/`, never `src/duckdb/`),
   `clang-format -i src/*.{c,cc,cpp,h,hpp}`,
-  amend into HEAD with an `R-side fix` section, rerun to finish the budget.
+  amend into HEAD with an `R-side fix` section, rerun to finish the picks. The strand commit stays as it is.
+* A `PATCH BROKEN` stop is the strand's: fix the patch in the strand commit, amend it there, and pick again.
 * A vendored tree broken by upstream itself is vendored on and folded into the next commit that repairs it (stage 2's fold rule).
-* Push `<S>-build` unconditionally; red never blocks the buffer.
+* A series with no strand yet derives one from its buffer first, once: `scripts/series-vendor.sh <S> --init --push`,
+  which `series-check.sh` asks for as `VENDOR`.
+* Push `<S>-vendor` and `<S>-build` unconditionally; red never blocks the buffer.
 
 Reference: [`references/1-vendor.md`](references/1-vendor.md).
 

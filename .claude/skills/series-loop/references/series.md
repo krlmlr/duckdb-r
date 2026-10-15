@@ -31,8 +31,8 @@ each firing lists `refs/heads/*-build`,
 and every `<X>-build` with a sibling `<X>-dev` is a series it serves —
 base and forward (`<S>-fwd-*`, see `series-forward/SKILL.md`) alike,
 in one pass over all of them.
-A forward's `<S>-fwd-vendor` is no series and gets no stage:
-it is the vendor strand the forward wrote once, read by a human and nothing else
+A series' `<S>-vendor` is no series and gets no stage of its own:
+it is the vendor strand stage 1 vendors onto and derives the buffer from
 ([`branches/model/`](/handbook/branches/model/README.md)).
 Ignore a forward series
 whose green is an ancestor of its base series' green;
@@ -46,10 +46,12 @@ Nor are `<S>-alpha` and `<S>-rc-alpha`, each one stamp commit on a green commit 
 Nor is `<L>-land-dev` with its `<L>-land-green`, a line on its way onto `main`
 ([`series-land/SKILL.md`](/.claude/skills/series-land/SKILL.md)).
 
-**All four refs exist from day one, equal, and green contains the flavor
+**All four refs exist from day one, and green contains the flavor
 change.**
-A new series is bootstrapped with all four refs at the **same commit** —
-the seed tip, "after flavoring", before any vendor commit:
+A forward is bootstrapped with all four refs at the **same commit** —
+the seed tip, "after flavoring", before any vendor commit;
+an opening cuts the build pair and the dev pair from the parent's strands instead, each at its own cut
+([`series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)):
 
     <S>-green = <S>-build-base = <S>-build = <S>-dev
 
