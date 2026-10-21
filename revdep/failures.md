@@ -1,4 +1,4 @@
-# freestiler (0.2.0)
+# freestiler (0.3.0)
 
 * GitHub mirror: <https://github.com/cran/freestiler>
 
@@ -17,24 +17,24 @@ Run `revdepcheck::revdep_details(, "freestiler")` for more info
 ### Devel
 
 ```
-* installing *source* package ‘freestiler’ ...
-** this is package ‘freestiler’ version ‘0.2.0’
-** package ‘freestiler’ successfully unpacked and MD5 sums checked
-** using staged installation
-Using cargo 1.98.1 (797e8a9bc 2026-08-05)
-Using rustc 1.98.1 (48a229cea 2026-09-01)
-Enabling GeoParquet feature.
-Enabling DuckDB feature.
-Writing `src/Makevars`.
-`tools/config.R` has finished.
+[... 141 earlier lines omitted; the full 00install.out is in the check artifact ...]
+    |
+677 |         let layers = match freestiler_core::file_input::parquet_to_layers(
+    |                                             ^^^^^^^^^^ could not find `file_input` in `freestiler_core`
+    |
+note: found an item that was configured out
+   --> freestiler-core/src/lib.rs:9:9
+    |
+  8 | #[cfg(any(feature = "geoparquet", feature = "duckdb"))]
+    |          -------------------------------------------- the item is gated here
 ...
-if [ -d ./vendor ]; then \
-	find ./vendor -type f \( -name '._*' -o -name '.DS_Store' \) -delete; \
-fi
-export CARGO_HOME=/revdepx/out/freestiler.Rcheck/00_pkg_src/freestiler/src/.cargo && \
-export PATH="/revdepx/out/freestiler.Rcheck/R_check_bin:/usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/revdepx/out/home/.cargo/bin" && \
-RUSTFLAGS=" --print=native-static-libs" cargo build  --features geoparquet,duckdb --lib --release --manifest-path=./rust/Cargo.toml --target-dir ./rust/target 
-error: the package 'freestiler' does not contain these features: duckdb, geoparquet
+398 | pub fn generate_pmtiles(
+    |        ^^^^^^^^^^^^^^^^
+
+Some errors have detailed explanations: E0308, E0433, E0599.
+For more information about an error, try `rustc --explain E0308`.
+warning: `freestiler` (lib) generated 3 warnings
+error: could not compile `freestiler` (lib) due to 13 previous errors; 6 warnings emitted
 make: *** [Makevars:28: rust/target/release/libfreestiler.a] Error 101
 ERROR: compilation failed for package ‘freestiler’
 * removing ‘/revdepx/out/freestiler.Rcheck/freestiler’
@@ -44,27 +44,77 @@ ERROR: compilation failed for package ‘freestiler’
 ### CRAN
 
 ```
-* installing *source* package ‘freestiler’ ...
-** this is package ‘freestiler’ version ‘0.2.0’
-** package ‘freestiler’ successfully unpacked and MD5 sums checked
-** using staged installation
-Using cargo 1.98.1 (797e8a9bc 2026-08-05)
-Using rustc 1.98.1 (48a229cea 2026-09-01)
-Enabling GeoParquet feature.
-Enabling DuckDB feature.
-Writing `src/Makevars`.
-`tools/config.R` has finished.
+[... 141 earlier lines omitted; the full 00install.out is in the check artifact ...]
+    |
+677 |         let layers = match freestiler_core::file_input::parquet_to_layers(
+    |                                             ^^^^^^^^^^ could not find `file_input` in `freestiler_core`
+    |
+note: found an item that was configured out
+   --> freestiler-core/src/lib.rs:9:9
+    |
+  8 | #[cfg(any(feature = "geoparquet", feature = "duckdb"))]
+    |          -------------------------------------------- the item is gated here
 ...
-if [ -d ./vendor ]; then \
-	find ./vendor -type f \( -name '._*' -o -name '.DS_Store' \) -delete; \
-fi
-export CARGO_HOME=/revdepx/out/freestiler.Rcheck/00_pkg_src/freestiler/src/.cargo && \
-export PATH="/revdepx/out/freestiler.Rcheck/R_check_bin:/usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/revdepx/out/home/.cargo/bin" && \
-RUSTFLAGS=" --print=native-static-libs" cargo build  --features geoparquet,duckdb --lib --release --manifest-path=./rust/Cargo.toml --target-dir ./rust/target 
-error: the package 'freestiler' does not contain these features: duckdb, geoparquet
+398 | pub fn generate_pmtiles(
+    |        ^^^^^^^^^^^^^^^^
+
+Some errors have detailed explanations: E0308, E0433, E0599.
+For more information about an error, try `rustc --explain E0308`.
+warning: `freestiler` (lib) generated 3 warnings
+error: could not compile `freestiler` (lib) due to 13 previous errors; 6 warnings emitted
 make: *** [Makevars:28: rust/target/release/libfreestiler.a] Error 101
 ERROR: compilation failed for package ‘freestiler’
 * removing ‘/revdepx/out/freestiler.Rcheck/freestiler’
+
+
+```
+# rladybugdb (0.4.4)
+
+* GitHub mirror: <https://github.com/cran/rladybugdb>
+
+Run `revdepcheck::revdep_details(, "rladybugdb")` for more info
+
+## In both
+
+*   checking whether package ‘rladybugdb’ can be installed ... ERROR
+     ```
+     Installation failed.
+     See ‘<lib>/rladybugdb.Rcheck/00install.out’ for details.
+     ```
+
+## Installation
+
+### Devel
+
+```
+* installing *source* package ‘rladybugdb’ ...
+** this is package ‘rladybugdb’ version ‘0.4.4’
+** package ‘rladybugdb’ successfully unpacked and MD5 sums checked
+** using staged installation
+configure: extracting verified LadybugDB v0.20.4 source.
+tar (child): xz: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+ERROR: configuration failed for package ‘rladybugdb’
+* removing ‘/revdepx/out/rladybugdb.Rcheck/rladybugdb’
+
+
+```
+### CRAN
+
+```
+* installing *source* package ‘rladybugdb’ ...
+** this is package ‘rladybugdb’ version ‘0.4.4’
+** package ‘rladybugdb’ successfully unpacked and MD5 sums checked
+** using staged installation
+configure: extracting verified LadybugDB v0.20.4 source.
+tar (child): xz: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+ERROR: configuration failed for package ‘rladybugdb’
+* removing ‘/revdepx/out/rladybugdb.Rcheck/rladybugdb’
 
 
 ```
