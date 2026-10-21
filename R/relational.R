@@ -729,7 +729,10 @@ rel_from_table_function <- function(con, function_name, positional_parameters = 
 
 rel_to_parquet <- function(rel, file_name, options = list()) {
   if (
-    !is.character(file_name) || length(file_name) != 1L || !nzchar(file_name)
+    !is.character(file_name) ||
+      length(file_name) != 1L ||
+      is.na(file_name) ||
+      !nzchar(file_name)
   ) {
     stop("`file_name` must be a non-empty string.", call. = FALSE)
   }
@@ -738,7 +741,10 @@ rel_to_parquet <- function(rel, file_name, options = list()) {
 
 rel_to_csv <- function(rel, file_name, options = list()) {
   if (
-    !is.character(file_name) || length(file_name) != 1L || !nzchar(file_name)
+    !is.character(file_name) ||
+      length(file_name) != 1L ||
+      is.na(file_name) ||
+      !nzchar(file_name)
   ) {
     stop("`file_name` must be a non-empty string.", call. = FALSE)
   }
