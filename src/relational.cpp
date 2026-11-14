@@ -37,7 +37,6 @@ SEXP result_to_df(duckdb::unique_ptr<duckdb::QueryResult> res) {
 	if (res->HasError()) {
 		stop("%s", res->GetError().c_str());
 	}
-	D_ASSERT(res->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
 
 	return duckdb_execute_R_impl(res.get(), duckdb::ConvertOpts(), RStrings::get().tbl_df_tbl_dataframe_str);
 }
@@ -318,6 +317,7 @@ void check_column_validity(SEXP col, const std::string &col_name, ConvertOpts::S
 	cpp11::sexp out;
 
 	{
+		EndOpenResults(*rel->rel->context->GetContext());
 		ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 		auto res = rel->rel->Execute();
@@ -334,6 +334,7 @@ void check_column_validity(SEXP col, const std::string &col_name, ConvertOpts::S
 // DuckDB Relations: questioning
 
 [[cpp11::register]] SEXP rapi_rel_sql(duckdb::rel_extptr_t rel, std::string sql) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	auto res = rel->rel->Query("_", sql);
@@ -484,12 +485,18 @@ static WindowBoundary StringToWindowBoundary(string &window_boundary) {
 	}
 }
 
-bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
-	if (expr->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
-		auto const_expr = expr->Cast<ConstantExpression>();
-		return !const_expr.GetLiteral().IsNull();
+// A typed NULL arrives as a cast of a NULL literal, which is how ConstantExpression::FromValue() builds it, so the
+// literal is asked under any cast.
+static bool is_null_literal(const ParsedExpression &expr) {
+	if (expr.GetExpressionClass() == ExpressionClass::CAST) {
+		return is_null_literal(expr.Cast<CastExpression>().Child());
 	}
-	return true;
+	return expr.GetExpressionType() == ExpressionType::VALUE_CONSTANT &&
+	       expr.Cast<ConstantExpression>().GetLiteral().IsNull();
+}
+
+bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
+	return !is_null_literal(*expr);
 }
 
 [[cpp11::register]] SEXP rapi_expr_window(duckdb::expr_extptr_t window_function, list partitions, list order_bys,
@@ -533,16 +540,21 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 	if (constant_expression_is_not_null(end_expr)) {
 		window_expr->EndExprMutable() = end_expr->Copy();
 	}
-	if (constant_expression_is_not_null(offset_expr)) {
+	// Only LEAD/LAG take an offset and a default, as their second and third argument; other functions ignore both
+	bool is_lead_lag = (function.FunctionName() == "lead" || function.FunctionName() == "lag");
+	if (is_lead_lag && constant_expression_is_not_null(offset_expr)) {
 		// LEAD/LAG offset must be BIGINT; cast to avoid type mismatch errors
 		auto offset_copy = offset_expr->Copy();
-		bool is_lead_lag = (function.FunctionName() == "lead" || function.FunctionName() == "lag");
-		if (is_lead_lag) {
-			offset_copy = make_uniq<CastExpression>(LogicalType::BIGINT, std::move(offset_copy));
-		}
+		offset_copy = make_uniq<CastExpression>(LogicalType::BIGINT, std::move(offset_copy));
 		window_expr->GetArgumentsMutable().push_back(FunctionArgument(std::move(offset_copy)));
 	}
-	if (constant_expression_is_not_null(default_expr)) {
+	if (is_lead_lag && constant_expression_is_not_null(default_expr)) {
+		// LEAD/LAG take the default as their third argument, so without an offset the default would be read as the
+		// offset: the default offset of 1 goes first
+		if (!constant_expression_is_not_null(offset_expr)) {
+			window_expr->GetArgumentsMutable().push_back(
+			    FunctionArgument(ConstantExpression::FromValue(Value::BIGINT(1))));
+		}
 		window_expr->GetArgumentsMutable().push_back(FunctionArgument(default_expr->Copy()));
 	}
 
@@ -755,10 +767,12 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 	// Format names are resolved by the renderer registry, which is keyed on the
 	// lowercase name; rel_explain_df() passes them uppercase.
 	auto print_format = ProfilerPrintFormat(StringUtil::Lower(format));
+	EndOpenResults(*rel->rel->context->GetContext());
 	return result_to_df(rel->rel->Explain(type_enum, print_format));
 }
 
 [[cpp11::register]] void rapi_rel_to_parquet(duckdb::rel_extptr_t rel, std::string file_name, list options_sexps) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	rel->rel->WriteParquet(file_name, ListToVectorOfValue(options_sexps));
@@ -767,6 +781,7 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 }
 
 [[cpp11::register]] void rapi_rel_to_csv(duckdb::rel_extptr_t rel, std::string file_name, list options_sexps) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	rel->rel->WriteCSV(file_name, ListToVectorOfValue(options_sexps));
@@ -776,6 +791,7 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 
 [[cpp11::register]] void rapi_rel_to_table(duckdb::rel_extptr_t rel, std::string schema_name, std::string table_name,
                                            bool temporary) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	rel->rel->Create(Identifier(schema_name), Identifier(table_name), temporary);
@@ -785,6 +801,7 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 
 [[cpp11::register]] void rapi_rel_to_view(duckdb::rel_extptr_t rel, std::string schema_name, std::string view_name,
                                           bool temporary) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	rel->rel->CreateView(Identifier(schema_name), Identifier(view_name), false, temporary);
@@ -793,6 +810,7 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 }
 
 [[cpp11::register]] void rapi_rel_insert(duckdb::rel_extptr_t rel, std::string schema_name, std::string table_name) {
+	EndOpenResults(*rel->rel->context->GetContext());
 	ScopedInterruptHandler signal_handler(rel->rel->context->GetContext());
 
 	rel->rel->Insert(Identifier(schema_name), Identifier(table_name));
