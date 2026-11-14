@@ -113,19 +113,19 @@ void StandardColumnData::Select(TransactionData transaction, idx_t vector_index,
 	bool validity_has_select = validity_compression && validity_compression->select;
 	auto target_count = GetVectorCount(vector_index);
 	auto scan_type = GetVectorScanType(state, target_count, result);
-	bool scan_entire_vector = scan_type == ScanVectorType::SCAN_ENTIRE_VECTOR;
-	if (!has_select || !validity_has_select || !scan_entire_vector) {
-		// we are not scanning an entire vector - this can have several causes (updates, etc)
+	if (!has_select || !validity_has_select || HasUpdates() || validity->HasUpdates()) {
+		// the updates need to be merged into the entire vector, so we cannot select
 		ColumnData::Select(transaction, vector_index, state, result, sel, sel_count);
 		return;
 	}
-	SelectVector(state, result, target_count, sel, sel_count);
-	validity->SelectVector(state.child_states[0], result, target_count, sel, sel_count);
+	SelectVector(state, result, target_count, sel, sel_count, scan_type);
+	validity->SelectVector(state.child_states[0], result, target_count, sel, sel_count, scan_type);
 }
 
 void StandardColumnData::InitializeAppend(ColumnAppendState &state) {
 	ColumnData::InitializeAppend(state);
 	ColumnAppendState child_append;
+	child_append.transient = state.transient;
 	validity->InitializeAppend(child_append);
 	state.child_appends.push_back(std::move(child_append));
 }
@@ -341,6 +341,21 @@ PersistentColumnData StandardColumnData::Serialize() {
 void StandardColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatistics &target_stats) {
 	ColumnData::InitializeColumn(column_data, target_stats);
 	validity->InitializeColumn(column_data.child_columns[0], target_stats);
+	// segments without a byte size come from older storage, which may record NULLs only in the validity statistics
+	bool legacy_segments = false;
+	for (auto &pointer : column_data.pointers) {
+		legacy_segments = legacy_segments || !pointer.byte_size;
+	}
+	bool validity_has_null = false;
+	for (auto &pointer : column_data.child_columns[0].pointers) {
+		validity_has_null = validity_has_null || pointer.statistics.CanHaveNull();
+	}
+	if (!legacy_segments || !validity_has_null) {
+		return;
+	}
+	for (auto &node : data.SegmentNodes()) {
+		node.GetNode().GetStatsMutable().SetHasNull();
+	}
 }
 
 void StandardColumnData::GetColumnSegmentInfo(const QueryContext &context, duckdb::idx_t row_group_index,

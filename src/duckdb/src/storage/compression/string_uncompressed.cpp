@@ -158,7 +158,8 @@ void UncompressedStringStorage::StringScan(ColumnSegment &segment, ColumnScanSta
 // Select
 //===--------------------------------------------------------------------===//
 void UncompressedStringStorage::Select(ColumnSegment &segment, ColumnScanState &state, idx_t vector_count,
-                                       Vector &result, const SelectionVector &sel, idx_t sel_count) {
+                                       Vector &result, const SelectionVector &sel, idx_t sel_count, idx_t result_offset,
+                                       ScanVectorType) {
 	// clear any previously locked buffers and get the primary buffer handle
 	auto &scan_state = state.scan_state->Cast<StringScanState>();
 	auto layout = StringSegmentLayout::Read(scan_state.handle, segment);
@@ -174,7 +175,7 @@ void UncompressedStringStorage::Select(ColumnSegment &segment, ColumnScanState &
 		auto selection_index = sel.get_index(i);
 		D_ASSERT(selection_index < vector_count);
 		auto entry = strings.GetEntry(selection_index);
-		result_data[i] = FetchStringFromEntry(state.context, segment, result, entry);
+		result_data[result_offset + i] = FetchStringFromEntry(state.context, segment, result, entry);
 	}
 }
 
@@ -255,17 +256,20 @@ idx_t UncompressedStringStorage::FinalizeAppend(ColumnSegment &segment, BaseStat
 	// compute the total size required to store this segment
 	auto offset_size = DICTIONARY_HEADER_SIZE + segment.count * sizeof(int32_t);
 	auto total_size = offset_size + dict.size;
+	D_ASSERT(total_size <= segment.SegmentSize());
+	auto dataptr = handle.GetDataMutable() + segment.GetBlockOffset();
 
 	CompressionInfo info(segment.GetBlockHandle()->GetBlockManager());
 	if (total_size >= info.GetCompactionFlushLimit()) {
 		// the block is full enough, don't bother moving around the dictionary
+		// the whole segment is persisted, so clear the gap between the offsets and the dictionary
+		memset(dataptr + offset_size, 0, segment.SegmentSize() - total_size);
 		return segment.SegmentSize();
 	}
 
 	// the block has space left: figure out how much space we can save
 	auto move_amount = segment.SegmentSize() - total_size;
 	// move the dictionary so it lines up exactly with the offsets
-	auto dataptr = handle.GetDataMutable() + segment.GetBlockOffset();
 	memmove(dataptr + offset_size, dataptr + dict.end - dict.size, dict.size);
 	dict.end -= move_amount;
 	D_ASSERT(dict.end == total_size);
@@ -304,18 +308,20 @@ void UncompressedStringStorage::VisitBlockIds(const ColumnSegment &segment, Bloc
 //===--------------------------------------------------------------------===//
 CompressionFunction StringUncompressed::GetFunction(PhysicalType data_type) {
 	D_ASSERT(data_type == PhysicalType::VARCHAR);
-	return CompressionFunction(CompressionType::COMPRESSION_UNCOMPRESSED, data_type,
-	                           UncompressedStringStorage::StringInitAnalyze, UncompressedStringStorage::StringAnalyze,
-	                           UncompressedStringStorage::StringFinalAnalyze, UncompressedFunctions::InitCompression,
-	                           UncompressedFunctions::Compress, UncompressedFunctions::FinalizeCompress,
-	                           UncompressedStringStorage::StringInitScan, UncompressedStringStorage::StringScan,
-	                           UncompressedStringStorage::StringScanPartial, UncompressedStringStorage::StringFetchRow,
-	                           UncompressedFunctions::EmptySkip, UncompressedStringStorage::StringInitSegment,
-	                           UncompressedStringStorage::StringInitAppend, UncompressedStringStorage::StringAppend,
-	                           UncompressedStringStorage::FinalizeAppend, UncompressedStringStorage::StringRevertAppend,
-	                           UncompressedStringStorage::SerializeState, UncompressedStringStorage::DeserializeState,
-	                           UncompressedStringStorage::VisitBlockIds, UncompressedStringInitPrefetch,
-	                           UncompressedStringStorage::Select);
+	auto result = CompressionFunction(
+	    CompressionType::COMPRESSION_UNCOMPRESSED, data_type, UncompressedStringStorage::StringInitAnalyze,
+	    UncompressedStringStorage::StringAnalyze, UncompressedStringStorage::StringFinalAnalyze,
+	    UncompressedFunctions::InitCompression, UncompressedFunctions::Compress,
+	    UncompressedFunctions::FinalizeCompress, UncompressedStringStorage::StringInitScan,
+	    UncompressedStringStorage::StringScan, UncompressedStringStorage::StringScanPartial,
+	    UncompressedStringStorage::StringFetchRow, UncompressedFunctions::EmptySkip,
+	    UncompressedStringStorage::StringInitSegment, UncompressedStringStorage::StringInitAppend,
+	    UncompressedStringStorage::StringAppend, UncompressedStringStorage::FinalizeAppend,
+	    UncompressedStringStorage::StringRevertAppend, UncompressedStringStorage::SerializeState,
+	    UncompressedStringStorage::DeserializeState, UncompressedStringStorage::VisitBlockIds,
+	    UncompressedStringInitPrefetch, UncompressedStringStorage::Select);
+	result.zero_initialize_segments = false;
+	return result;
 }
 
 //===--------------------------------------------------------------------===//

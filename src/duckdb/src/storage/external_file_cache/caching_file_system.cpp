@@ -357,12 +357,16 @@ Allocator &CachingFileHandle::GetBufferAllocator() const {
 	return external_file_cache.GetBufferManager().GetBufferAllocator();
 }
 
+bool CachingFileHandle::ReadsAreCached() {
+	return external_file_cache.IsEnabled() && external_file_cache.ShouldCacheFile(path.path) && CanUseCache();
+}
+
 FileBufferHandleGroup CachingFileHandle::Read(const idx_t nr_bytes, const idx_t location) {
 	if (nr_bytes == 0) {
 		return FileBufferHandleGroup();
 	}
 
-	if (!external_file_cache.IsEnabled() || !external_file_cache.ShouldCacheFile(path.path) || !CanUseCache()) {
+	if (!ReadsAreCached()) {
 		auto buf = AllocateUncachedReadBuffer(external_file_cache.GetBufferManager(), nr_bytes);
 		ReadUncached(buf.GetDataMutable(), nr_bytes, location);
 		vector<FileBufferHandleGroup::MemoryHandle> mem_handles;
@@ -616,6 +620,12 @@ bool CachingFileHandle::TryGetNetworkThroughput(NetworkThroughputEstimate &resul
 
 void CachingFileHandle::ReadAndRecord(QueryContext context, data_ptr_t buffer, idx_t nr_bytes, idx_t location) {
 	auto handle = GetFileHandle();
+	if (handle->file_system.IsLocalFileSystem()) {
+		// Pre-fault local read buffers before the kernel fills them.
+		for (idx_t offset = 0; offset < nr_bytes; offset += 4096) {
+			buffer[offset] = 0;
+		}
+	}
 	const auto read_start = steady_clock::now();
 	handle->Read(context, buffer, nr_bytes, location);
 	auto cache_valid_until = handle->file_system.GetCacheValidUntil(*handle);

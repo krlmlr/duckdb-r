@@ -292,6 +292,8 @@ enum class HLLStorageType : uint8_t;
 
 enum class HTTPClientCachePolicy : uint8_t;
 
+enum class HTTPRetryOutcomeOwner : uint8_t;
+
 enum class HTTPStatusCode : uint16_t;
 
 enum class HTTPTransportReusePolicy : uint8_t;
@@ -617,6 +619,8 @@ enum class TransactionInvalidationPolicy : uint8_t;
 enum class TransactionModifierType : uint8_t;
 
 enum class TransactionType : uint8_t;
+
+enum class TransformChildKind : uint8_t;
 
 enum class TriggerEventType : uint8_t;
 
@@ -1058,6 +1062,9 @@ const char* EnumUtil::ToChars<HLLStorageType>(HLLStorageType value);
 
 template<>
 const char* EnumUtil::ToChars<HTTPClientCachePolicy>(HTTPClientCachePolicy value);
+
+template<>
+const char* EnumUtil::ToChars<HTTPRetryOutcomeOwner>(HTTPRetryOutcomeOwner value);
 
 template<>
 const char* EnumUtil::ToChars<HTTPStatusCode>(HTTPStatusCode value);
@@ -1549,6 +1556,9 @@ template<>
 const char* EnumUtil::ToChars<TransactionType>(TransactionType value);
 
 template<>
+const char* EnumUtil::ToChars<TransformChildKind>(TransformChildKind value);
+
+template<>
 const char* EnumUtil::ToChars<TriggerEventType>(TriggerEventType value);
 
 template<>
@@ -2013,6 +2023,9 @@ HLLStorageType EnumUtil::FromString<HLLStorageType>(const char *value);
 
 template<>
 HTTPClientCachePolicy EnumUtil::FromString<HTTPClientCachePolicy>(const char *value);
+
+template<>
+HTTPRetryOutcomeOwner EnumUtil::FromString<HTTPRetryOutcomeOwner>(const char *value);
 
 template<>
 HTTPStatusCode EnumUtil::FromString<HTTPStatusCode>(const char *value);
@@ -2502,6 +2515,9 @@ TransactionModifierType EnumUtil::FromString<TransactionModifierType>(const char
 
 template<>
 TransactionType EnumUtil::FromString<TransactionType>(const char *value);
+
+template<>
+TransformChildKind EnumUtil::FromString<TransformChildKind>(const char *value);
 
 template<>
 TriggerEventType EnumUtil::FromString<TriggerEventType>(const char *value);
