@@ -288,7 +288,6 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_NS:
-	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -514,11 +513,6 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 			// (handbook/architecture/glue/altrep/README.md)
 			cpp11::warning("Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		}
-		break;
-	case LogicalTypeId::TIMESTAMP_TZ_NS:
-		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_TZ_NS>(src_vec, n, dest, dest_offset);
-		std::call_once(nanosecond_coercion_warning, Rf_warning,
-		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;
 	case LogicalTypeId::DATE: {
 		auto src_data = FlatVector::GetData<date_t>(src_vec);
