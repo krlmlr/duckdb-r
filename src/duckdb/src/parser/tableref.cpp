@@ -109,13 +109,6 @@ void TableRef::VerifyDeserialized() const {
 		}
 		break;
 	}
-	case TableReferenceType::BASE_TABLE: {
-		auto &at_clause = Cast<BaseTableRef>().at_clause;
-		if (at_clause && !at_clause->Expression()) {
-			throw invalid("missing AT expression");
-		}
-		break;
-	}
 	case TableReferenceType::TABLE_FUNCTION: {
 		auto &function = Cast<TableFunctionRef>().function;
 		if (!function || function->GetExpressionClass() != ExpressionClass::FUNCTION) {

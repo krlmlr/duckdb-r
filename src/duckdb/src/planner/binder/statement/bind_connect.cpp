@@ -19,7 +19,7 @@ BoundStatement Binder::Bind(ConnectStatement &stmt) {
 		TableFunctionBinder option_binder(*this, context, "Connect", "Connect parameter");
 		for (auto &entry : stmt.info->parsed_options) {
 			auto bound_expr = option_binder.Bind(entry.second);
-			auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+			auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr);
 			if (val.IsNull()) {
 				throw BinderException("NULL is not supported as a valid option for CONNECT option \"" + entry.first +
 				                      "\"");
@@ -50,8 +50,6 @@ BoundStatement Binder::Bind(DisconnectStatement &stmt) {
 
 	auto &properties = GetStatementProperties();
 	properties.return_type = StatementReturnType::NOTHING;
-	// DISCONNECT returns to LOCAL also in an aborted transaction, so that it can be rolled back
-	properties.requires_valid_transaction = false;
 	return result;
 }
 

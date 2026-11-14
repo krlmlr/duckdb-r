@@ -40,7 +40,7 @@ interval_t MultiplyOperator::Operation(double left, interval_t right);
 struct TryMultiplyOperator {
 	template <class TA, class TB, class TR>
 	static inline bool Operation(TA left, TB right, TR &result) {
-		InternalException::Throw("Unimplemented type for TryMultiplyOperator");
+		throw InternalException("Unimplemented type for TryMultiplyOperator");
 	}
 };
 
@@ -84,7 +84,7 @@ struct MultiplyOperatorOverflowCheck {
 struct TryDecimalMultiply {
 	template <class TA, class TB, class TR>
 	static inline bool Operation(TA left, TB right, TR &result) {
-		InternalException::Throw("Unimplemented type for TryDecimalMultiply");
+		throw InternalException("Unimplemented type for TryDecimalMultiply");
 	}
 };
 

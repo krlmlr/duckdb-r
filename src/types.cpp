@@ -6,8 +6,6 @@
 #include "rapi.hpp"
 #include "typesr.hpp"
 
-#include <cmath>
-
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
 #undef FALSE
@@ -33,19 +31,8 @@ RTypeId RType::id() const {
 	return id_;
 }
 
-// Field names and factor levels are R's, so they compare exactly:
-// an Identifier compares case-insensitively, as SQL names do.
 bool RType::operator==(const RType &rhs) const {
-	if (id_ != rhs.id_ || size_ != rhs.size_ || aux_.size() != rhs.aux_.size()) {
-		return false;
-	}
-	for (idx_t i = 0; i < aux_.size(); i++) {
-		if (aux_[i].first.GetIdentifierName() != rhs.aux_[i].first.GetIdentifierName() ||
-		    !(aux_[i].second == rhs.aux_[i].second)) {
-			return false;
-		}
-	}
-	return true;
+	return id_ == rhs.id_ && size_ == rhs.size_ && aux_ == rhs.aux_;
 }
 
 // Reads the levels in place, as DetectRType() does a data frame's names
@@ -345,7 +332,6 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::SMALLINT:
-	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		return "integer";
 	case LogicalTypeId::TIMESTAMP_SEC:
@@ -388,6 +374,7 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::ENUM:
 		return "factor";
 	case LogicalTypeId::UNKNOWN:
+	case LogicalTypeId::SQLNULL:
 	// No R vector holds these: the route to R vectors refuses them by column before
 	// the statement runs, in rapi_execute_impl(), while an Arrow result carries them
 	// unconverted (handbook/usage/types/README.md).
@@ -417,36 +404,28 @@ date_t RDateType::Convert(double val) {
 	return date_t((int32_t)std::floor(val));
 }
 
-// A value halfway between two microseconds rounds to the even one, as R's
-// round() in dbQuoteLiteral() and the engine's own to_timestamp() do; C's
-// round() would take it away from zero. R leaves the rounding mode at its
-// default, round to nearest, which is the mode std::nearbyint() follows.
-static int64_t RoundMicros(double micros) {
-	return int64_t(std::nearbyint(micros));
-}
-
 timestamp_t RTimestampType::Convert(double val) {
-	return Timestamp::FromEpochMicroSeconds(RoundMicros(val * Interval::MICROS_PER_SEC));
+	return Timestamp::FromEpochMicroSeconds(round(val * Interval::MICROS_PER_SEC));
 }
 
 interval_t RIntervalSecondsType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_SEC));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_SEC)));
 }
 
 interval_t RIntervalMinutesType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_MINUTE));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_MINUTE)));
 }
 
 interval_t RIntervalHoursType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_HOUR));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_HOUR)));
 }
 
 interval_t RIntervalDaysType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_DAY));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_DAY)));
 }
 
 interval_t RIntervalWeeksType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * (Interval::MICROS_PER_DAY * Interval::DAYS_PER_WEEK)));
+	return Interval::FromMicro(int64_t(round(val * (Interval::MICROS_PER_DAY * Interval::DAYS_PER_WEEK))));
 }
 
 bool RIntegerType::IsNull(int val) {

@@ -46,17 +46,9 @@ the query
 into lazy tables;
 `simulate_duckdb()` renders SQL without a connection.
 
-**`slice_sample()` is the one verb the backend implements.**
-dbplyr numbers the rows in a window ordered by `RANDOM()`,
-and DuckDB 2.0 refuses a volatile window key by design
-([duckdb/duckdb#25482](https://github.com/duckdb/duckdb/pull/25482)).
-The backend draws the key as a column of an inner query and leaves the rest to dbplyr's `slice_min()`,
-so groups, `by`, and dbplyr's refusals of `prop`, `weight_by` and `replace` stay as they were
-([#2963](https://github.com/duckdb/duckdb-r/issues/2963)).
-
-Otherwise the backend translates *expressions*, not verbs,
-and literals are escaped by dbplyr;
-these are the boundaries users keep hitting:
+The backend translates *expressions*, not verbs,
+and literals are escaped by dbplyr —
+the boundaries users keep hitting:
 
 * `tbl()` cannot open a table holding a type R cannot hold, `BIT`, `BIGNUM`, `TIME_NS` or `UNION`:
   dbplyr reads the fields through a query R has to convert, and reports "Can't query fields".
@@ -84,10 +76,6 @@ these are the boundaries users keep hitting:
   ([#1585](https://github.com/duckdb/duckdb-r/issues/1585),
   blocked on
   [tidyverse/dbplyr#1838](https://github.com/tidyverse/dbplyr/issues/1838)).
-* A window ordered by a random value fails to bind, as `slice_sample()` did.
-  That covers `row_number(runif(n()))`, `slice_min(runif(n()))` and `lag(x, order_by = runif(n()))`.
-  Drawing the value as a column first works: `mutate(r = runif(n()), i = row_number(r))` computes `r` in a subquery.
-  `arrange(runif(n()))` sorts the result rather than a window, and is unaffected.
 
 ## duckplyr
 
@@ -134,21 +122,19 @@ The stream is the interchange: any Arrow C stream consumer takes a result onward
 The stream feeds one consumer, draining as it is read, and a drained stream reads as empty rather than as the result again.
 A `$get_next()` loop over it ends in `NULL`, and a second `nanoarrow::convert_array_stream()` returns zero rows.
 `as.data.frame()` and `arrow::as_arrow_table()` also release it, so a read after either is an error ("has already been released").
-It also holds its connection until the engine has seen the end of the result, in a batch shorter than `chunk_size` or in an empty read.
-Another statement on that connection invalidates it.
-The next read is then an error, not an early end that would pass for a complete result
+Another statement on that connection leaves it alone:
+this engine keeps a query result independent of whatever statement its connection is running,
+so a stream opened before that statement still delivers every row
 ([#2772](https://github.com/duckdb/duckdb-r/issues/2772)).
-So a stream whose last batch held exactly `chunk_size` rows is invalidated, although every row has arrived.
-The glue drains the result itself and checks before each read whether another statement ended it
-(`RArrowArrayStreamWrapper`, [`src/arrow_export.cpp`](/src/arrow_export.cpp)).
-The engine refuses any statement on a connection while a result is open there,
-so the glue ends the connection's open results first (`EndOpenResults()`).
+The glue wraps the engine's stream all the same
+(`RArrowArrayStreamWrapper`, [`src/arrow_export.cpp`](/src/arrow_export.cpp)),
+because the engine `main` vendors does invalidate such a result and reports it as ended,
+which would read as a complete result; on this engine that check never fires.
 The wrapper also keeps the connection's client context alive until the stream is released.
 The engine's callbacks read it, so a stream can still be read after `dbDisconnect()`.
-Statements that must run between reads need a connection of their own.
-That includes a query that scans the stream itself.
+A query that scans the stream itself still needs a connection of its own.
 Registering `arrow::as_record_batch_reader(stream)` with `duckdb_register_arrow()` and querying it is one.
-On the stream's own connection it fails, as the entry below says.
+On the stream's own connection it waits for good, as the entry below says.
 A multi-row `dbBind()` is not affected, because its results are materialized.
 Reach for the stream where the result should not be held twice;
 what every route holds, and for how long, is
@@ -158,9 +144,12 @@ that class directly instead of a data frame to convert afterwards,
 and `dbSendQueryArrow()` with `dbFetchArrowChunk()` converts a batch
 at a time.
 
-**A query that scans a stream on the stream's own connection fails.**
-Starting the query ends the stream, and the scan's first read fails with the invalidation error.
-With the v1.5 engine the scan waited for good instead, and Ctrl+C did not end the wait.
+**A query that scans a stream on the stream's own connection waits instead of failing.**
+Starting the query invalidates the stream.
+A read learns that only under the connection's lock, which the query holds until the scan returns.
+Neither the size of the result nor the number of threads changes that.
+Ctrl+C does not end the wait, so the R session has to be killed ([`interactive/`](/handbook/usage/interactive/README.md)).
+The engine's own stream waits the same way, in the Python client and in this package before [#2775](https://github.com/duckdb/duckdb-r/pull/2775).
 A second connection to the same database scans the stream.
 So does its own connection once the stream has been read to the end or the result materialized
 ([`2026-09-27-stream-self-scan/`](/experiments/2026-09-27-stream-self-scan/README.md)).
@@ -186,13 +175,11 @@ It holds a large result once where `to_arrow()` holds it twice, but it is no dro
 Its reference page points here for them.
 The reader is its connection's open result until it has been read to the end:
 
-* Any other statement on that connection breaks it, and the next read fails with the invalidation error.
-  dplyr and dbplyr run such statements unasked: `tbl()` asks for the columns, and printing or collecting a lazy table runs its query.
-  A second `to_arrow_stream()` on the same connection is one too.
-* A query that scans the reader on its own connection fails with the invalidation error, as the entry above says.
+* Any other statement on that connection leaves it alone, as the entry above says, so the reader still delivers every row.
+* A query that scans the reader on its own connection never returns, and Ctrl+C does not end it, as the entry above says.
   `to_duckdb(reader, con = con)` is one, and so is a query on `con` after `duckdb_register_arrow()` of the reader.
 * Tables from `to_duckdb()` share the one connection arrow keeps unless `con` is given.
-  For those, a later `to_duckdb()` without `con` breaks the reader, and one on the reader itself fails.
+  For those, a later `to_duckdb()` without `con` breaks the reader, and one on the reader itself never returns.
 * Writing the reader back to its own connection fails partway.
   `dbWriteTableArrow()` leaves an empty table behind, and `dbAppendTableArrow()` the first batch.
 * A read runs outside the package's interrupt handler, so Ctrl+C does not stop it.

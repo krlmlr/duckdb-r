@@ -43,33 +43,18 @@ test_that("to_arrow_stream() refuses a simulated or a closed connection", {
   expect_error(to_arrow_stream(lazy), "to be open")
 })
 
-test_that("the reader reads the result as it goes", {
-  con <- local_con()
-  # One thread, so that the scan runs no further ahead than the stream buffers.
-  dbExecute(con, "SET threads = 1")
-
-  # A result run to completion fails in to_arrow_stream() already.
-  lazy <- dplyr::tbl(
-    con,
-    dplyr::sql(
-      "SELECT CASE WHEN i < 5000000 THEN i ELSE error('late') END AS i
-      FROM range(6000000) t(i)"
-    )
-  )
-  reader <- to_arrow_stream(lazy)
-
-  expect_equal(reader$read_next_batch()$num_rows, 1000000)
-  expect_error(reader$read_table(), "late")
-})
-
-test_that("a statement on its connection invalidates a reader not read to the end", {
+test_that("a reader not read to the end reads on across another statement", {
   con <- local_con()
 
   lazy <- dplyr::tbl(con, dplyr::sql("SELECT i FROM range(3000000) t(i)"))
   reader <- to_arrow_stream(lazy)
-  expect_gt(reader$read_next_batch()$num_rows, 0)
+  total <- reader$read_next_batch()$num_rows
+  expect_gt(total, 0)
   dbGetQuery(con, "SELECT 1")
-  expect_error(reader$read_next_batch(), "invalidated by another statement")
+  while (!is.null(batch <- reader$read_next_batch())) {
+    total <- total + batch$num_rows
+  }
+  expect_equal(total, 3e6)
 })
 
 test_that("the reader's documented limits hold", {
@@ -78,10 +63,10 @@ test_that("the reader's documented limits hold", {
   dbWriteTable(con, "u", data.frame(j = 1:3))
   lazy <- dplyr::tbl(con, "t")
 
-  # dbplyr asks for the columns of a new lazy table.
+  # dbplyr asks for the columns of a new lazy table; the reader reads on.
   reader <- to_arrow_stream(lazy)
   dplyr::tbl(con, "u")
-  expect_error(reader$read_next_batch(), "invalidated by another statement")
+  expect_equal(reader$read_table()$num_rows, 3e6)
 
   # A second connection to the same database leaves the reader alone.
   other <- dbConnect(con@driver)

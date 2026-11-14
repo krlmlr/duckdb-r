@@ -2,11 +2,6 @@
 
 namespace duckdb {
 
-void ScalarExecutor::PrepareConstantResult(Vector &result) {
-	result.SetVectorType(VectorType::FLAT_VECTOR);
-	FlatVector::ValidityMutable(result).SetValid(0);
-}
-
 bool ScalarExecutor::PrepareGenericResultValidity(const UnifiedVectorFormat *formats, idx_t format_count,
                                                   Vector &result, idx_t count, bool preserve_result_validity,
                                                   bool adds_nulls) {

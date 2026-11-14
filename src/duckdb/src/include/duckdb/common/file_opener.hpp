@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb/common/open_file_info.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/main/setting_info.hpp"
@@ -22,18 +21,8 @@ class HTTPUtil;
 class Value;
 class Logger;
 
-//! The file an open, listing or request is for
 struct FileOpenerInfo {
-	FileOpenerInfo() = default;
-	FileOpenerInfo(string path) // NOLINT: allow implicit conversion from a path
-	    : file(std::move(path)) {
-	}
-	FileOpenerInfo(OpenFileInfo file_p) // NOLINT: allow implicit conversion from a file
-	    : file(std::move(file_p)) {
-	}
-
-	//! The file, with the options it is opened with, e.g. the secret to open it with
-	OpenFileInfo file;
+	string file_path;
 };
 
 //! Abstract type that provide client-specific context to FileSystem.

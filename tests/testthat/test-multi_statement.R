@@ -128,8 +128,7 @@ test_that("export/import database works", {
     dir.create(export_location)
   }
 
-  # Closed by hand once exported, so not a local_con().
-  con <- dbConnect(duckdb())
+  con <- local_con()
   DBI::dbExecute(con, "CREATE TABLE integers(i integer)")
   DBI::dbExecute(con, "insert into integers select * from range(10)")
   DBI::dbExecute(con, "CREATE TABLE integers2(i INTEGER)")

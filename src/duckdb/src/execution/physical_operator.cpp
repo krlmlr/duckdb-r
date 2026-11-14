@@ -509,15 +509,8 @@ static void AppendToCache(CachingOperatorState &state, DataChunk &source, Client
 			auto &source_col = source.data[col_idx];
 			// Compare the pinned entry by pointer: cheaper than the string id and exact, since pinning keeps the
 			// address stable (no ABA). The type check must come first to guard the Cast against a flat vector.
-			bool same_dict = false;
-			if (source_col.GetVectorType() == VectorType::DICTIONARY_VECTOR) {
-				auto &source_entry = source_col.Buffer().Cast<DictionaryBuffer>().GetEntry();
-				// Reinterpret (e.g. a type-changing function) re-wraps a global dictionary in a new entry per chunk
-				// that keeps its id, so a global dictionary is also matched by id
-				same_dict = &source_entry == slot.entry.get() ||
-				            (slot.entry->global_dictionary && source_entry.global_dictionary &&
-				             !slot.entry->id.empty() && source_entry.id == slot.entry->id);
-			}
+			const bool same_dict = source_col.GetVectorType() == VectorType::DICTIONARY_VECTOR &&
+			                       &source_col.Buffer().Cast<DictionaryBuffer>().GetEntry() == slot.entry.get();
 			if (same_dict) {
 				const auto &source_sel = DictionaryVector::SelVector(source_col);
 				for (idx_t row = 0; row < added; row++) {
@@ -525,8 +518,13 @@ static void AppendToCache(CachingOperatorState &state, DataChunk &source, Client
 				}
 				continue;
 			}
-			// an operator above the producer may forward its global dictionary for some chunks only (a CASE branch, a
-			// spilled probe, a cross product): demote the column to flat
+			// A global dictionary wraps the same entry for the producer's lifetime, so a change is a producer bug
+			// that would desync the downstream sink layout -> fail loudly. A non-global dict rotating is normal.
+			if (slot.entry->global_dictionary) {
+				throw InternalException("dict-surviving cache: global dictionary column %llu changed identity "
+				                        "after being seeded for dictionary caching",
+				                        static_cast<uint64_t>(col_idx));
+			}
 			FlattenDictColumn(state, cache, col_idx, base);
 		}
 		// reached by originally-flat and just-demoted columns

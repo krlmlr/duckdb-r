@@ -85,14 +85,14 @@ void SetInvalidRange(ValidityMask &result, idx_t start, idx_t end) {
 	}
 	D_ASSERT(result.Capacity() >= end);
 	result.EnsureWritable();
-	auto result_data = unsafe_array_ptr<validity_t>(result.GetData(), ValidityMask::EntryCount(result.Capacity()));
+	auto result_data = (validity_t *)result.GetData();
 
 #ifdef DEBUG
 	ValidityMask copy_for_verification(result.Capacity());
 	copy_for_verification.EnsureWritable();
-	auto copy_data = unsafe_array_ptr<validity_t>(copy_for_verification.GetData(), result_data.size());
-	for (idx_t i = 0; i < result_data.size(); i++) {
-		copy_data[i] = result_data[i];
+	for (idx_t i = 0;
+	     i < AlignValue<idx_t, ValidityMask::BITS_PER_VALUE>(result.Capacity()) / ValidityMask::BITS_PER_VALUE; i++) {
+		copy_for_verification.GetData()[i] = result.GetData()[i];
 	}
 #endif
 	idx_t index = start;
@@ -209,7 +209,7 @@ void RoaringFinalizeCompress(CompressionState &state_p) {
 }
 
 unique_ptr<SegmentScanState> RoaringInitScan(const QueryContext &context, ColumnSegment &segment) {
-	auto result = make_uniq<RoaringScanState>(context, segment);
+	auto result = make_uniq<RoaringScanState>(segment);
 	return std::move(result);
 }
 
@@ -267,7 +267,7 @@ void RoaringScanBoolean(ColumnSegment &segment, ColumnScanState &state, idx_t sc
 // Fetch
 //===--------------------------------------------------------------------===//
 void RoaringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
-	RoaringScanState scan_state(state.context, segment);
+	RoaringScanState scan_state(segment);
 
 	idx_t internal_offset;
 	idx_t container_idx = scan_state.GetContainerIndex(static_cast<idx_t>(row_id), internal_offset);
@@ -277,7 +277,7 @@ void RoaringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_
 }
 void RoaringFetchRowBoolean(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
                             idx_t result_idx) {
-	RoaringScanState scan_state(state.context, segment);
+	RoaringScanState scan_state(segment);
 
 	idx_t internal_offset;
 	idx_t container_idx = scan_state.GetContainerIndex(static_cast<idx_t>(row_id), internal_offset);
@@ -332,12 +332,10 @@ CompressionFunction GetCompressionFunction(PhysicalType data_type) {
 	default:
 		throw InternalException("Roaring GetCompressionFunction, type %s not handled", EnumUtil::ToString(data_type));
 	}
-	CompressionFunction result(CompressionType::COMPRESSION_ROARING, data_type, roaring::RoaringInitAnalyze, analyze,
+	return CompressionFunction(CompressionType::COMPRESSION_ROARING, data_type, roaring::RoaringInitAnalyze, analyze,
 	                           roaring::RoaringFinalAnalyze, roaring::RoaringInitCompression, compress,
 	                           roaring::RoaringFinalizeCompress, roaring::RoaringInitScan, scan, scan_partial,
 	                           fetch_row, roaring::RoaringSkip, roaring::RoaringInitSegment);
-	result.zero_initialize_segments = false;
-	return result;
 }
 
 CompressionFunction RoaringCompressionFun::GetFunction(PhysicalType type) {

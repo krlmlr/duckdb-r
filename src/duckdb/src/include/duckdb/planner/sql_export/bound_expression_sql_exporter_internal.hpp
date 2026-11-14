@@ -121,9 +121,8 @@ private:
 	BoundExpressionSQLExportResult RestoreResultType(const LogicalType &type, unique_ptr<ParsedExpression> result,
 	                                                 const LogicalPlanVerificationPath &path);
 	static bool RequiresConstantConstructor(const LogicalType &type);
-	static BoundExpressionSQLExportResult CastToConstructedType(const LogicalType &type,
-	                                                            unique_ptr<ParsedExpression> child,
-	                                                            const LogicalPlanVerificationPath &path);
+	BoundExpressionSQLExportResult CastToConstructedType(const LogicalType &type, unique_ptr<ParsedExpression> child,
+	                                                     const LogicalPlanVerificationPath &path);
 	BoundExpressionSQLExportResult ExportConstant(const BoundConstantExpression &expression,
 	                                              const LogicalPlanVerificationPath &path);
 	BoundExpressionSQLExportResult ExportReference(const BoundReferenceExpression &expression,

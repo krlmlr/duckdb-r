@@ -17,7 +17,6 @@ namespace duckdb {
 struct FileHandle;
 struct BaseRequest;
 struct HTTPResponse;
-struct MetricTiming;
 class PhysicalOperator;
 enum class PhysicalOperatorType : uint8_t;
 class AttachedDatabase;
@@ -126,8 +125,7 @@ public:
 
 	static LogicalType GetLogType();
 
-	static string ConstructLogMessage(const string &metric, const Value &value,
-	                                  optional_ptr<const MetricTiming> timing = nullptr);
+	static string ConstructLogMessage(const string &metric, const Value &value);
 };
 
 class CheckpointLogType : public LogType {
@@ -203,19 +201,6 @@ public:
 	static LogicalType GetLogType();
 
 	static string ConstructLogMessage(const string &pool, idx_t task_count);
-};
-
-class ReadAheadBudgetLogType : public LogType {
-public:
-	static constexpr const char *NAME = "ReadAheadBudget";
-	static constexpr LogLevel LEVEL = LogLevel::LOG_DEBUG;
-
-	ReadAheadBudgetLogType();
-
-	static LogicalType GetLogType();
-
-	//! One entry per pushed read-ahead job with the backlog charge, its budget and the jobs in flight
-	static string ConstructLogMessage(idx_t pending_bytes, idx_t budget_bytes, idx_t active_jobs);
 };
 
 class ProgressVerificationLogType : public LogType {

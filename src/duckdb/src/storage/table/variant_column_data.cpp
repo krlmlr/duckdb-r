@@ -141,10 +141,6 @@ bool VariantColumnData::PushdownShreddedFieldExtract(const StorageIndex &variant
 		return false;
 	}
 	if (root_type.id() != LogicalTypeId::INVALID) {
-		if (!VariantUtils::ShreddedCastMatchesVariantCast(shredded_stats.get().GetType(), root_type)) {
-			//! The cast has to be applied to the VARIANT
-			return false;
-		}
 		column_index.SetPushdownExtractType(shredded.type, root_type);
 	}
 
@@ -350,14 +346,12 @@ void VariantColumnData::Skip(ColumnScanState &state, idx_t count) {
 
 void VariantColumnData::InitializeAppend(ColumnAppendState &state) {
 	ColumnAppendState validity_append;
-	validity_append.transient = state.transient;
 	validity->InitializeAppend(validity_append);
 	state.child_appends.push_back(std::move(validity_append));
 
 	for (idx_t i = 0; i < sub_columns.size(); i++) {
 		auto &sub_column = sub_columns[i];
 		ColumnAppendState child_append;
-		child_append.transient = state.transient;
 		sub_column->InitializeAppend(child_append);
 		state.child_appends.push_back(std::move(child_append));
 	}
@@ -753,8 +747,9 @@ unique_ptr<ColumnCheckpointState> VariantColumnData::Checkpoint(const RowGroup &
 
 	LogicalType shredded_type;
 	if (should_shred) {
-		shredded_type = config.GetForceVariantShredding();
-		if (shredded_type.id() == LogicalTypeId::INVALID) {
+		if (config.options.force_variant_shredding.id() != LogicalTypeId::INVALID) {
+			shredded_type = config.options.force_variant_shredding;
+		} else {
 			shredded_type = GetShreddedType();
 		}
 		D_ASSERT(shredded_type.id() == LogicalTypeId::STRUCT);

@@ -42,8 +42,7 @@ public:
 			                  width, sizeof(T) * BITPACK_DLEN);
 		}
 		const auto mask = BITPACK_MASKS[width];
-		// check once that every byte touched from the current bit position is available
-		src.available((bitpack_pos + count * width + BITPACK_DLEN - 1) / BITPACK_DLEN);
+		src.available(count * width / BITPACK_DLEN); // check if buffer has enough space available once
 		if (bitpack_pos == 0 && count >= BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE) {
 			idx_t remainder = count % BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
 			idx_t aligned_count = count - remainder;
@@ -67,8 +66,7 @@ public:
 
 	static void Skip(ByteBuffer &src, bitpacking_width_t &bitpack_pos, idx_t count, const bitpacking_width_t width) {
 		CheckWidth(width);
-		// check once that every byte touched from the current bit position is available
-		src.available((bitpack_pos + count * width + BITPACK_DLEN - 1) / BITPACK_DLEN);
+		src.available(count * width / BITPACK_DLEN); // check if buffer has enough space available once
 		if (bitpack_pos == 0 && count >= BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE) {
 			idx_t remainder = count % BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
 			idx_t aligned_count = count - remainder;

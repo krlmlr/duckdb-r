@@ -129,8 +129,6 @@ VectorCache &VectorCache::operator=(VectorCache &&other) noexcept {
 
 void VectorCache::ResetFromCache(Vector &result) const {
 	if (!cache_entry) {
-		// uninitialized column: drop the last reference so it does not keep a stale size
-		result.SetBuffer(nullptr);
 		return;
 	}
 	cache_entry->ResetFromCache(result);

@@ -129,7 +129,7 @@ private:
 		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 			return SelectOperation<T, LessThanEquals>(vdata, sel, approved_tuple_count);
 		default:
-			InternalException::Throw("Unsupported comparison type for comparison filter executor");
+			throw InternalException("Unsupported comparison type for comparison filter executor");
 		}
 	}
 
@@ -166,7 +166,7 @@ private:
 		case PhysicalType::VARCHAR:
 			return SelectTyped<string_t>(vdata, sel, approved_tuple_count);
 		default:
-			InternalException::Throw("Unsupported physical type for comparison filter executor");
+			throw InternalException("Unsupported physical type for comparison filter executor");
 		}
 	}
 
@@ -348,7 +348,7 @@ private:
 		}
 	}
 
-	shared_ptr<const BloomFilter> filter;
+	optional_ptr<BloomFilter> filter;
 	bool filters_null_values;
 	Vector hashes;
 	SelectionVector bloom_sel;

@@ -21,10 +21,7 @@ DUCKDB_V2_ERROR duckdb_v2_error_info_get_raw_text(duckdb_v2_error_info_handle in
 }
 
 DUCKDB_V2_ERROR duckdb_v2_error_info_set_text(duckdb_v2_error_info_handle info, const duckdb_v2_str *text) {
-	if (!info) {
-		return DUCKDB_V2_ERROR_NONE;
-	}
-	if (IsNullArgument(text)) {
+	if (!info || IsNullArgument(text)) {
 		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	auto *ei = Convert(info);
@@ -44,7 +41,7 @@ DUCKDB_V2_ERROR duckdb_v2_error_info_get_code(duckdb_v2_error_info_handle info, 
 
 DUCKDB_V2_ERROR duckdb_v2_error_info_set_code(duckdb_v2_error_info_handle info, DUCKDB_V2_ERROR code) {
 	if (!info) {
-		return DUCKDB_V2_ERROR_NONE;
+		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	const auto ei = Convert(info);
 	ei->code = code;

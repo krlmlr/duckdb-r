@@ -107,11 +107,9 @@ struct ParquetWriteBindData : public TableFunctionData {
 	idx_t string_dictionary_page_size_limit = PrimitiveColumnWriter::MAX_UNCOMPRESSED_DICT_PAGE_SIZE;
 
 	//! The maximum uncompressed size of a data page
-	//! 0 when not set by the user: the default then depends on whether the page index is written
-	idx_t data_page_size_limit = 0;
+	idx_t data_page_size_limit = PrimitiveColumnWriter::MAX_UNCOMPRESSED_PAGE_SIZE;
 
 	bool enable_bloom_filters = true;
-	bool write_page_index = false;
 	//! What false positive rate are we willing to accept for bloom filters
 	double bloom_filter_false_positive_ratio = 0.01;
 
@@ -157,7 +155,6 @@ static void ParquetListCopyOptions(ClientContext &context, CopyOptionsInput &inp
 	copy_options["bloom_filter_false_positive_ratio"] = CopyOption(LogicalType::DOUBLE, CopyOptionMode::WRITE_ONLY);
 	copy_options["debug_use_openssl"] = CopyOption(LogicalType::BOOLEAN, CopyOptionMode::READ_WRITE);
 	copy_options["write_bloom_filter"] = CopyOption(LogicalType::BOOLEAN, CopyOptionMode::WRITE_ONLY);
-	copy_options["write_page_index"] = CopyOption(LogicalType::BOOLEAN, CopyOptionMode::WRITE_ONLY);
 	copy_options["compression_level"] = CopyOption(LogicalType::BIGINT, CopyOptionMode::WRITE_ONLY);
 	copy_options["parquet_version"] = CopyOption(LogicalType::VARCHAR, CopyOptionMode::WRITE_ONLY);
 	copy_options["binary_as_string"] = CopyOption(LogicalType::BOOLEAN, CopyOptionMode::READ_ONLY);
@@ -248,7 +245,8 @@ static unique_ptr<FunctionData> ParquetWriteBind(ClientContext &context, CopyFun
 				const auto &struct_children = StructValue::GetChildren(shredding_types_value);
 				D_ASSERT(StructType::GetChildTypes(struct_type).size() == struct_children.size());
 				for (idx_t i = 0; i < struct_children.size(); i++) {
-					const auto &col_name = StructType::GetChildName(struct_type, i).GetIdentifierName();
+					const auto &col_name =
+					    StringUtil::Lower(StructType::GetChildName(struct_type, i).GetIdentifierName());
 					auto it = variant_names.find(Identifier(col_name));
 					if (it == variant_names.end()) {
 						string names;
@@ -271,7 +269,8 @@ static unique_ptr<FunctionData> ParquetWriteBind(ClientContext &context, CopyFun
 						}
 					}
 					const auto &child_value = struct_children[i];
-					bind_data->shredding_types.AddChild(*it, ShreddingType::GetShreddingTypes(child_value, context));
+					bind_data->shredding_types.AddChild(Identifier(col_name),
+					                                    ShreddingType::GetShreddingTypes(child_value, context));
 				}
 			}
 		} else if (option_name == "kv_metadata") {
@@ -284,9 +283,6 @@ static unique_ptr<FunctionData> ParquetWriteBind(ClientContext &context, CopyFun
 			for (idx_t i = 0; i < values.size(); i++) {
 				auto &value = values[i];
 				auto key = StructType::GetChildName(kv_struct_type, i);
-				if (value.IsNull()) {
-					throw BinderException("kv_metadata value for key %s cannot be NULL", key);
-				}
 				// If the value is a blob, write the raw blob bytes
 				// otherwise, cast to string
 				if (value.type().id() == LogicalTypeId::BLOB) {
@@ -324,8 +320,6 @@ static unique_ptr<FunctionData> ParquetWriteBind(ClientContext &context, CopyFun
 			bind_data->data_page_size_limit = val;
 		} else if (option_name == "write_bloom_filter") {
 			bind_data->enable_bloom_filters = BooleanValue::Get(option_values[0].DefaultCastAs(LogicalType::BOOLEAN));
-		} else if (option_name == "write_page_index") {
-			bind_data->write_page_index = BooleanValue::Get(option_values[0].DefaultCastAs(LogicalType::BOOLEAN));
 		} else if (option_name == "bloom_filter_false_positive_ratio") {
 			auto val = option_values[0].GetValue<double>();
 			if (!(val > 0 && val <= 1)) {
@@ -414,15 +408,8 @@ static unique_ptr<GlobalFunctionData> ParquetWriteInitializeGlobal(ClientContext
 	options.encryption_config = parquet_bind.encryption_config;
 	options.dictionary_size_limit = parquet_bind.dictionary_size_limit,
 	options.string_dictionary_page_size_limit = parquet_bind.string_dictionary_page_size_limit;
-	// pages are what the page index lets readers skip: with the index, pages follow the 1 MiB default of the other
-	// writers; without it the whole column chunk stays one page, as before
-	options.data_page_size_limit =
-	    parquet_bind.data_page_size_limit != 0
-	        ? parquet_bind.data_page_size_limit
-	        : (parquet_bind.write_page_index ? PrimitiveColumnWriter::DEFAULT_DATA_PAGE_SIZE_LIMIT
-	                                         : PrimitiveColumnWriter::MAX_UNCOMPRESSED_PAGE_SIZE);
+	options.data_page_size_limit = parquet_bind.data_page_size_limit;
 	options.enable_bloom_filters = parquet_bind.enable_bloom_filters,
-	options.write_page_index = parquet_bind.write_page_index;
 	options.bloom_filter_false_positive_ratio = parquet_bind.bloom_filter_false_positive_ratio;
 	options.compression_level = parquet_bind.compression_level;
 	options.parquet_version = parquet_bind.parquet_version,
@@ -432,8 +419,7 @@ static unique_ptr<GlobalFunctionData> ParquetWriteInitializeGlobal(ClientContext
 	options.not_null_columns = parquet_bind.not_null_columns;
 
 	auto flags = FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW;
-	// checking a remote path costs a request, so a remote output is opened like one that may exist
-	if (!fs.IsRemoteFile(file_path) && !fs.FileExists(file_path) && !fs.IsPipe(file_path)) {
+	if (!fs.FileExists(file_path) && !fs.IsPipe(file_path)) {
 		flags |= FileFlags::FILE_FLAGS_EXCLUSIVE_CREATE;
 	}
 	options.open_flags = flags;
@@ -826,8 +812,6 @@ static void ParquetCopySerialize(Serializer &serializer, const FunctionData &bin
 	                                                  default_value.not_null_columns);
 	serializer.WritePropertyWithDefault(121, "data_page_size_limit", bind_data.data_page_size_limit,
 	                                    default_value.data_page_size_limit);
-	serializer.WritePropertyWithDefault(122, "write_page_index", bind_data.write_page_index,
-	                                    default_value.write_page_index);
 }
 
 static unique_ptr<FunctionData> ParquetCopyDeserialize(Deserializer &deserializer, CopyFunction &function) {
@@ -870,8 +854,6 @@ static unique_ptr<FunctionData> ParquetCopyDeserialize(Deserializer &deserialize
 	    deserializer.ReadPropertyWithExplicitDefault<vector<bool>>(120, "not_null_columns", vector<bool>());
 	data->data_page_size_limit =
 	    deserializer.ReadPropertyWithExplicitDefault(121, "data_page_size_limit", default_value.data_page_size_limit);
-	data->write_page_index =
-	    deserializer.ReadPropertyWithExplicitDefault(122, "write_page_index", default_value.write_page_index);
 
 	return std::move(data);
 }
@@ -1103,12 +1085,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	ParquetFullMetadataFunction full_meta_fun;
 	loader.RegisterFunction(MultiFileReader::CreateFunctionSet(full_meta_fun));
 
-	// parquet_page_index
-	ParquetPageIndexFunction page_index_fun;
-	loader.RegisterFunction(MultiFileReader::CreateFunctionSet(page_index_fun));
-
 	// variant_to_parquet_variant
-	loader.RegisterType("PARQUET_VARIANT", VariantColumnWriter::GetParquetVariantType());
 	loader.RegisterFunction(VariantColumnWriter::GetTransformFunction());
 
 	// bytes_to_variant
@@ -1153,10 +1130,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	config.replacement_scans.emplace_back(ParquetScanReplacement);
 	config.AddExtensionOption("binary_as_string", "In Parquet files, interpret binary data as a string.",
 	                          LogicalType::BOOLEAN, Value(false));
-	config.AddExtensionOption("parquet_can_have_nan",
-	                          "In Parquet files without a nan_count, assume FLOAT/DOUBLE columns can hold NaN outside "
-	                          "their min/max. The default for the can_have_nan option of Parquet scans.",
-	                          LogicalType::BOOLEAN, Value(false));
 	config.AddExtensionOption("disable_parquet_prefetching", "Disable the prefetching mechanism in Parquet",
 	                          LogicalType::BOOLEAN, Value(false));
 	config.AddExtensionOption("prefetch_all_parquet_files",
@@ -1169,10 +1142,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	config.AddExtensionOption("parquet_metadata_cache",
 	                          "Cache Parquet metadata - useful when reading the same files multiple times",
 	                          LogicalType::BOOLEAN, Value(false));
-	config.AddExtensionOption("parquet_use_page_index",
-	                          "Use the page index (ColumnIndex and OffsetIndex) of Parquet files to skip the pages "
-	                          "that cannot contain rows matching the filters",
-	                          LogicalType::BOOLEAN, Value::BOOLEAN(true));
 	config.AddExtensionOption(
 	    "enable_geoparquet_conversion",
 	    "Attempt to decode/encode geometry data in/as GeoParquet files if the spatial extension is present.",

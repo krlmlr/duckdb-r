@@ -109,14 +109,14 @@ void BaseAppender::AppendDecimalValueInternal(Vector &col, SRC input) {
 		return;
 	}
 	default:
-		InternalException::Throw("Type not implemented for AppenderType");
+		throw InternalException("Type not implemented for AppenderType");
 	}
 }
 
 template <class T>
 void BaseAppender::AppendValueInternal(T input) {
 	if (column >= GetActiveTypes().size()) {
-		InvalidInputException::Throw("Too many appends for chunk!");
+		throw InvalidInputException("Too many appends for chunk!");
 	}
 	auto &col = chunk.data[column];
 	switch (col.GetType().id()) {
@@ -174,7 +174,7 @@ void BaseAppender::AppendValueInternal(T input) {
 			AppendDecimalValueInternal<T, hugeint_t>(col, input);
 			break;
 		default:
-			InternalException::Throw("Internal type not recognized for Decimal");
+			throw InternalException("Internal type not recognized for Decimal");
 		}
 		break;
 	case LogicalTypeId::DATE:
@@ -309,14 +309,14 @@ void BaseAppender::Append(interval_t value) {
 template <>
 void BaseAppender::Append(Value value) { // NOLINT: template stuff
 	if (column >= chunk.ColumnCount()) {
-		InvalidInputException::Throw("Too many appends for chunk!");
+		throw InvalidInputException("Too many appends for chunk!");
 	}
 	AppendValue(value);
 }
 
 void duckdb::BaseAppender::Append(DataChunk &target, const Value &value, idx_t col, idx_t row) {
 	if (col >= target.ColumnCount()) {
-		InvalidInputException::Throw("Too many appends for chunk!");
+		throw InvalidInputException("Too many appends for chunk!");
 	}
 	if (value.type() == target.GetTypes()[col]) {
 		target.data[col].SetValue(row, value);
@@ -335,7 +335,7 @@ void duckdb::BaseAppender::Append(DataChunk &target, const Value &value, idx_t c
 template <>
 void BaseAppender::Append(std::nullptr_t value) {
 	if (column >= chunk.ColumnCount()) {
-		InvalidInputException::Throw("Too many appends for chunk!");
+		throw InvalidInputException("Too many appends for chunk!");
 	}
 	auto &col = chunk.data[column++];
 	FlatVector::SetNull(col, chunk.size(), true);
@@ -368,8 +368,7 @@ void BaseAppender::AppendDataChunk(DataChunk &chunk_p) {
 	// We try to cast the chunk.
 	auto size = chunk_p.size();
 	DataChunk cast_chunk;
-	// Chunks converted from Arrow can hold more than STANDARD_VECTOR_SIZE rows
-	cast_chunk.Initialize(allocator, appender_types, MaxValue<idx_t>(size, STANDARD_VECTOR_SIZE));
+	cast_chunk.Initialize(allocator, appender_types);
 	cast_chunk.SetChildCardinality(size);
 
 	for (idx_t i = 0; i < count; i++) {
@@ -652,7 +651,7 @@ Value Appender::GetDefaultValue(idx_t column) {
 	if (it == default_values.end()) {
 		auto &name = description->columns[index].Name();
 		throw NotImplementedException(
-		    "AppendDefault is not supported for column %s: not a foldable default expressions.", name);
+		    "AppendDefault is not supported for column \"%s\": not a foldable default expressions.", name);
 	}
 	return it->second;
 }

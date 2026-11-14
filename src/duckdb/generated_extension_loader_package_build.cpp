@@ -37,7 +37,7 @@ int32_t duckdb_extension_parquet_describe(duckdb_extension_descriptor *descripto
 	descriptor->version = 1;
 	descriptor->name = "parquet";
 	descriptor->extension_version = EXT_VERSION_PARQUET;
-	descriptor->api_version = "cb56736851";
+	descriptor->api_version = "d4355d01c5";
 	descriptor->entry_cpp = (void (*)(void))parquet_duckdb_cpp_init;
 	return 0;
 }
@@ -70,7 +70,7 @@ int32_t duckdb_extension_core_functions_describe(duckdb_extension_descriptor *de
 	descriptor->version = 1;
 	descriptor->name = "core_functions";
 	descriptor->extension_version = EXT_VERSION_CORE_FUNCTIONS;
-	descriptor->api_version = "cb56736851";
+	descriptor->api_version = "d4355d01c5";
 	descriptor->entry_cpp = (void (*)(void))core_functions_duckdb_cpp_init;
 	return 0;
 }
@@ -81,7 +81,7 @@ int32_t duckdb_extension_core_functions_describe(duckdb_extension_descriptor *de
 #endif
 
 #ifndef DUCKDB_STATIC_EXTENSION_LOADER_API
-#if !defined(_WIN32) && (defined(__GNUC__) || defined(__clang__))
+#if defined(__GNUC__) || defined(__clang__)
 #define DUCKDB_STATIC_EXTENSION_LOADER_API __attribute__((visibility("hidden")))
 #else
 #define DUCKDB_STATIC_EXTENSION_LOADER_API

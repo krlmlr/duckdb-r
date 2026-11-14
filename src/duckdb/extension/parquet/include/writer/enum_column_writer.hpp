@@ -32,7 +32,6 @@ public:
 	EnumColumnWriter(ParquetWriter &writer, ParquetColumnSchema &&column_schema, vector<Identifier> schema_path_p);
 	~EnumColumnWriter() override = default;
 
-	unique_ptr<ColumnWriterState> InitializeWriteState(duckdb_parquet::RowGroup &row_group) override;
 	unique_ptr<ColumnWriterStatistics> InitializeStatsState() override;
 
 	void WriteVector(WriteStream &temp_writer, ColumnWriterStatistics *stats_p, ColumnWriterPageState *page_state_p,
@@ -58,6 +57,8 @@ private:
 	                       EnumWriterPageState &page_state);
 
 	uint32_t bit_width;
+	//! Tracks which enum values have actually been written.
+	vector<bool> seen_enum;
 };
 
 } // namespace duckdb

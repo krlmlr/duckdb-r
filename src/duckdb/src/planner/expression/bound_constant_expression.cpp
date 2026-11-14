@@ -32,17 +32,8 @@ string BoundConstantExpression::ToString() const {
 
 //! Two constants are the same expression if their values have the same representation. VARIANT values compare by
 //! meaning - 1::TINYINT and 1::INTEGER are equal - but as constants they are different: variant_typeof tells them
-//! apart, and they hash differently. Vectors compare a VARIANT as the STRUCT it is stored as. INTERVALs that are
-//! only not distinct after normalization (e.g. INTERVAL 1 MONTH vs INTERVAL 30 DAY) can have different effects in
-//! expressions - DATE '2008-05-17' + INTERVAL 1 MONTH is 2008-06-17, but + INTERVAL 30 DAY is 2008-06-16 - so
-//! they compare by their raw (months, days, micros) fields, not by normalized equality.
+//! apart, and they hash differently. Vectors compare a VARIANT as the STRUCT it is stored as.
 static bool SameRepresentation(const Value &left, const Value &right) {
-	if (left.type().id() == LogicalTypeId::INTERVAL) {
-		if (left.IsNull() || right.IsNull()) {
-			return left.IsNull() == right.IsNull();
-		}
-		return left.GetValueUnsafe<interval_t>().SameFields(right.GetValueUnsafe<interval_t>());
-	}
 	if (!TypeVisitor::Contains(left.type(), LogicalTypeId::VARIANT)) {
 		return !ValueOperations::DistinctFrom(left, right);
 	}
@@ -56,21 +47,11 @@ bool BoundConstantExpression::Equals(const BaseExpression &other_p) const {
 		return false;
 	}
 	auto &other = other_p.Cast<BoundConstantExpression>();
-	if (value.type() != other.value.type()) {
-		return false;
-	}
-	return SameRepresentation(value, other.value);
+	return value.type() == other.value.type() && SameRepresentation(value, other.value);
 }
 
 hash_t BoundConstantExpression::Hash() const {
 	hash_t result = Expression::Hash();
-	if (value.type().id() == LogicalTypeId::INTERVAL && !value.IsNull()) {
-		// Hash by the raw (months, days, micros) fields: Value::Hash normalizes first, which would put intervals
-		// that are only equal after normalization in the same bucket and make Equals the deciding factor
-		auto interval = value.GetValueUnsafe<interval_t>();
-		return CombineHash(duckdb::Hash(interval.months) ^ duckdb::Hash(interval.days) ^ duckdb::Hash(interval.micros),
-		                   result);
-	}
 	return CombineHash(value.Hash(), result);
 }
 
