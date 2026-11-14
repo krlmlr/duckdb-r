@@ -114,13 +114,25 @@ groups <- list(
   list(
     owner = "handbook/operations/vendoring/pipeline",
     globs = c(
-      "VENDORING.md", "vendor.sh", "vendor-one.sh", "rconfigure.py",
+      "VENDORING.md", "vendor.sh", "vendor-one.sh", "vendor-one-test.sh", "vendor-lib.sh", "rconfigure.py",
       "merge-version.sh", "setup-git.sh"
     )
   ),
   list(
     owner = "handbook/operations/vendoring/series-loop",
     globs = c("series-*.sh", "r-universe-*.sh")
+  ),
+  list(
+    owner = "handbook/operations/releases/versioning",
+    globs = c("preview-prefix*")
+  ),
+  list(
+    owner = "handbook/operations/releases/cran",
+    globs = c("cran-*.sh")
+  ),
+  list(
+    owner = "handbook/branches/flavors",
+    globs = c("series.yaml", "series-table.R")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/selection",
@@ -132,13 +144,17 @@ groups <- list(
   ),
   list(
     owner = "handbook/operations/ci/per-commit/legs",
-    globs = c("each-shard.sh", "rcc-one.sh")
+    globs = c("each-shard.sh", "each-follow-up.sh", "each-follow-up-test.sh", "rcc-one.sh")
+  ),
+  list(
+    owner = "handbook/operations/ci/per-commit/upstream",
+    globs = c("each-mirror.sh", "each-mirror-test.sh")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/store",
     globs = c(
       "each-harvest.sh", "rcc-consolidate.sh", "rcc-cutover.sh",
-      "rcc-lib.sh", "rcc-logs.sh", "rcc-publish.sh",
+      "rcc-drop.sh", "rcc-lib.sh", "rcc-logs.sh", "rcc-publish.sh",
       "rcc-run-fields.jq", "rcc-store-test.sh"
     )
   ),
@@ -147,23 +163,31 @@ groups <- list(
     globs = c("vendor-rfuns.sh")
   ),
   list(
+    owner = "handbook/usage/types",
+    globs = c("types-rd.R")
+  ),
+  list(
     owner = "handbook/branches/flavors",
-    globs = c("flavor*")
+    globs = c("flavor*", "reflavor*")
+  ),
+  list(
+    owner = "handbook/branches/mirrors",
+    globs = c("pull-config.sh")
   ),
   list(
     owner = "handbook/build/fast-paths",
     globs = c("install-*.sh")
   ),
   list(
-    owner = "handbook/build/configuration",
-    globs = c("setup-makeflags.R")
-  ),
-  list(
-    owner = "handbook/architecture/glue",
+    owner = "handbook/architecture/glue/conventions",
     globs = c("format.py", "python_helpers.py")
   ),
   list(
-    owner = "handbook/architecture/r-layer",
+    owner = "handbook/build/warnings",
+    globs = c("warnings.sh")
+  ),
+  list(
+    owner = "handbook/architecture/r-layer/conventions",
     globs = c("rethrow.R")
   ),
   list(
@@ -173,6 +197,10 @@ groups <- list(
   list(
     owner = "handbook/meta/handbook",
     globs = c("README.md")
+  ),
+  list(
+    owner = "handbook/meta/local",
+    globs = c("render-reprex.R")
   )
 )
 groups <- groups[order(vapply(groups, function(g) g$owner, character(1)))]
