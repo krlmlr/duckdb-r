@@ -65,7 +65,7 @@ public:
 		span = span_p;
 		shift = 0;
 
-		while ((span >> shift) >= max_bits) {
+		while (UnsafeNumericCast<idx_t>(span >> shift) >= max_bits) {
 			shift++;
 		}
 
@@ -694,6 +694,9 @@ FilterPropagateResult PrefixRangeScalarFun::FilterPrune(const FunctionStatistics
 		return FilterPropagateResult::NO_PRUNING_POSSIBLE;
 	}
 	auto &stats = *column_stats;
+	if (!stats.CanHaveNoNull()) {
+		return FilterPropagateResult::FILTER_ALWAYS_FALSE;
+	}
 	switch (stats.GetStatsType()) {
 	case StatisticsType::NUMERIC_STATS: {
 		if (!NumericStats::HasMinMax(stats)) {

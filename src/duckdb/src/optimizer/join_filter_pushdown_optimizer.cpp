@@ -12,6 +12,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
+#include "duckdb/planner/operator/logical_any_join.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
@@ -160,7 +161,8 @@ static void PushdownProjectionColumns(LogicalProjection &proj, const vector<Join
 
 void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
                                                            vector<JoinFilterPushdownColumn> columns,
-                                                           vector<PushdownFilterTarget> &targets) {
+                                                           vector<PushdownFilterTarget> &targets,
+                                                           bool cross_secure_views) {
 	auto &probe_child = op;
 	switch (probe_child.type) {
 	case LogicalOperatorType::LOGICAL_LIMIT:
@@ -173,12 +175,21 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 	case LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
 		// does not affect probe side - recurse into left child
 		// FIXME: we can probably recurse into more operators here (e.g. window, unnest)
-		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets);
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets, cross_secure_views);
 		break;
 	case LogicalOperatorType::LOGICAL_FILTER:
 	case LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
-		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets);
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets, cross_secure_views);
 		break;
+	case LogicalOperatorType::LOGICAL_ANY_JOIN: {
+		auto &join = probe_child.Cast<LogicalAnyJoin>();
+		// Only remove left rows where that cannot introduce null-extended rows or change volatile predicates.
+		if (join.join_type != JoinType::INNER || join.condition->IsVolatile()) {
+			break;
+		}
+		GetPushdownFilterTargets(*join.children[0], std::move(columns), targets, cross_secure_views);
+		break;
+	}
 	case LogicalOperatorType::LOGICAL_UNNEST: {
 		auto &unnest = probe_child.Cast<LogicalUnnest>();
 		// check if the filters apply to the unnest index
@@ -188,7 +199,7 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 				return;
 			}
 		}
-		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets);
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets, cross_secure_views);
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_EXCEPT:
@@ -215,7 +226,7 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 				continue;
 			}
 			// then recurse into the child
-			GetPushdownFilterTargets(*child, std::move(child_columns), targets);
+			GetPushdownFilterTargets(*child, std::move(child_columns), targets, cross_secure_views);
 
 			// for EXCEPT we can only recurse into the first (left) child
 			if (probe_child.type == LogicalOperatorType::LOGICAL_EXCEPT) {
@@ -233,10 +244,17 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 		}
 		get.ResolveOperatorTypes();
 		const auto bindings = get.GetColumnBindings();
+		vector<JoinFilterPushdownColumn> accepted_columns;
 		for (auto &filter : columns) {
 			if (filter.probe_column_index.table_index != get.table_index) {
 				// the filter does not apply to the probe side here - bail-out
 				return;
+			}
+			if (get.function.supports_pushdown_type) {
+				auto column_id = get.GetColumnIndex(filter.probe_column_index).GetPrimaryIndex();
+				if (!get.function.supports_pushdown_type(*get.bind_data, column_id)) {
+					continue;
+				}
 			}
 			// add storage type to columns
 			for (idx_t i = 0; i < bindings.size(); i++) {
@@ -254,8 +272,12 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 			    reconstructed_type.id() == LogicalTypeId::VARIANT) {
 				return;
 			}
+			accepted_columns.push_back(std::move(filter));
 		}
-		targets.emplace_back(get, std::move(columns));
+		if (accepted_columns.empty()) {
+			return;
+		}
+		targets.emplace_back(get, std::move(accepted_columns));
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_PROJECTION: {
@@ -266,7 +288,7 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 		if (projected_columns.empty()) {
 			return;
 		}
-		GetPushdownFilterTargets(*probe_child.children[0], std::move(projected_columns), targets);
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(projected_columns), targets, cross_secure_views);
 		break;
 	}
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
@@ -283,9 +305,18 @@ void JoinFilterPushdownOptimizer::GetPushdownFilterTargets(LogicalOperator &op,
 				return;
 			}
 		}
-		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets);
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets, cross_secure_views);
 		break;
 	}
+	case LogicalOperatorType::LOGICAL_SECURE_VIEW:
+		if (!cross_secure_views) {
+			break;
+		}
+		// a join filter enters the view as a pushed WHERE filter would, and needs no barrier: it cannot fail, as a cast
+		// that can fail is a TRY_CAST that keeps the rows it cannot convert for the join
+		// (PreserveRuntimeFilterCastErrors)
+		GetPushdownFilterTargets(*probe_child.children[0], std::move(columns), targets, cross_secure_views);
+		break;
 	default:
 		// unsupported child type
 		break;
@@ -357,7 +388,7 @@ void JoinFilterPushdownOptimizer::GenerateJoinFilters(LogicalComparisonJoin &joi
 	}
 	// recurse the query tree to find the LogicalGets in which we can push the filter info
 	vector<PushdownFilterTarget> pushdown_filter_targets;
-	GetPushdownFilterTargets(*join.children[0], pushdown_columns, pushdown_filter_targets);
+	GetPushdownFilterTargets(*join.children[0], pushdown_columns, pushdown_filter_targets, true);
 	for (auto &target : pushdown_filter_targets) {
 		auto &get = target.get;
 		// pushdown info can be applied to this LogicalGet - push the dynamic table filter set

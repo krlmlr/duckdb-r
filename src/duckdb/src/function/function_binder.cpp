@@ -470,6 +470,10 @@ static LogicalTypeComparisonResult RequiresCast(const LogicalType &source_type, 
 		return RequiresCast(ListType::GetChildType(source_type), ListType::GetChildType(target_type));
 	}
 	if (source_type.id() == LogicalTypeId::ARRAY && target_type.id() == LogicalTypeId::ARRAY) {
+		auto target_size = ArrayType::GetSize(target_type);
+		if (target_size != 0 && target_size != ArrayType::GetSize(source_type)) {
+			return LogicalTypeComparisonResult::DIFFERENT_TYPES;
+		}
 		return RequiresCast(ArrayType::GetChildType(source_type), ArrayType::GetChildType(target_type));
 	}
 	return LogicalTypeComparisonResult::DIFFERENT_TYPES;
@@ -770,6 +774,10 @@ void FunctionBinder::CastToFunctionArguments(BoundSimpleFunction &function, vect
 			    "Function %s returned a STRING_LITERAL or INTEGER_LITERAL type - return an explicit type instead",
 			    function.GetName());
 		}
+		if (children[i]->GetReturnType().id() == LogicalTypeId::UNKNOWN && !target_type.IsComplete()) {
+			// an unresolved parameter cannot take an incomplete type, the statement is bound again at EXECUTE
+			throw ParameterNotResolvedException();
+		}
 		target_type.Verify();
 		// don't cast lambda children, their slot only ever holds a placeholder
 		if (children[i]->GetReturnType().id() == LogicalTypeId::LAMBDA) {
@@ -787,13 +795,13 @@ void FunctionBinder::CastToFunctionArguments(BoundSimpleFunction &function, vect
 		// except for one special case: if the function accepts ANY argument
 		// in that case we don't add a cast
 		if (cast_result == LogicalTypeComparisonResult::DIFFERENT_TYPES) {
-			if (target_has_any && children[i]->GetReturnType().id() != LogicalTypeId::UNKNOWN) {
+			if (target_has_any) {
 				// a type that is not concrete cannot be cast to (e.g. a NULL or a VARIANT passed to LIST(ANY)) - the
-				// function has to handle the argument as-is. Unresolved parameters are still assigned the type.
+				// function has to handle the argument as-is
 				continue;
 			}
 			if (IsIncompleteCastTarget(target_type)) {
-				throw InternalException("Function '%s' has incomplete argument type %s - concrete argument types must "
+				throw InternalException("Function %s has incomplete argument type %s - concrete argument types must "
 				                        "be resolved in the resolve_types callback",
 				                        function.GetName(), target_type);
 			}
@@ -853,13 +861,17 @@ static bool HasUntypedNullArgument(const vector<unique_ptr<Expression>> &regular
 //! Evaluates a constant argument and returns true if it is NULL. A non-NULL result replaces the argument with a
 //! constant: the argument has been evaluated anyway, and keeping the result means that it is not evaluated again by
 //! every enclosing function call - which made binding nested constant expressions quadratic in their depth.
-static bool FoldConstantArgument(ClientContext &context, unique_ptr<Expression> &child) {
+static bool FoldConstantArgument(ClientContext &context, unique_ptr<Expression> &child, optional_ptr<Binder> binder) {
 	if (child->GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
 		return child->Cast<BoundConstantExpression>().GetValue().IsNull();
 	}
 	// a lambda has no value of its own, the function it is passed to executes its body
 	if (child->GetExpressionClass() == ExpressionClass::BOUND_LAMBDA || !child->IsFoldable()) {
 		return false;
+	}
+	if (binder && child->RequiresRebind()) {
+		// the constant no longer shows that its value can change across queries
+		binder->SetAlwaysRequireRebind();
 	}
 	Value result;
 	if (!ExpressionExecutor::TryEvaluateScalar(context, *child, result)) {
@@ -879,14 +891,15 @@ static bool FoldConstantArgument(ClientContext &context, unique_ptr<Expression> 
 //! Returns true if any argument is a constant expression that evaluates to NULL. Arguments that evaluate to a non-NULL
 //! value are folded to constants along the way.
 static bool HasNullConstantArgument(ClientContext &context, vector<unique_ptr<Expression>> &regular_args,
-                                    vector<pair<Identifier, unique_ptr<Expression>>> &keyword_args) {
+                                    vector<pair<Identifier, unique_ptr<Expression>>> &keyword_args,
+                                    optional_ptr<Binder> binder) {
 	for (auto &child : regular_args) {
-		if (FoldConstantArgument(context, child)) {
+		if (FoldConstantArgument(context, child, binder)) {
 			return true;
 		}
 	}
 	for (auto &child : keyword_args) {
-		if (FoldConstantArgument(context, child.second)) {
+		if (FoldConstantArgument(context, child.second, binder)) {
 			return true;
 		}
 	}
@@ -927,7 +940,7 @@ unique_ptr<Expression> FunctionBinder::BindScalarFunction(const ScalarFunctionCa
 		if (HasUntypedNullArgument(regular_args, keyword_args)) {
 			return make_uniq<BoundConstantExpression>(Value(NullReturnType(return_type)));
 		}
-		if (HasNullConstantArgument(context, regular_args, keyword_args)) {
+		if (HasNullConstantArgument(context, regular_args, keyword_args, binder)) {
 			if (return_type.IsComplete()) {
 				BoundScalarFunction null_function(std::move(selected_function));
 				for (auto &child : keyword_args) {
@@ -1083,7 +1096,7 @@ static string ExtractCollation(const vector<unique_ptr<Expression>> &children) {
 
 //! Pushes the collations of the arguments into the children, returns the collation to propagate to the return type
 static string PushCollations(ClientContext &context, BoundSimpleFunction &bound_function,
-                             vector<unique_ptr<Expression>> &children, CollationType type) {
+                             vector<unique_ptr<Expression>> &children, CollationType type, bool is_index_key) {
 	FunctionCollations collations;
 	auto &argument_types = bound_function.GetArguments();
 	for (idx_t i = 0; i < children.size(); i++) {
@@ -1091,8 +1104,8 @@ static string PushCollations(ClientContext &context, BoundSimpleFunction &bound_
 		auto &target_type = argument_types[i].IsComplete() ? argument_types[i] : source_type;
 		ExtractCollationFromType(source_type, target_type, collations);
 	}
-	if (collations.collation.empty() && collations.fields.empty()) {
-		// no collation to push
+	if (is_index_key && collations.collation.empty() && collations.fields.empty()) {
+		// index keys only use explicit collations, comparison keys and the default collation would change them
 		return string();
 	}
 	// push collations to the children
@@ -1118,13 +1131,16 @@ static string PushCollations(ClientContext &context, BoundSimpleFunction &bound_
 
 //! Pushes collations into the children (if required), returns the collation to propagate to the return type
 static string PushArgumentCollations(ClientContext &context, BoundSimpleFunction &bound_function,
-                                     const FunctionProperties &props, vector<unique_ptr<Expression>> &children) {
+                                     const FunctionProperties &props, vector<unique_ptr<Expression>> &children,
+                                     bool is_index_key) {
 	switch (props.GetCollationHandling()) {
 	case FunctionCollationHandling::IGNORE_COLLATIONS:
 	case FunctionCollationHandling::PROPAGATE_COLLATIONS:
 		return string();
 	case FunctionCollationHandling::PUSH_COMBINABLE_COLLATIONS:
-		return PushCollations(context, bound_function, children, CollationType::COMBINABLE_COLLATIONS);
+		return PushCollations(context, bound_function, children, CollationType::COMBINABLE_COLLATIONS, is_index_key);
+	case FunctionCollationHandling::PUSH_DISTINCT_COLLATIONS:
+		throw InternalException("PUSH_DISTINCT_COLLATIONS is only supported for aggregate functions");
 	default:
 		throw InternalException("Unrecognized collation handling");
 	}
@@ -1328,7 +1344,7 @@ static void VerifyTemplateType(const LogicalType &type, const Identifier &functi
 	TypeVisitor::Contains(type, [&](const LogicalType &type) {
 		if (type.id() == LogicalTypeId::TEMPLATE) {
 			const auto msg =
-			    "Function '%s' has a template parameter type '%s' that could not be resolved to a concrete type";
+			    "Function %s has a template parameter type '%s' that could not be resolved to a concrete type";
 			throw BinderException(msg, function_name, TemplateType::GetName(type));
 		}
 		return false; // continue visiting
@@ -1371,13 +1387,13 @@ static vector<Identifier> ResolveArguments(const SimpleFunction &function, Bound
 		if (name.empty()) {
 			// Somehow this was not a named argument, throw an error.
 			throw BinderException(location,
-			                      "Positional arguments cannot follow named arguments in a function call to '%s'",
+			                      "Positional arguments cannot follow named arguments in a function call to %s",
 			                      function.GetName());
 		}
 
 		if (seen_names.count(name)) {
 			// This should also not really happen when invoked through SQL
-			throw BinderException(location, "Duplicate named argument %s in function call to '%s'", name,
+			throw BinderException(location, "Duplicate named argument %s in function call to %s", name,
 			                      function.GetName());
 		}
 		seen_names.insert(name);
@@ -1385,8 +1401,8 @@ static vector<Identifier> ResolveArguments(const SimpleFunction &function, Bound
 		const auto opt_param_idx = sig.GetParameterIndexByName(name);
 		if (!opt_param_idx.IsValid()) {
 			if (!kwargs_param) {
-				throw BinderException(location, "Function '%s' does not have a parameter named '%s'",
-				                      function.GetName(), name);
+				throw BinderException(location, "Function %s does not have a parameter named %s", function.GetName(),
+				                      name);
 			}
 			kwargs.emplace_back(name, std::move(arg));
 			continue;
@@ -1395,8 +1411,8 @@ static vector<Identifier> ResolveArguments(const SimpleFunction &function, Bound
 		const auto param_idx = opt_param_idx.GetIndex();
 		if (sig.GetParameter(param_idx).AcceptsPosition() && param_idx < passed_count) {
 			throw BinderException(location,
-			                      "Named argument '%s' cannot be used for parameter '%s' because it has already "
-			                      "been provided as a positional argument in function call to '%s'",
+			                      "Named argument '%s' cannot be used for parameter %s because it has already "
+			                      "been provided as a positional argument in function call to %s",
 			                      arg->ToString(), name, function.GetName());
 		}
 		keyword_arguments[param_idx] = std::move(arg);
@@ -1468,7 +1484,7 @@ static vector<Identifier> ResolveArguments(const SimpleFunction &function, Bound
 // The names of the named arguments have to stay parallel to the last arguments
 static void VerifyArgumentCount(const BoundSimpleFunction &bound_function, idx_t resolved_count, idx_t argument_count) {
 	if (resolved_count != argument_count && !bound_function.GetNamedArguments().empty()) {
-		throw InternalException("Function '%s' cannot add or remove arguments in its bind callback when it is "
+		throw InternalException("Function %s cannot add or remove arguments in its bind callback when it is "
 		                        "called with keyword-only or '**kwargs' arguments",
 		                        bound_function.GetName());
 	}
@@ -1479,7 +1495,7 @@ static void VerifyBindArgumentTypes(const BoundScalarFunction &bound_function,
                                     const vector<unique_ptr<Expression>> &arguments) {
 	auto &argument_types = bound_function.GetArguments();
 	if (arguments.size() > argument_types.size()) {
-		throw InternalException("Function '%s' added arguments in its bind callback - argument types must be "
+		throw InternalException("Function %s added arguments in its bind callback - argument types must be "
 		                        "resolved in the resolve_types callback",
 		                        bound_function.GetName());
 	}
@@ -1494,7 +1510,7 @@ static void VerifyBindArgumentTypes(const BoundScalarFunction &bound_function,
 			continue;
 		}
 		if (RequiresCast(source_type, target_type) == LogicalTypeComparisonResult::DIFFERENT_TYPES) {
-			throw InternalException("Function '%s' changed the type of argument %llu from %s to %s in its bind "
+			throw InternalException("Function %s changed the type of argument %llu from %s to %s in its bind "
 			                        "callback - argument types must be resolved in the resolve_types callback",
 			                        bound_function.GetName(), i + 1, source_type, target_type);
 		}
@@ -1556,8 +1572,9 @@ FunctionBinder::ResolveScalarFunctionTypes(shared_ptr<const ScalarFunction> func
 	for (auto &argument_type : bound_function.GetArguments()) {
 		VerifyTemplateType(argument_type, bound_function.GetName());
 	}
+	const bool is_index_key = arguments_collated || (binder && binder->IsBindingIndexKey());
 	result.pushed_collation =
-	    PushArgumentCollations(context, bound_function, bound_function.GetProperties(), arguments);
+	    PushArgumentCollations(context, bound_function, bound_function.GetProperties(), arguments, is_index_key);
 	CastToFunctionArguments(bound_function, arguments);
 	return result;
 }
@@ -1571,6 +1588,15 @@ FunctionBinder::ResolveFunction(shared_ptr<const ScalarFunction> function_p, vec
 
 	// The bind callback is called with arguments that are cast to the argument types of the bound function
 	unique_ptr<FunctionData> bind_info;
+	if (binder && (bound_function.HasBindCallback() || bound_function.HasBindExpressionCallback())) {
+		// the callbacks can evaluate constant arguments and drop them, which hides casts that read settings
+		for (auto &argument : arguments) {
+			if (argument->IsFoldable() && argument->RequiresRebind()) {
+				binder->SetAlwaysRequireRebind();
+				break;
+			}
+		}
+	}
 	if (bound_function.HasBindCallback()) {
 		BindScalarFunctionInput input(context, bound_function, arguments, argument_names, binder);
 		bind_info = bound_function.GetBindCallback()(input);
@@ -1622,6 +1648,10 @@ unique_ptr<Expression> FunctionBinder::BindScalarFunction(shared_ptr<const Scala
 	auto result_func = make_uniq<BoundFunctionExpression>(std::move(bound_function), std::move(children),
 	                                                      std::move(bind_info), is_operator);
 
+	if (binder && result_func->Function().GetStability() == FunctionStability::CONSISTENT_WITHIN_QUERY) {
+		// the result depends on the query it is bound in, also when the bind_expression callback folds it
+		binder->SetAlwaysRequireRebind();
+	}
 	if (result_func->Function().HasBindExpressionCallback()) {
 		// if a bind_expression callback is registered - call it and emit the resulting expression
 		FunctionBindExpressionInput input(context, result_func->FunctionMutable(), result_func->BindInfoMutable().get(),
@@ -1698,6 +1728,15 @@ FunctionBinder::BindAggregateFunction(shared_ptr<const AggregateFunction> functi
                                       vector<unique_ptr<Expression>> children,
                                       vector<pair<Identifier, unique_ptr<Expression>>> keyword_args,
                                       unique_ptr<Expression> filter, AggregateType aggr_type) {
+	if (aggr_type == AggregateType::DISTINCT &&
+	    function->GetCollationHandling() == FunctionCollationHandling::PUSH_DISTINCT_COLLATIONS) {
+		for (auto &child : children) {
+			ExpressionBinder::PushCollation(context, child, child->GetReturnType());
+		}
+		for (auto &argument : keyword_args) {
+			ExpressionBinder::PushCollation(context, argument.second, argument.second->GetReturnType());
+		}
+	}
 	auto [bound_function, bind_info] = ResolveFunction(std::move(function), children, keyword_args);
 
 	return make_uniq<BoundAggregateExpression>(std::move(bound_function), std::move(children), std::move(filter),
