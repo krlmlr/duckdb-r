@@ -60,7 +60,7 @@ Path Path::FromString(const string &raw) {
 		path_offset = ParseFileSchemes(raw, parsed);
 	}
 #if defined(_WIN32)
-	else if (raw.size() >= 5 && StartsWithAnySeparator(raw, R"(\\)") && raw.find_first_of(R"(/\)", 3) != string::npos) {
+	else if (raw.size() >= 5 && StringUtil::StartsWith(raw, R"(\\)") && raw.find_first_of('\\', 3) != string::npos) {
 		path_offset = ParseUNCScheme(raw, parsed);
 	}
 #endif
@@ -317,20 +317,6 @@ size_t Path::ParseFileSchemes(const string &input, Path &parsed) {
 }
 
 #if defined(_WIN32)
-// Windows accepts either separator in a UNC prefix: "\\server\share", "//server/share" and "\\?\UNC\" alike
-bool Path::StartsWithAnySeparator(const string &input, const string &prefix) {
-	if (input.size() < prefix.size()) {
-		return false;
-	}
-	for (size_t i = 0; i < prefix.size(); i++) {
-		const bool match = IsPathSeparator(prefix[i]) ? IsPathSeparator(input[i]) : input[i] == prefix[i];
-		if (!match) {
-			return false;
-		}
-	}
-	return true;
-}
-
 //
 // UNC Scheme as we handle it:
 // - scheme = "\\"
@@ -339,12 +325,12 @@ bool Path::StartsWithAnySeparator(const string &input, const string &prefix) {
 // - path = < the rest >
 //
 size_t Path::ParseUNCScheme(const string &input, Path &parsed) {
-	D_ASSERT(input.size() >= 4 && IsPathSeparator(input[0]) && IsPathSeparator(input[1]));
+	D_ASSERT(input.size() >= 4 && input[0] == '\\' && input[1] == '\\');
 
 	static const char extended_prefix[] = R"(\\?\)";
 	static const char extended_unc_prefix[] = R"(\\?\UNC\)";
-	const bool extended = StartsWithAnySeparator(input, extended_prefix);
-	const bool extended_unc = extended && StartsWithAnySeparator(input, extended_unc_prefix);
+	const bool extended = StringUtil::StartsWith(input, extended_prefix);
+	const bool extended_unc = extended && StringUtil::StartsWith(input, extended_unc_prefix);
 
 	parsed.separator = '\\';
 
@@ -355,7 +341,7 @@ size_t Path::ParseUNCScheme(const string &input, Path &parsed) {
 	}
 
 	const auto server_begin = extended_unc ? sizeof(extended_unc_prefix) - 1 : 2;
-	const auto share_begin = input.find_first_of(R"(/\)", server_begin) + 1;
+	const auto share_begin = input.find_first_of('\\', server_begin) + 1;
 	auto pos = input.find_first_of("/\\", share_begin);
 	const auto share_len = (pos == string::npos ? input.size() : pos) - share_begin;
 	if (share_begin - server_begin <= 1 || share_len == 0) {
@@ -364,8 +350,6 @@ size_t Path::ParseUNCScheme(const string &input, Path &parsed) {
 
 	parsed.scheme = extended_unc ? extended_unc_prefix : R"(\\)";
 	parsed.authority = input.substr(server_begin, share_begin + share_len - server_begin);
-	// render "server/share" as "server\share", as when spelled with backslashes
-	parsed.authority[share_begin - 1 - server_begin] = '\\';
 	parsed.anchor = '\\';
 	parsed.is_absolute = true;
 	return (pos == string::npos || pos + 1 >= input.size()) ? input.size() : pos + 1;
