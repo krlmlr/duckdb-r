@@ -76,11 +76,14 @@
 // long-jmp past the guard would leave the counter stuck and silently degrade
 // every later error.
 //
-// The counter is shared across threads rather than thread_local. Only R's
-// evaluator enters an ALTREP method, so only the R thread ever writes it -- but
-// rapi_error_with_context() is also reached from DuckDB's data frame scan,
-// which runs in parallel (`DataFrameScanFunc`, src/scan.cpp). Relaxed atomics
-// make that read race-free at no cost. A thread_local counter would instead
+// The counter is shared across threads rather than thread_local. R's
+// evaluator enters an ALTREP method on R's thread, and an engine thread enters
+// one too when a task binds the data frame scan, which reads a converted
+// column through its class's methods (`DataFrameScanBind`, src/scan.cpp).
+// Two threads can write the counter at once, so it is updated with
+// read-modify-write operations, relaxed because it orders no other memory.
+// rapi_error_with_context() reads it from DuckDB's data frame scan too, which
+// runs in parallel (`DataFrameScanFunc`). A thread_local counter would
 // read 0 on a worker thread and send it into R from a non-R thread, which is
 // worse than what the guard prevents; sharing sends it down the throwing branch
 // instead. That is a mitigation, not a cure -- a worker that reaches the helper
@@ -89,11 +92,10 @@
 class AltrepGuard {
 public:
 	AltrepGuard() {
-		// Single writer, so load-add-store needs no read-modify-write atomic.
-		depth.store(depth.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+		depth.fetch_add(1, std::memory_order_relaxed);
 	}
 	~AltrepGuard() {
-		depth.store(depth.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
+		depth.fetch_sub(1, std::memory_order_relaxed);
 	}
 	AltrepGuard(const AltrepGuard &) = delete;
 	AltrepGuard &operator=(const AltrepGuard &) = delete;
@@ -205,8 +207,9 @@ typedef cpp11::external_pointer<ConnWrapper, ConnDeleter> conn_eptr_t;
 // progress display. R may collect garbage there and run the finalizer of any
 // duckdb object it still holds, and a prepared statement deallocates itself
 // through ClientContext::RemovePreparedStatement(), which takes that same
-// non-recursive lock. Statements freed inside such a callback are parked
-// instead, and destroyed at the next entry point that is known to hold nothing.
+// non-recursive lock. A statement a finalizer frees is parked instead, inside
+// such a callback or not, and destroyed at the next entry point that is known
+// to hold nothing; dbClearResult() destroys its statement at once.
 class RCallbackScope {
 public:
 	RCallbackScope();
@@ -217,21 +220,41 @@ public:
 
 	//! Whether a duckdb call is running R code right now
 	static bool Active();
-	//! Park a statement that cannot be destroyed where we are
-	static void Defer(duckdb::unique_ptr<PreparedStatement> stmt);
-	//! Destroy everything parked so far; a no-op while Active()
+	//! Park an object that cannot be destroyed where we are:
+	//! a statement, or a query result, which ends its query under the same lock
+	template <class T>
+	static void Defer(T object) {
+		Park(duckdb::make_uniq<Parked<T>>(std::move(object)));
+	}
+	//! Destroy everything parked so far, in the order it was parked; a no-op while Active()
 	static void Drain();
+
+	struct ParkedBase {
+		virtual ~ParkedBase() = default;
+	};
+
+private:
+	template <class T>
+	struct Parked : public ParkedBase {
+		explicit Parked(T object_p) : object(std::move(object_p)) {
+		}
+		T object;
+	};
+	static void Park(duckdb::unique_ptr<ParkedBase> object);
 };
+
+//! Whether the calling thread is R's, the only one that may run R code (handbook/architecture/glue/threading/).
+//! A task that binds a scan, and the fetch of a streaming result, can run on another thread.
+bool OnRThread();
+//! Records the calling thread as R's; called once, when R loads the package.
+void RecordRThread();
 
 struct RStatement {
 	RStatement() = delete;
-	RStatement(duckdb::unique_ptr<PreparedStatement> stmt_p, bool explain_analyze_p = false)
-	    : stmt(std::move(stmt_p)), explain_analyze(explain_analyze_p) {
+	explicit RStatement(duckdb::unique_ptr<PreparedStatement> stmt_p) : stmt(std::move(stmt_p)) {
 	}
 	~RStatement();
 	duckdb::unique_ptr<PreparedStatement> stmt;
-	//! Whether the prepared statement is an EXPLAIN ANALYZE, which needs the profiler
-	bool explain_analyze;
 	vector<Value> parameters;
 };
 
@@ -250,12 +273,47 @@ typedef cpp11::external_pointer<RelationWrapper> rel_extptr_t;
 
 typedef cpp11::external_pointer<ParsedExpression> expr_extptr_t;
 
+// A streamed result of the Arrow route holds its connection's query open, and the engine refuses any other
+// statement on that connection until it ends. A statement the glue starts ends it first, through EndOpenResults(),
+// and the result reports that it was invalidated by another statement when it is read next
+// (handbook/architecture/glue/objects/README.md).
+class ROpenResult {
+public:
+	ROpenResult() = default;
+	virtual ~ROpenResult() = default;
+	// Registered by address, so never copied or moved
+	ROpenResult(const ROpenResult &) = delete;
+	ROpenResult &operator=(const ROpenResult &) = delete;
+	//! Ends the result's query, for another statement on its connection
+	virtual void EndForAnotherStatement() = 0;
+
+	bool Invalidated() const {
+		return invalidated;
+	}
+
+protected:
+	//! Tracked for its connection's context until Untrack()
+	void Track(ClientContext *context);
+	void Untrack();
+	bool invalidated = false;
+
+private:
+	friend void EndOpenResults(ClientContext &context);
+	ClientContext *tracked_context = nullptr;
+};
+
+// Ends every open result of the Arrow route on the context, before the glue starts a statement there
+void EndOpenResults(ClientContext &context);
+
 // Pulls chunks from a query result and converts them to Arrow arrays of at most batch_size rows.
 // A result that can be drained is streamed; any other is read from its collection.
-class RArrowChunkSource {
+class RArrowChunkSource : public ROpenResult {
 public:
-	explicit RArrowChunkSource(duckdb::unique_ptr<QueryResult> result);
+	explicit RArrowChunkSource(duckdb::unique_ptr<QueryResult> result, bool invalidated = false);
 	explicit RArrowChunkSource(QueryResult &result);
+	~RArrowChunkSource() override;
+
+	void EndForAnotherStatement() override;
 
 public:
 	// The number of rows written to out, 0 at the end. Throws on an execution error
@@ -268,6 +326,7 @@ public:
 private:
 	void Initialize();
 	bool LoadNextChunk();
+	void Fail(ErrorData error);
 
 private:
 	duckdb::unique_ptr<QueryResult> owned_result;
@@ -280,11 +339,13 @@ private:
 	duckdb::unique_ptr<DataChunk> current_chunk;
 	idx_t offset = 0;
 	bool finished = false;
+	//! The error of a read that failed, reported again by every later read
+	ErrorData error;
 };
 
 // An Arrow C stream over a query result, converting on the consumer thread
 struct RResultArrowStream {
-	RResultArrowStream(duckdb::unique_ptr<QueryResult> result, idx_t batch_size);
+	RResultArrowStream(duckdb::unique_ptr<QueryResult> result, idx_t batch_size, bool invalidated = false);
 
 	ArrowArrayStream stream;
 	RArrowChunkSource source;
@@ -302,7 +363,8 @@ private:
 // invalidated by another statement on its connection as an error, where the engine reports the end of the stream
 // (handbook/usage/integrations/README.md).
 struct RArrowArrayStreamWrapper {
-	RArrowArrayStreamWrapper(duckdb::unique_ptr<QueryResult> result, idx_t batch_size);
+	RArrowArrayStreamWrapper(duckdb::shared_ptr<ClientContext> context, duckdb::unique_ptr<QueryResult> result,
+	                         idx_t batch_size, bool invalidated = false);
 
 	ArrowArrayStream stream;
 	// The engine's callbacks read the result's client context through a raw pointer,
@@ -324,14 +386,30 @@ private:
 // A query result for the Arrow route.
 // Its columns stay after the result has been read to the end or handed over,
 // for the Arrow schema and the empty batch that answer from then on (handbook/usage/integrations/README.md).
-// The client properties point to the client context,
-// which the result's prepared statement keeps alive until dbClearResult().
-struct RQueryResult {
-	explicit RQueryResult(duckdb::unique_ptr<QueryResult> result_p)
-	    : result(std::move(result_p)), types(result->GetTypes()), names(IdentifiersToStrings(result->GetNames())),
-	      client_properties(result->client_properties) {
+// The client properties point to the client context, which the result keeps alive itself,
+// taken when the statement ran: a disconnect frees the connection's context,
+// and the prepared statement only holds a weak reference to it.
+struct RQueryResult : public ROpenResult {
+	// A streamed result holds its connection's query open from here on, so it is tracked until it is handed on
+	RQueryResult(duckdb::shared_ptr<ClientContext> context_p, duckdb::unique_ptr<QueryResult> result_p, bool streamed)
+	    : context(std::move(context_p)), result(std::move(result_p)), types(result->GetTypes()),
+	      names(IdentifiersToStrings(result->GetNames())), client_properties(result->client_properties) {
+		if (streamed && context) {
+			Track(context.get());
+		}
 	}
 
+	~RQueryResult() override;
+
+	void EndForAnotherStatement() override;
+	//! Hands the result on, to a stream that tracks it from then on
+	duckdb::unique_ptr<QueryResult> TakeResult() {
+		Untrack();
+		return std::move(result);
+	}
+
+	// Declared first, so the context outlives everything that reads it.
+	duckdb::shared_ptr<ClientContext> context;
 	duckdb::unique_ptr<QueryResult> result;
 	duckdb::unique_ptr<RArrowArrayStreamWrapper> stream_wrapper;
 	vector<LogicalType> types;

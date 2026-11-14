@@ -1,4 +1,5 @@
 #include "cpp11/environment.hpp"
+#include "duckdb/common/enum_util.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "r_progress_bar_display.hpp"
 #include "rapi.hpp"
@@ -56,7 +57,7 @@ void RProgressBarDisplay::Initialize() {
 }
 
 // The engine builds the display when a query starts, on the thread that issues it, which is R's.
-RProgressBarDisplay::RProgressBarDisplay() : ProgressBarDisplay(), r_thread(std::this_thread::get_id()) {
+RProgressBarDisplay::RProgressBarDisplay() : ProgressBarDisplay() {
 	ReleaseOrphanedCallbacks();
 	Initialize();
 }
@@ -71,10 +72,6 @@ RProgressBarDisplay::~RProgressBarDisplay() {
 	}
 	std::lock_guard<std::mutex> guard(orphaned_callbacks_lock);
 	orphaned_callbacks.push_back(progress_callback);
-}
-
-bool RProgressBarDisplay::OnRThread() const {
-	return std::this_thread::get_id() == r_thread;
 }
 
 void RProgressBarDisplay::Update(double percentage) {
@@ -136,6 +133,29 @@ static void SetDefaultConfigArguments(ClientContext &context) {
 	if (conn_wrapper) {
 		delete conn_wrapper;
 	}
+}
+
+// Whether a transaction begun by BEGIN is open: a statement's own transaction,
+// and the one a streaming result holds, are not.
+[[cpp11::register]] bool rapi_connection_in_transaction(duckdb::conn_eptr_t conn) {
+	if (!conn || !conn.get() || !conn->conn) {
+		rapi_error_with_context("rapi_connection_in_transaction", "Invalid connection");
+	}
+	return !conn->conn->IsAutoCommit();
+}
+
+// Replaces the policy that decides which errors abort the open transaction,
+// and returns the one it replaced, so that the caller can put it back as it was.
+// Set directly, as BEGIN sets it, rather than through SET, which a locked
+// configuration refuses.
+[[cpp11::register]] std::string rapi_connection_set_invalidation_policy(duckdb::conn_eptr_t conn, std::string policy) {
+	if (!conn || !conn.get() || !conn->conn) {
+		rapi_error_with_context("rapi_connection_set_invalidation_policy", "Invalid connection");
+	}
+	auto &transaction = conn->conn->context->transaction;
+	auto previous = EnumUtil::ToString(transaction.GetInvalidationPolicy());
+	transaction.SetInvalidationPolicy(EnumUtil::FromString<TransactionInvalidationPolicy>(policy));
+	return previous;
 }
 
 [[cpp11::register]] bool rapi_connection_valid(duckdb::conn_eptr_t conn) {

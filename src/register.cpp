@@ -42,6 +42,7 @@ using namespace duckdb;
 		rapi_error_with_context("rapi_register_df", "Data frame with at least one column required");
 	}
 
+	EndOpenResults(*conn->conn->context);
 	ScopedInterruptHandler signal_handler(conn->conn->context);
 
 	try {
@@ -69,6 +70,7 @@ using namespace duckdb;
 		return;
 	}
 
+	EndOpenResults(*conn->conn->context);
 	ScopedInterruptHandler signal_handler(conn->conn->context);
 
 	static_cast<cpp11::sexp>(conn).attr("_registered_df_" + name) = R_NilValue;
@@ -230,11 +232,11 @@ private:
 
 	// col IN (v1, v2, ...) as a balanced tree of equality comparisons.
 	static SEXP TransformInExpression(const BoundOperatorExpression &op_expr, SEXP column_name_expr, SEXP functions) {
-		auto &op_children = op_expr.GetChildren();
-		if (op_children.empty() || op_children[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
+		if (op_expr.GetChildren().empty() ||
+		    op_expr.GetChildren()[0]->GetExpressionClass() != ExpressionClass::BOUND_REF) {
 			throw NotImplementedException("Arrow table filter pushdown %s not supported yet", op_expr.ToString());
 		}
-		const idx_t num_values = op_children.size() - 1;
+		const idx_t num_values = op_expr.GetChildren().size() - 1;
 		if (num_values == 0) {
 			// col IN () matches no rows
 			return CreateScalar(functions, cpp11::sexp(Rf_ScalarLogical(false)));
@@ -248,14 +250,17 @@ private:
 		}
 		vector<cpp11::sexp> equal_exprs;
 		equal_exprs.reserve(num_values);
-		for (idx_t i = 1; i < op_children.size(); i++) {
-			auto &value_expr = *op_children[i];
+		for (idx_t i = 1; i < op_expr.GetChildren().size(); i++) {
+			auto &value_expr = *op_expr.GetChildren()[i];
 			if (value_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 				throw NotImplementedException("Arrow table filter pushdown %s not supported yet", op_expr.ToString());
 			}
 			auto &value = value_expr.Cast<BoundConstantExpression>().GetValue();
-			equal_exprs.push_back(cpp11::sexp(
-			    CreateExpression(functions, "equal", column_name_expr, CreateConstantExpression(functions, value))));
+			// Bind the constant before building the comparison: `CreateExpression()`
+			// allocates before it stores its operands, so passing the fresh
+			// expression straight through would leave it unprotected.
+			cpp11::sexp constant_expr = CreateConstantExpression(functions, value);
+			equal_exprs.push_back(cpp11::sexp(CreateExpression(functions, "equal", column_name_expr, constant_expr)));
 		}
 		return FoldBalanced(functions, "or_kleene", equal_exprs, 0, equal_exprs.size());
 	}
