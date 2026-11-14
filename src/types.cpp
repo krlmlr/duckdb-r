@@ -33,8 +33,19 @@ RTypeId RType::id() const {
 	return id_;
 }
 
+// Field names and factor levels are R's, so they compare exactly:
+// an Identifier compares case-insensitively, as SQL names do.
 bool RType::operator==(const RType &rhs) const {
-	return id_ == rhs.id_ && size_ == rhs.size_ && aux_ == rhs.aux_;
+	if (id_ != rhs.id_ || size_ != rhs.size_ || aux_.size() != rhs.aux_.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < aux_.size(); i++) {
+		if (aux_[i].first.GetIdentifierName() != rhs.aux_[i].first.GetIdentifierName() ||
+		    !(aux_[i].second == rhs.aux_[i].second)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 // Reads the levels in place, as DetectRType() does a data frame's names
@@ -334,6 +345,7 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		return "integer";
 	case LogicalTypeId::TIMESTAMP_SEC:
@@ -376,7 +388,6 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::ENUM:
 		return "factor";
 	case LogicalTypeId::UNKNOWN:
-	case LogicalTypeId::SQLNULL:
 	// No R vector holds these: the route to R vectors refuses them by column before
 	// the statement runs, in rapi_execute_impl(), while an Arrow result carries them
 	// unconverted (handbook/usage/types/README.md).

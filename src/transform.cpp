@@ -288,7 +288,6 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_NS:
-	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -301,6 +300,7 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 		}
 		break;
 	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		// TIMESTAMP WITH TIME ZONE stores microseconds since the UTC epoch.
 		// Prefer the session's TimeZone (settable via `SET TimeZone = ...` with
 		// the ICU extension) so the displayed clock matches DuckDB's own

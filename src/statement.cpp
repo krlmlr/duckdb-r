@@ -1,11 +1,12 @@
 #include "duckdb/common/types/timestamp.hpp"
-#include "duckdb/main/query_profiler.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/parser/statement/explain_statement.hpp"
 #include "duckdb/parser/statement/relation_statement.hpp"
 #include "duckdb/planner/statement_preprocessor.hpp"
 #include "httplib.hpp"
 #include "rapi.hpp"
+
+#include <atomic>
+#include <mutex>
 #include "signal.hpp"
 #include "typesr.hpp"
 
@@ -25,8 +26,14 @@ namespace {
 
 // Depth rather than a flag: a callback may run R code that starts another query
 // over another registered table, and only the outermost return is safe.
-idx_t callback_depth = 0;
-vector<duckdb::unique_ptr<PreparedStatement>> deferred_statements;
+// Atomic: written on R's thread, and read by whichever thread releases a reader.
+std::atomic<idx_t> callback_depth {0};
+// Never destroyed: what is still parked when R exits is left to the process,
+// rather than destroyed by static destructors, which may run after the engine's own.
+vector<duckdb::unique_ptr<RCallbackScope::ParkedBase>> &deferred_objects =
+    *new vector<duckdb::unique_ptr<RCallbackScope::ParkedBase>>();
+// Parking happens from whichever thread releases a reader, so the list is locked.
+std::mutex deferred_lock;
 
 } // namespace
 
@@ -44,8 +51,9 @@ bool RCallbackScope::Active() {
 	return callback_depth > 0;
 }
 
-void RCallbackScope::Defer(duckdb::unique_ptr<PreparedStatement> stmt) {
-	deferred_statements.push_back(std::move(stmt));
+void RCallbackScope::Park(duckdb::unique_ptr<ParkedBase> object) {
+	std::lock_guard<std::mutex> guard(deferred_lock);
+	deferred_objects.push_back(std::move(object));
 }
 
 // Deliberately not called from the scope's own destructor: that returns into the
@@ -57,31 +65,62 @@ void RCallbackScope::Drain() {
 	}
 	// Swap first: destroying a statement runs duckdb code, which may register
 	// another callback, and appending to a vector we are iterating would be UB.
-	vector<duckdb::unique_ptr<PreparedStatement>> to_destroy;
-	to_destroy.swap(deferred_statements);
-	to_destroy.clear();
+	vector<duckdb::unique_ptr<ParkedBase>> to_destroy;
+	{
+		std::lock_guard<std::mutex> guard(deferred_lock);
+		to_destroy.swap(deferred_objects);
+	}
+	for (auto &object : to_destroy) {
+		object.reset();
+	}
 }
 
+// Only a finalizer gets here with the statement still held, from a garbage collection or from R's exit,
+// and a finalizer cannot know whether the client context lock is held where it runs.
+// The statement is parked instead, so a finalizer never takes that lock.
 RStatement::~RStatement() {
-	if (stmt && RCallbackScope::Active()) {
+	if (stmt) {
 		RCallbackScope::Defer(std::move(stmt));
+	}
+}
+
+// A query result not run to its end ends its query on destruction, which takes the client context lock.
+// Parked in this order, the stream and the result go before the context they read.
+RQueryResult::~RQueryResult() {
+	Untrack();
+	if (RCallbackScope::Active()) {
+		if (stream_wrapper) {
+			RCallbackScope::Defer(std::move(stream_wrapper));
+		}
+		if (result) {
+			RCallbackScope::Defer(std::move(result));
+		}
+		if (context) {
+			RCallbackScope::Defer(std::move(context));
+		}
+	}
+}
+
+void RQueryResult::EndForAnotherStatement() {
+	if (result) {
+		invalidated = true;
+		result->Close();
 	}
 }
 
 } // namespace duckdb
 
 [[cpp11::register]] void rapi_release(duckdb::stmt_eptr_t stmt) {
+	RCallbackScope::Drain();
+
 	auto stmt_ptr = stmt.release();
 	if (stmt_ptr) {
+		// Released by R, which holds nothing unless a callback is running
+		if (!RCallbackScope::Active()) {
+			stmt_ptr->stmt.reset();
+		}
 		delete stmt_ptr;
 	}
-}
-
-static bool IsExplainAnalyze(const SQLStatement &statement) {
-	if (statement.type != StatementType::EXPLAIN_STATEMENT) {
-		return false;
-	}
-	return statement.Cast<ExplainStatement>().explain_type == ExplainType::EXPLAIN_ANALYZE;
 }
 
 // Every entry point that takes a statement asks this first: the pointer may have been released by dbClearResult().
@@ -92,12 +131,12 @@ static void CheckStatement(const duckdb::stmt_eptr_t &stmt, const char *context)
 }
 
 static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt, const string &query, idx_t n_param,
-                                     SEXP registered_dfs = R_NilValue, bool explain_analyze = false) {
+                                     SEXP registered_dfs = R_NilValue) {
 	cpp11::writable::list retlist;
 	retlist.reserve(8);
 	retlist.push_back({"str"_nm = query});
 
-	auto stmtholder = make_uniq<RStatement>(std::move(stmt), explain_analyze);
+	auto stmtholder = make_uniq<RStatement>(std::move(stmt));
 
 	retlist.push_back({"type"_nm = StatementTypeToString(stmtholder->stmt->GetStatementType())});
 	retlist.push_back({"names"_nm = cpp11::as_sexp(IdentifiersToStrings(stmtholder->stmt->GetNames()))});
@@ -126,6 +165,7 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 	if (!conn || !conn.get() || !conn->conn) {
 		rapi_error_with_context("rapi_prepare", "Invalid connection");
 	}
+	EndOpenResults(*conn->conn->context);
 
 	// Create ScopedInterruptHandler to prevent deadlock when called re-entrantly
 	// during progress bar callbacks. This will throw "ScopedInterruptHandler already active"
@@ -225,11 +265,8 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 			}
 		}
 	}
-	// The last statement is the call's result. With no fragment left, it was a PRAGMA that expanded to nothing, the
-	// only statement that can, and it returns what any other PRAGMA returns: no rows of one `Success` column.
-	bool explain_analyze = last_statement && IsExplainAnalyze(*last_statement);
-	auto stmt = last_statement ? conn->conn->Prepare(std::move(last_statement))
-	                           : conn->conn->Prepare("SELECT CAST(NULL AS BOOLEAN) AS Success LIMIT 0");
+	// The last statement is the call's result; a PRAGMA that expands to nothing is answered where it runs.
+	auto stmt = conn->conn->Prepare(std::move(last_statement));
 
 	signal_handler.HandleInterrupt();
 
@@ -240,10 +277,10 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 		rapi_error_with_context("rapi_prepare", error);
 	}
 	auto n_param = stmt->GetParameterCount();
-	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs, explain_analyze);
+	return construct_retlist(std::move(stmt), query, n_param, conn->db->registered_dfs);
 }
 
-static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts);
+static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result);
 
 [[cpp11::register]] cpp11::list rapi_bind(duckdb::stmt_eptr_t stmt, cpp11::list params,
                                           duckdb::ConvertOpts convert_opts) {
@@ -283,6 +320,11 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		rapi_error_with_context("rapi_bind", "Bind parameter values need to have length one for arrow queries");
 	}
 
+	// Streaming arrow results from the same prepared statement cannot coexist
+	// (each execution ends the previous one's query). Materialize
+	// per-row arrow results when binding multiple rows.
+	bool allow_stream_result = arrow && allow_stream && n_rows == 1;
+
 	cpp11::writable::list out;
 	out.reserve(n_rows);
 
@@ -294,7 +336,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		}
 
 		// Protection error is flagged by rchk
-		cpp11::sexp res = rapi_execute_impl(stmt.get(), convert_opts);
+		cpp11::sexp res = rapi_execute_impl(stmt.get(), convert_opts, allow_stream_result);
 		out.push_back(res);
 	}
 
@@ -384,7 +426,8 @@ static void CheckResultTypeForR(const LogicalType &type, const string &name) {
 		CheckResultTypeForR(MapType::ValueType(type), name);
 		return;
 	case LogicalTypeId::STRUCT:
-		for (const auto &child : StructType::GetChildTypes(type)) {
+	case LogicalTypeId::TUPLE:
+		for (const auto &child : RApiTypes::StructLikeChildTypes(type)) {
 			CheckResultTypeForR(child.second, name + "$" + child.first);
 		}
 		return;
@@ -394,7 +437,7 @@ static void CheckResultTypeForR(const LogicalType &type, const string &name) {
 	}
 }
 
-static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts) {
+static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result) {
 	// Only the conversion to R vectors needs the check: an Arrow result carries every type.
 	if (convert_opts.arrow != ConvertOpts::ArrowConversion::ENABLED) {
 		const auto &types = stmt->stmt->GetTypes();
@@ -405,17 +448,30 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	}
 
 	auto context = stmt->stmt->TryGetContext();
+	if (context) {
+		EndOpenResults(*context);
+	}
 	ScopedInterruptHandler signal_handler(context);
 
-	// EXPLAIN ANALYZE renders the query profiler's output, and the profiler only
-	// arms itself when the statement the engine plans is the EXPLAIN itself. The
-	// prepared-statement API plans an EXECUTE, so arm it here; the profiler
-	// disarms itself at the end of the query.
-	if (stmt->explain_analyze && context) {
-		QueryProfiler::Get(*context).StartExplainAnalyze();
+	// A streamed result is submitted, and runs as it is read. Whether it streams is decided by the statement as
+	// written, because a prepared execution reports the EXECUTE that runs it, as the engine's own ADBC driver does
+	// (ExecuteArrow() in the vendored src/common/adbc/adbc.cpp).
+	duckdb::unique_ptr<QueryResult> generic_result;
+	bool streamed = false;
+	if (allow_stream_result) {
+		generic_result = stmt->stmt->Submit(stmt->parameters);
+		if (!generic_result->HasError()) {
+			// A reader that may stop early: a SELECT that writes is completed rather than streamed, since a stream
+			// abandoned before its end is rolled back, with the transaction it runs in.
+			streamed = StreamsByDefault(stmt->stmt->GetStatementType(), *generic_result,
+			                            /* reads_to_the_end = */ false);
+			if (!streamed) {
+				generic_result->Complete();
+			}
+		}
+	} else {
+		generic_result = stmt->stmt->Execute(stmt->parameters);
 	}
-
-	auto generic_result = stmt->stmt->Execute(stmt->parameters);
 
 	signal_handler.HandleInterrupt();
 
@@ -428,12 +484,22 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	}
 
 	if (convert_opts.arrow == ConvertOpts::ArrowConversion::ENABLED) {
-		auto query_result = make_uniq<RQueryResult>(std::move(generic_result));
+		auto query_result = make_uniq<RQueryResult>(std::move(context), std::move(generic_result), streamed);
 		rqry_eptr_t query_resultsexp(query_result.release());
 		return query_resultsexp;
 	} else {
-		D_ASSERT(generic_result->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
 		auto result = generic_result.get();
+
+		// A PRAGMA that expanded to nothing has no columns, and returns what any other PRAGMA returns:
+		// no rows of one `Success` column, as before the engine expanded it while running it.
+		if (result->ColumnCount() == 0 && stmt->stmt->GetStatementType() == StatementType::PRAGMA_STATEMENT) {
+			vector<LogicalType> types {LogicalType::BOOLEAN};
+			vector<Identifier> names {Identifier("Success")};
+			cpp11::writable::list data_frame = duckdb_r_allocate_df(types, names, 0, convert_opts, "rapi_execute");
+			SET_NAMES(data_frame, StringsToSexp({"Success"}));
+			duckdb_r_df_decorate(data_frame, 0, RStrings::get().dataframe_str);
+			return data_frame;
+		}
 
 		// Avoid rchk warning, it sees QueryResult::~QueryResult() as an allocating function
 		cpp11::sexp out = duckdb_execute_R_impl(result, convert_opts, RStrings::get().dataframe_str);
@@ -446,5 +512,7 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 
 	CheckStatement(stmt, "rapi_execute");
 
-	return rapi_execute_impl(stmt.get(), convert_opts);
+	bool allow_stream_result = convert_opts.arrow == ConvertOpts::ArrowConversion::ENABLED &&
+	                           convert_opts.allow_stream_result == ConvertOpts::AllowStreamResult::ENABLED;
+	return rapi_execute_impl(stmt.get(), convert_opts, allow_stream_result);
 }
