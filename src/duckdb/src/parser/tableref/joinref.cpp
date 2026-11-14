@@ -119,6 +119,7 @@ unique_ptr<TableRef> JoinRef::Copy() {
 	}
 	copy->type = type;
 	copy->ref_type = ref_type;
+	copy->alias = alias;
 	copy->using_columns = using_columns;
 	copy->delim_flipped = delim_flipped;
 	for (auto &col : duplicate_eliminated_columns) {
@@ -131,7 +132,6 @@ unique_ptr<TableRef> JoinRef::Copy() {
 	copy->nearest_count = nearest_count;
 	copy->nearest_order_type = nearest_order_type;
 	copy->nearest_approx = nearest_approx;
-	CopyProperties(*copy);
 	return std::move(copy);
 }
 

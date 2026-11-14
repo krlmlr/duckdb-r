@@ -75,7 +75,7 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		if (type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast macro to type - macro type mismatch");
+			throw InternalException("Failed to cast macro to type - macro type mismatch");
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
@@ -83,7 +83,7 @@ public:
 	template <class TARGET>
 	const TARGET &Cast() const {
 		if (type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast macro to type - macro type mismatch");
+			throw InternalException("Failed to cast macro to type - macro type mismatch");
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}

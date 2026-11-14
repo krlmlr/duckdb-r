@@ -21,10 +21,11 @@ struct EnumTypeInfoTemplated : public EnumTypeInfo {
 		for (idx_t i = 0; i < size_p; i++) {
 			auto idx = vdata.sel->get_index(i);
 			if (!vdata.validity.RowIsValid(idx)) {
-				InternalException::Throw("Attempted to create ENUM type with NULL value");
+				throw InternalException("Attempted to create ENUM type with NULL value");
 			}
 			if (values.count(data[idx]) > 0) {
-				ThrowDuplicateValue(data[idx]);
+				throw InvalidInputException("Attempted to create ENUM type with duplicate value %s",
+				                            data[idx].GetString());
 			}
 			values[data[idx]] = UnsafeNumericCast<T>(i);
 		}
@@ -37,13 +38,13 @@ struct EnumTypeInfoTemplated : public EnumTypeInfo {
 		idx_t read_count = 0;
 		deserializer.ReadList(201, "values", [&](Deserializer::List &list, idx_t i) {
 			if (i >= size) {
-				ThrowCorruptedIndex(i, size);
+				throw SerializationException("Corrupted enum: string value index %llu exceeds enum size %u", i, size);
 			}
 			strings[i] = list.ReadElement<string>();
 			read_count++;
 		});
 		if (read_count != size) {
-			ThrowCorruptedCount(size, read_count);
+			throw SerializationException("Corrupted enum: expected %u values, but found %llu", size, read_count);
 		}
 		return make_uniq<EnumTypeInfoTemplated>(values_insert_order, size);
 	}

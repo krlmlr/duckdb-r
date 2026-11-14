@@ -100,7 +100,7 @@ struct RType {
 	static constexpr const RTypeId LIST_OF_NULLS = RTypeId::LIST_OF_NULLS;
 	static constexpr const RTypeId BLOB = RTypeId::BLOB;
 
-	static RType FACTOR(SEXP levels);
+	static RType FACTOR(cpp11::strings levels);
 	Vector GetFactorLevels() const;
 	size_t GetFactorLevelsCount() const;
 	Value GetFactorValue(int r_value) const;
@@ -129,8 +129,6 @@ struct RApiTypes {
 	static R_len_t GetVecSize(SEXP coldata, bool integer64 = false);
 	static Value SexpToValue(SEXP valsexp, R_len_t idx, bool typed_logical_null = true);
 	static SEXP ValueToSexp(const Value &val, const ConvertOpts &convert_opts);
-	// Children of a STRUCT or TUPLE, with positional names synthesized for the unnamed TUPLE members
-	static child_list_t<LogicalType> StructLikeChildTypes(const LogicalType &type);
 };
 
 struct RIntegralType {
@@ -190,15 +188,6 @@ struct RIntervalWeeksType : public RDoubleType {
 struct RIntegerType {
 	static bool IsNull(int val);
 	static int Convert(int val);
-};
-
-// A Date or difftime stored as integer: its NA is NA_integer_, which the double
-// check it inherits would take for a real value.
-template <class T>
-struct RIntegerBackedType : public T {
-	static bool IsNull(int val) {
-		return RIntegerType::IsNull(val);
-	}
 };
 
 struct RInteger64Type {

@@ -44,10 +44,6 @@ unique_ptr<SortStrategy> SortStrategy::Factory(ClientContext &client,
 	}
 }
 
-unique_ptr<TupleDataCollection> SortStrategy::TryTakeSinglePartition(idx_t, GlobalSourceState &) const {
-	return nullptr;
-}
-
 void SortStrategy::RegisterHyperLogLog(LocalSinkState &, ParallelHyperLogLogLocalState &) const {
 	// NOP for all but HashedSort
 }

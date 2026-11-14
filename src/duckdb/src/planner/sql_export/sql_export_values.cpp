@@ -288,8 +288,7 @@ LogicalPlanSQLExportResult LogicalExpressionGet::ToSQL(LogicalPlanSQLExportConte
 	if (fields.HasError()) {
 		return LogicalPlanSQLExportResult::Failure(fields);
 	}
-	if (get.children[0]->type != LogicalOperatorType::LOGICAL_DUMMY_SCAN ||
-	    export_context.FindSource(*get.children[0])) {
+	if (get.children[0]->type != LogicalOperatorType::LOGICAL_DUMMY_SCAN) {
 		return ExportSQLInput(export_context, path, std::move(fields.GetValue()));
 	}
 

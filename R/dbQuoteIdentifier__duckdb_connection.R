@@ -7,12 +7,11 @@ dbQuoteIdentifier__duckdb_connection <- function(conn, x, ...) {
   }
 
   if (any(is.na(x))) {
-    abort("Cannot pass NA to dbQuoteIdentifier()")
+    stop("Cannot pass NA to dbQuoteIdentifier()")
   }
 
   x <- enc2utf8(x)
-  needs_escape <- !grepl("^[a-zA-Z_][a-zA-Z0-9_]*$", x) |
-    tolower(x) %in% conn@reserved_words
+  needs_escape <- !grepl("^[a-zA-Z_][a-zA-Z0-9_]*$", x) | tolower(x) %in% conn@reserved_words
   x[needs_escape] <- paste0('"', gsub('"', '""', x[needs_escape]), '"')
 
   SQL(x, names = names(x))
@@ -20,32 +19,16 @@ dbQuoteIdentifier__duckdb_connection <- function(conn, x, ...) {
 
 #' @rdname duckdb_connection-class
 #' @export
-setMethod(
-  "dbQuoteIdentifier",
-  signature("duckdb_connection"),
-  dbQuoteIdentifier__duckdb_connection
-)
+setMethod("dbQuoteIdentifier", signature("duckdb_connection"), dbQuoteIdentifier__duckdb_connection)
 #' @rdname duckdb_connection-class
 #' @usage NULL
-setMethod(
-  "dbQuoteIdentifier",
-  signature("duckdb_connection", "character"),
-  dbQuoteIdentifier__duckdb_connection
-)
+setMethod("dbQuoteIdentifier", signature("duckdb_connection", "character"), dbQuoteIdentifier__duckdb_connection)
 #' @rdname duckdb_connection-class
 #' @usage NULL
-setMethod(
-  "dbQuoteIdentifier",
-  signature("duckdb_connection", "SQL"),
-  dbQuoteIdentifier__duckdb_connection
-)
+setMethod("dbQuoteIdentifier", signature("duckdb_connection", "SQL"), dbQuoteIdentifier__duckdb_connection)
 #' @rdname duckdb_connection-class
 #' @usage NULL
-setMethod(
-  "dbQuoteIdentifier",
-  signature("duckdb_connection", "Id"),
-  dbQuoteIdentifier__duckdb_connection
-)
+setMethod("dbQuoteIdentifier", signature("duckdb_connection", "Id"), dbQuoteIdentifier__duckdb_connection)
 
 get_reserved_words <- function(con) {
   dbGetQuery(con, "SELECT keyword_name FROM duckdb_keywords()")[[1]]

@@ -239,9 +239,7 @@ FilterPropagateResult StatisticsPropagator::ClassifyFilter(Expression &condition
 
 	if (ExpressionIsConstant(condition, Value::BOOLEAN(false))) {
 		return FilterPropagateResult::FILTER_ALWAYS_FALSE;
-	} else if (ExpressionIsConstantOrNull(condition, Value::BOOLEAN(false)) ||
-	           ExpressionIsConstant(condition, Value(LogicalType::BOOLEAN))) {
-		// a condition that is always NULL rejects every row too
+	} else if (ExpressionIsConstantOrNull(condition, Value::BOOLEAN(false))) {
 		return FilterPropagateResult::FILTER_FALSE_OR_NULL;
 	}
 

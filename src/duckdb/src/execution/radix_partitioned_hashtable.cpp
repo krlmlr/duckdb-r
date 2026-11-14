@@ -138,8 +138,7 @@ RadixHTGlobalSinkState::RadixHTGlobalSinkState(ClientContext &context_p, const R
 	auto tuples_per_block = block_alloc_size / radix_ht.GetLayout().GetRowWidth();
 	idx_t ht_count =
 	    LossyNumericCast<idx_t>(static_cast<double>(config.sink_capacity) / GroupedAggregateHashTable::LOAD_FACTOR);
-	auto num_partitions =
-	    RadixPartitioning::NumberOfPartitions(MaxValue(config.GetRadixBits(), config.GetMaximumSinkRadixBits()));
+	auto num_partitions = RadixPartitioning::NumberOfPartitions(config.GetMaximumSinkRadixBits());
 	auto count_per_partition = ht_count / num_partitions;
 	auto blocks_per_partition = (count_per_partition + tuples_per_block) / tuples_per_block;
 	if (!radix_ht.GetLayout().AllConstant()) {
@@ -545,29 +544,22 @@ bool ShouldExportStates(RadixHTGlobalSinkState &gstate, RadixHTLocalSinkState &l
 
 void UpdateSinkReservation(ClientContext &context, RadixHTGlobalSinkState &gstate, GroupedAggregateHashTable &ht,
                            idx_t total_size) {
-	// Include the headroom required by the arena's export threshold.
-	const auto required_size = gstate.spill_plan
-	                               ? MaxValue(total_size, ht.GetAggregateAllocator()->AllocationSize() *
-	                                                          RadixHTConfig::AGGREGATE_STATE_PRESSURE_DIVISOR)
-	                               : total_size;
-	if (required_size <= gstate.GetThreadLimit() || gstate.external) {
+	if (total_size <= gstate.GetThreadLimit() || gstate.external) {
 		return;
 	}
 	const annotated_lock_guard<annotated_mutex> guard {gstate.lock};
-	if (required_size <= gstate.GetThreadLimit() || gstate.external) {
+	if (total_size <= gstate.GetThreadLimit()) {
 		return;
 	}
 	auto &temporary_memory_state = *gstate.temporary_memory_state;
 	const auto aggregate_allocator_size = ht.GetAggregateAllocator()->AllocationSize();
-	// Account for tuple metadata and the headroom deducted by GetThreadLimit.
-	const auto minimum_reservation =
-	    (gstate.minimum_reservation + gstate.number_of_threads * gstate.block_alloc_size) / 8 * 10;
 	temporary_memory_state.SetMinimumReservation(aggregate_allocator_size * gstate.number_of_threads +
-	                                             minimum_reservation);
-	// Grow from current demand, not the previous request, which might not have been granted.
+	                                             gstate.minimum_reservation);
 	const auto remaining_size =
-	    MaxValue<idx_t>(2 * gstate.number_of_threads * required_size, temporary_memory_state.GetRemainingSize());
-	temporary_memory_state.SetRemainingSizeAndUpdateReservation(context, remaining_size);
+	    MaxValue<idx_t>(gstate.number_of_threads * total_size, temporary_memory_state.GetRemainingSize());
+	// Repeated pressure checks must not keep doubling an unsatisfied reservation.
+	const auto requested_size = remaining_size > gstate.memory_limit / 2 ? gstate.memory_limit : 2 * remaining_size;
+	temporary_memory_state.SetRemainingSizeAndUpdateReservation(context, requested_size);
 }
 
 void MaybeRepartition(ClientContext &context, RadixHTGlobalSinkState &gstate, RadixHTLocalSinkState &lstate,

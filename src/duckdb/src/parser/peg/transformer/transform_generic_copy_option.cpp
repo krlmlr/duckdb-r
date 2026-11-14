@@ -44,6 +44,8 @@ static void SetGenericCopyOptionExpression(GenericCopyOption &copy_option, uniqu
 				                        ExpressionClassToString(child->GetExpressionClass()));
 			}
 		}
+	} else if (expression->GetExpressionType() == ExpressionType::FUNCTION) {
+		copy_option.expression = std::move(expression);
 	} else if (expression->GetExpressionType() == ExpressionType::STAR) {
 		copy_option.children.push_back(Value("*"));
 	} else if (expression->GetExpressionType() == ExpressionType::OPERATOR_CAST) {
@@ -61,7 +63,8 @@ static void SetGenericCopyOptionExpression(GenericCopyOption &copy_option, uniqu
 			copy_option.expression = std::move(expression);
 		}
 	} else {
-		copy_option.expression = std::move(expression);
+		throw NotImplementedException("Unrecognized expression type %s",
+		                              ExpressionTypeToString(expression->GetExpressionType()));
 	}
 }
 
@@ -193,7 +196,7 @@ void PEGTransformerFactory::SplitGenericOptions(const vector<GenericCopyOption> 
 			options[option.name.GetIdentifierName()] = Value(true);
 		} else if (option.children.size() == 1) {
 			if (option.children[0].IsNull()) {
-				throw BinderException("NULL is not supported as a valid option for %s option %s", statement_name,
+				throw BinderException("NULL is not supported as a valid option for %s option \"%s\"", statement_name,
 				                      option.name);
 			}
 			options[option.name.GetIdentifierName()] = option.children[0];

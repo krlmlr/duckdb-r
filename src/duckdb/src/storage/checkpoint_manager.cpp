@@ -36,6 +36,7 @@
 #include "duckdb/transaction/duck_transaction_manager.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
+#include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 
@@ -83,6 +84,10 @@ void ActiveCheckpointWrapper::Commit() {
 }
 
 bool ActiveCheckpointWrapper::HasCheckpointContext() const {
+	return checkpoint_context;
+}
+
+optional_ptr<ClientContext> ActiveCheckpointWrapper::GetCheckpointContext() const {
 	return checkpoint_context;
 }
 
@@ -193,6 +198,25 @@ static catalog_entry_vector_t GetCatalogEntries(vector<reference<SchemaCatalogEn
 	return entries;
 }
 
+static bool HasBufferedIndexReplays(AttachedDatabase &db) {
+	bool has_buffered_replays = false;
+	auto &catalog = Catalog::GetCatalog(db).Cast<DuckCatalog>();
+	catalog.ScanSchemas([&](SchemaCatalogEntry &schema) {
+		if (has_buffered_replays) {
+			return;
+		}
+		schema.Scan(CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+			if (has_buffered_replays || entry.type != CatalogType::TABLE_ENTRY) {
+				return;
+			}
+			auto &table = entry.Cast<DuckTableEntry>();
+			auto &indexes = table.GetStorage().GetDataTableInfo()->GetIndexes();
+			has_buffered_replays = indexes.HasBufferedReplays();
+		});
+	});
+	return has_buffered_replays;
+}
+
 void SingleFileCheckpointWriter::CreateCheckpoint() {
 	auto &storage_manager = db.GetStorageManager().Cast<SingleFileStorageManager>();
 	if (storage_manager.InMemory()) {
@@ -200,6 +224,10 @@ void SingleFileCheckpointWriter::CreateCheckpoint() {
 	}
 	if (ValidChecker::IsInvalidated(db.GetDatabase())) {
 		// don't checkpoint invalidated databases
+		return;
+	}
+	// A context-free checkpoint cannot persist buffered operations on an unbound index. Keep the WAL instead.
+	if (!context && HasBufferedIndexReplays(db)) {
 		return;
 	}
 	// assert that the checkpoint manager hasn't been used before
@@ -230,6 +258,7 @@ void SingleFileCheckpointWriter::CreateCheckpoint() {
 	// WALStartCheckpoint we will create a transaction for the checkpoint.
 	ActiveCheckpointWrapper active_checkpoint(context, db, transaction_manager);
 	auto has_wal = storage_manager.WALStartCheckpoint(meta_block, options, active_checkpoint);
+	checkpoint_context = active_checkpoint.GetCheckpointContext();
 
 	catalog_entry_vector_t catalog_entries;
 
@@ -369,6 +398,7 @@ void SingleFileCheckpointWriter::CreateCheckpoint() {
 		auto &index_list = table_info->GetIndexes();
 		index_list.MergeCheckpointDeltas(options.checkpoint_id);
 	}
+	checkpoint_context = nullptr;
 	active_checkpoint.Commit();
 }
 
@@ -583,12 +613,7 @@ void CheckpointWriter::WriteSequence(SequenceCatalogEntry &seq, Serializer &seri
 void CheckpointReader::ReadSequence(CatalogTransaction transaction, Deserializer &deserializer) {
 	auto info = ReadCreateInfo(deserializer, CatalogType::SEQUENCE_ENTRY, "sequence");
 	auto &sequence_info = info->Cast<CreateSequenceInfo>();
-	auto entry = catalog.CreateSequence(transaction, sequence_info);
-	auto &storage_manager = catalog.GetAttached().GetStorageManager();
-	if (entry && storage_manager.HasStorageVersion() &&
-	    StorageManager::IsPriorToVersion(StorageVersion::V2_0_0, storage_manager.GetStorageVersion())) {
-		entry->Cast<SequenceCatalogEntry>().DeriveLastValue();
-	}
+	catalog.CreateSequence(transaction, sequence_info);
 }
 
 //===--------------------------------------------------------------------===//
@@ -697,6 +722,18 @@ void SingleFileCheckpointWriter::WriteTable(TableCatalogEntry &table, Serializer
 	// Write the table metadata
 	serializer.WriteProperty(100, "table", &table);
 
+	// Explicit checkpoints bind indexes before serialization, so that buffered index operations are replayed
+	// and not lost on a restart. During a commit-time checkpoint the caller has no active transaction.
+	if (context && context->transaction.HasActiveTransaction() && checkpoint_context) {
+		D_ASSERT(checkpoint_context->transaction.HasActiveTransaction());
+		// Bind indexes with checkpoint transaction, which is already running and read-only, so any transaction the
+		// binder still starts skips start_transaction_lock.
+		D_ASSERT(MetaTransaction::Get(*checkpoint_context).IsReadOnly());
+		auto &info = table.GetStorage().GetDataTableInfo();
+		info->BindIndexes(*checkpoint_context);
+	}
+	// FIXME: If we do not have a context, however, the unbound indexes have to be serialized to disk.
+
 	// Write the table data
 	auto table_lock = table.GetStorage().GetCheckpointLock();
 	auto writer = GetTableDataWriter(table);
@@ -735,10 +772,7 @@ void CheckpointReader::ReadTableData(CatalogTransaction transaction, Deserialize
 	// Read next_row_id as total_rows for backwards compatibility. Older storage versions do not allow for gaps in
 	// row_id numbering, in which case next_row_id = total_rows.
 	auto next_row_id = deserializer.ReadPropertyWithExplicitDefault<idx_t>(105, "next_row_id", total_rows);
-	if (next_row_id < total_rows) {
-		throw DataCorruptionException("corrupt database file - next row id %llu is lower than the total row count %llu",
-		                              next_row_id, total_rows);
-	}
+	D_ASSERT(next_row_id >= total_rows);
 
 	if (!index_storage_infos.empty()) {
 		bound_info.indexes = std::move(index_storage_infos);

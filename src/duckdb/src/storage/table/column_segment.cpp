@@ -42,10 +42,6 @@ unique_ptr<ColumnSegment> ColumnSegment::CreatePersistentSegment(DatabaseInstanc
 
 	auto &type = statistics.GetType();
 	auto function = config.GetCompressionFunction(compression_type, type.InternalType());
-	if (block_id == INVALID_BLOCK && !function.get().supports_null_block) {
-		throw DataCorruptionException("Persistent %s segment is missing its data block",
-		                              CompressionTypeToString(compression_type));
-	}
 	if (block_id != INVALID_BLOCK) {
 		block = block_manager.RegisterBlock(block_id);
 	}
@@ -59,16 +55,11 @@ unique_ptr<ColumnSegment> ColumnSegment::CreatePersistentSegment(DatabaseInstanc
 unique_ptr<ColumnSegment> ColumnSegment::CreateTransientSegment(DatabaseInstance &db,
                                                                 const CompressionFunction &function,
                                                                 const LogicalType &type, const idx_t segment_size,
-                                                                BlockManager &block_manager, bool zero_initialize) {
+                                                                BlockManager &block_manager) {
 	// Allocate a buffer for the uncompressed segment.
 	auto &buffer_manager = BufferManager::GetBufferManager(db);
 	D_ASSERT(&buffer_manager == &block_manager.buffer_manager);
 	auto block = buffer_manager.RegisterTransientMemory(segment_size, block_manager);
-	// we want to zero initialize segments that end up on disk
-	if (zero_initialize) {
-		auto handle = buffer_manager.Pin(block);
-		memset(handle.GetDataMutable(), 0, segment_size);
-	}
 
 	return make_uniq<ColumnSegment>(db, std::move(block), ColumnSegmentType::TRANSIENT, 0U, function,
 	                                BaseStatistics::CreateEmpty(type), INVALID_BLOCK, 0U, segment_size);
@@ -160,16 +151,11 @@ void ColumnSegment::Scan(ColumnScanState &state, idx_t scan_count, Vector &resul
 }
 
 void ColumnSegment::Select(ColumnScanState &state, idx_t scan_count, Vector &result, const SelectionVector &sel,
-                           idx_t sel_count, idx_t result_offset, ScanVectorType scan_type) {
+                           idx_t sel_count) {
 	if (!function.get().select) {
 		throw InternalException("ColumnSegment::Select not implemented for this compression method");
 	}
-	if (scan_type == ScanVectorType::SCAN_ENTIRE_VECTOR) {
-		D_ASSERT(result_offset == 0);
-	} else {
-		D_ASSERT(result.GetVectorType() == VectorType::FLAT_VECTOR);
-	}
-	function.get().select(*this, state, scan_count, result, sel, sel_count, result_offset, scan_type);
+	function.get().select(*this, state, scan_count, result, sel, sel_count);
 }
 
 void ColumnSegment::Filter(ColumnScanState &state, idx_t scan_count, Vector &result, SelectionVector &sel,
@@ -292,12 +278,6 @@ void ColumnSegment::MarkAsPersistent(shared_ptr<BlockHandle> block_p, uint32_t o
 	D_ASSERT(segment_type == ColumnSegmentType::TRANSIENT);
 	block_id = block_p->BlockId();
 	SetBlock(std::move(block_p), offset_p);
-}
-
-void ColumnSegment::UsePackedCopy(shared_ptr<BlockHandle> block_p, uint32_t offset_p) {
-	D_ASSERT(segment_type == ColumnSegmentType::TRANSIENT);
-	offset = offset_p;
-	block = std::move(block_p);
 }
 
 void ColumnSegment::SetBlock(shared_ptr<BlockHandle> block_p, uint32_t offset_p) {

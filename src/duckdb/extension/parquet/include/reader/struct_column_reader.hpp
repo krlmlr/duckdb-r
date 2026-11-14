@@ -35,7 +35,6 @@ public:
 	idx_t GroupRowsAvailable() override;
 	void GatherColumnChunks(unordered_set<idx_t> &column_chunks) override;
 	void RegisterPrefetch(ThriftFileTransport &transport, bool allow_merge) override;
-	void InitializePageIndex(const ParquetRowGroupPageIndex &page_index) override;
 };
 
 } // namespace duckdb

@@ -1,1 +1,0 @@
-{ "name": "memingest", "private": true, "type": "module", "dependencies": { "@duckdb/node-api": "latest" } }

@@ -87,15 +87,6 @@ public:
 		return unsafe_array_ptr<const uint8_t>(data + position, length);
 	}
 
-	//! Returns a view over the next count aligned elements and advances the position.
-	template <class T>
-	unsafe_array_ptr<const T> ReadArray(idx_t count) {
-		static_assert(std::is_trivially_copyable_v<T>, "ReadArray element must be a trivially copyable data type");
-		auto result = GetArray<T>(position, count);
-		position += count * sizeof(T);
-		return result;
-	}
-
 	//! Returns a view over the preceding count aligned elements and moves the position backward.
 	template <class T>
 	unsafe_array_ptr<const T> ReadArrayBackward(idx_t count) {
@@ -142,7 +133,9 @@ public:
 	template <class T>
 	unsafe_array_ptr<const uint8_t> ReadBytesAligned(idx_t length) {
 		CheckForwardRead(length);
-		CheckAlignment<T>(position);
+		if (DUCKDB_UNLIKELY(reinterpret_cast<uintptr_t>(data + position) % alignof(T) != 0)) { // NOLINT
+			ThrowArrayMisaligned();
+		}
 		unsafe_array_ptr<const uint8_t> result(data + position, length);
 		position += length;
 		return result;
@@ -154,21 +147,14 @@ public:
 		return unsafe_array_ptr<const uint8_t>(data + offset, length);
 	}
 
-	//! Checks alignment at a byte offset, without validating its range or moving the position.
-	template <class T>
-	void CheckAlignment(idx_t offset) const {
-		// Use integer arithmetic to avoid forming a pointer outside the buffer.
-		if (DUCKDB_UNLIKELY((reinterpret_cast<uintptr_t>(data) + offset) % alignof(T) != 0)) { // NOLINT
-			ThrowArrayMisaligned();
-		}
-	}
-
 	//! Validates that count aligned elements fit at byte offset.
 	template <class T>
 	void CheckArray(idx_t offset, idx_t count) const {
 		static_assert(std::is_trivially_copyable_v<T>, "CheckArray element must be a trivially copyable data type");
 		CheckRange(offset, 0);
-		CheckAlignment<T>(offset);
+		if (DUCKDB_UNLIKELY(reinterpret_cast<uintptr_t>(data + offset) % alignof(T) != 0)) { // NOLINT
+			ThrowArrayMisaligned();
+		}
 		// Use division so an untrusted count cannot lead to overflow.
 		if (DUCKDB_UNLIKELY(count > (size - offset) / sizeof(T))) {
 			ThrowArrayOutOfBounds();
@@ -242,21 +228,19 @@ public:
 	//! Throws if alignment is zero.
 	void AlignBackward(idx_t alignment);
 
-	//! Validates that length bytes fit at the current position without advancing it.
+private:
 	void CheckForwardRead(idx_t length) const {
 		if (DUCKDB_UNLIKELY(length > size - position)) {
 			ThrowForwardReadOutOfBounds();
 		}
 	}
 
-	//! Validates that length bytes fit before the current position without moving it.
 	void CheckBackwardRead(idx_t length) const {
 		if (DUCKDB_UNLIKELY(length > position)) {
 			ThrowBackwardReadOutOfBounds();
 		}
 	}
 
-	//! Validates that length bytes fit at offset without changing the position.
 	void CheckRange(idx_t offset, idx_t length) const {
 		if (DUCKDB_UNLIKELY(offset > size)) {
 			ThrowOffsetOutOfBounds();
@@ -266,7 +250,6 @@ public:
 		}
 	}
 
-private:
 	//! Keep exception construction out of bounds-checking paths.
 	[[noreturn]] static void ThrowOffsetExceedsBlockSize(const char *context);
 	[[noreturn]] static void ThrowByteSizeExceedsBlockSize(const char *context);

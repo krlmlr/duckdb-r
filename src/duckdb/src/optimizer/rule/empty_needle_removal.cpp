@@ -19,11 +19,7 @@ static unique_ptr<Expression> TryRemoveEmptyStringConcat(ClientContext &context,
 		if (!children[child_idx]->IsFoldable()) {
 			continue;
 		}
-		Value value;
-		if (!ExpressionExecutor::TryEvaluateScalar(context, *children[child_idx], value)) {
-			// leave the error to execution, which may never evaluate it
-			continue;
-		}
+		auto value = ExpressionExecutor::EvaluateScalar(context, *children[child_idx]);
 		if (value.IsNull() || value.type().id() != LogicalTypeId::VARCHAR || !StringValue::Get(value).empty()) {
 			continue;
 		}
@@ -51,10 +47,6 @@ unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector
 	if (root.Function().GetName() == "||") {
 		return TryRemoveEmptyStringConcat(GetContext(), root);
 	}
-	auto &input_expr = bindings[1].get();
-	if (input_expr.GetReturnType().InternalType() != PhysicalType::VARCHAR) {
-		return nullptr;
-	}
 	auto &prefix_expr = bindings[2].get();
 
 	// the constant_expr is a scalar expression that we have to fold
@@ -63,10 +55,7 @@ unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector
 	}
 	D_ASSERT(root.GetReturnType().id() == LogicalTypeId::BOOLEAN);
 
-	Value prefix_value;
-	if (!ExpressionExecutor::TryEvaluateScalar(GetContext(), prefix_expr, prefix_value)) {
-		return nullptr;
-	}
+	auto prefix_value = ExpressionExecutor::EvaluateScalar(GetContext(), prefix_expr);
 
 	if (prefix_value.IsNull()) {
 		return make_uniq<BoundConstantExpression>(Value(LogicalType::BOOLEAN));

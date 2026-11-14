@@ -6,29 +6,10 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 
 #include "duckdb/execution/expression_executor.hpp"
-#include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
 
-//! Returns the code point of the (UTF-8 encoded) character at pos, and sets its length in bytes
-static int32_t GlobCharacter(const char *data, idx_t len, idx_t pos, idx_t &char_len) {
-	auto byte = static_cast<unsigned char>(data[pos]);
-	if (byte < 0x80) {
-		char_len = 1;
-		return byte;
-	}
-	int sz = 1;
-	auto codepoint = Utf8Proc::UTF8ToCodepoint(data + pos, sz, len - pos);
-	if (codepoint < 0 || sz <= 0) {
-		// not valid UTF-8: treat the byte as a character
-		char_len = 1;
-		return byte;
-	}
-	char_len = UnsafeNumericCast<idx_t>(sz);
-	return codepoint;
-}
-
-static bool GlobMatchesBracket(int32_t s, const char *pattern, idx_t plen, idx_t &pidx, bool &valid_pattern) {
+static bool GlobMatchesBracket(char s, const char *pattern, idx_t plen, idx_t &pidx, bool &valid_pattern) {
 	if (pidx == plen) {
 		valid_pattern = false;
 		return false;
@@ -45,8 +26,7 @@ static bool GlobMatchesBracket(int32_t s, const char *pattern, idx_t plen, idx_t
 	bool found_closing_bracket = false;
 	// now check the remainder of the pattern
 	while (pidx < plen) {
-		idx_t p_len;
-		auto p = GlobCharacter(pattern, plen, pidx, p_len);
+		auto p = pattern[pidx];
 		// if the first character is a closing bracket, we match it literally
 		// otherwise it indicates an end of bracket
 		if (p == ']' && pidx > start_pos) {
@@ -55,24 +35,26 @@ static bool GlobMatchesBracket(int32_t s, const char *pattern, idx_t plen, idx_t
 			pidx++;
 			break;
 		}
-		if (pidx + p_len >= plen) {
+		if (pidx + 1 == plen) {
 			// no next character!
 			break;
 		}
 		bool matches;
-		if (pattern[pidx + p_len] == '-' && pidx + p_len + 1 < plen && pattern[pidx + p_len + 1] != ']') {
+		if (pattern[pidx + 1] == '-') {
 			// range! find the next character in the range
-			idx_t next_len;
-			auto next_char = GlobCharacter(pattern, plen, pidx + p_len + 1, next_len);
+			if (pidx + 2 == plen) {
+				break;
+			}
+			auto next_char = pattern[pidx + 2];
 			// check if the current character is within the range
 			matches = s >= p && s <= next_char;
 			// shift the pattern forward past the range
-			pidx += p_len + 1 + next_len;
+			pidx += 3;
 		} else {
 			// no range! perform a direct match
 			matches = p == s;
 			// shift the pattern forward past the character
-			pidx += p_len;
+			pidx++;
 		}
 		if (found_match == invert && matches) {
 			// found a match! set the found_matches flag
@@ -100,8 +82,6 @@ bool Glob(const char *string, idx_t slen, const char *pattern, idx_t plen, bool 
 	while (sidx < slen) {
 		bool matched = false;
 		idx_t next_pidx = pidx;
-		// the number of bytes of the string that a match consumes
-		idx_t match_len = 1;
 		if (pidx < plen) {
 			auto p = pattern[pidx];
 			switch (p) {
@@ -125,8 +105,6 @@ bool Glob(const char *string, idx_t slen, const char *pattern, idx_t plen, bool 
 			case '?':
 				// when enabled: matches anything but null
 				if (allow_question_mark) {
-					// a single character, which can consist of multiple bytes
-					GlobCharacter(string, slen, sidx, match_len);
 					matched = true;
 				} else {
 					matched = string[sidx] == p;
@@ -136,8 +114,7 @@ bool Glob(const char *string, idx_t slen, const char *pattern, idx_t plen, bool 
 			case '[': {
 				next_pidx = pidx + 1;
 				bool valid_pattern;
-				auto character = GlobCharacter(string, slen, sidx, match_len);
-				matched = GlobMatchesBracket(character, pattern, plen, next_pidx, valid_pattern);
+				matched = GlobMatchesBracket(string[sidx], pattern, plen, next_pidx, valid_pattern);
 				if (!valid_pattern) {
 					return false;
 				}
@@ -161,7 +138,7 @@ bool Glob(const char *string, idx_t slen, const char *pattern, idx_t plen, bool 
 			}
 		}
 		if (matched) {
-			sidx += match_len;
+			sidx++;
 			pidx = next_pidx;
 			continue;
 		}
@@ -169,9 +146,7 @@ bool Glob(const char *string, idx_t slen, const char *pattern, idx_t plen, bool 
 			return false;
 		}
 		// backtrack: the last '*' consumes one more character and we retry from there
-		idx_t star_char_len;
-		GlobCharacter(string, slen, star_sidx, star_char_len);
-		star_sidx += star_char_len;
+		star_sidx++;
 		sidx = star_sidx;
 		pidx = star_pidx;
 	}
@@ -750,7 +725,6 @@ ScalarFunction NotLikeEscapeFun::GetFunction() {
 	    .AddParameter("like_specifier", LogicalType::VARCHAR)
 	    .AddParameter("escape_character", LogicalType::VARCHAR);
 	not_like_escape.SetCollationHandling(FunctionCollationHandling::PUSH_COMBINABLE_COLLATIONS);
-	not_like_escape.SetFallible();
 	return not_like_escape;
 }
 
@@ -761,7 +735,6 @@ ScalarFunction IlikeEscapeFun::GetFunction() {
 	    .AddParameter("like_specifier", LogicalType::VARCHAR)
 	    .AddParameter("escape_character", LogicalType::VARCHAR);
 	ilike_escape.SetCollationHandling(FunctionCollationHandling::PUSH_COMBINABLE_COLLATIONS);
-	ilike_escape.SetFallible();
 	return ilike_escape;
 }
 
@@ -772,7 +745,6 @@ ScalarFunction NotIlikeEscapeFun::GetFunction() {
 	    .AddParameter("like_specifier", LogicalType::VARCHAR)
 	    .AddParameter("escape_character", LogicalType::VARCHAR);
 	not_ilike_escape.SetCollationHandling(FunctionCollationHandling::PUSH_COMBINABLE_COLLATIONS);
-	not_ilike_escape.SetFallible();
 	return not_ilike_escape;
 }
 ScalarFunction LikeEscapeFun::GetFunction() {
@@ -782,7 +754,6 @@ ScalarFunction LikeEscapeFun::GetFunction() {
 	    .AddParameter("like_specifier", LogicalType::VARCHAR)
 	    .AddParameter("escape_character", LogicalType::VARCHAR);
 	like_escape.SetCollationHandling(FunctionCollationHandling::PUSH_COMBINABLE_COLLATIONS);
-	like_escape.SetFallible();
 	return like_escape;
 }
 

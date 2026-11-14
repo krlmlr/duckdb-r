@@ -5,7 +5,7 @@ namespace duckdb {
 
 class HighlightTokenizerBehavior : public TokenizerBehavior {
 public:
-	explicit HighlightTokenizerBehavior(const string &sql);
+	HighlightTokenizerBehavior(const string &sql, vector<MatcherToken> &tokens);
 	~HighlightTokenizerBehavior() override = default;
 
 	void PushToken(idx_t start, idx_t end, TokenType type, bool unterminated) override;

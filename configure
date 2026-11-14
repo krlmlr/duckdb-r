@@ -5,19 +5,7 @@ set -ex
 # Setup parallel compilation if MAKEFLAGS not already set
 cd "$(dirname "$0")"
 if [ -z "${MAKEFLAGS}" ]; then
-  makeflags_value=$(Rscript tools/setup-makeflags.R 2>/dev/null || echo "")
-  # Rscript reports a file it cannot open on *stdout* and exits 2, so neither
-  # the redirect nor the `||` keeps that message out of the capture. Accept
-  # only the -jN the helper produces, so anything else leaves MAKEFLAGS unset.
-  case "${makeflags_value}" in
-    -j*)
-      makeflags_digits="${makeflags_value#-j}"
-      case "${makeflags_digits}" in
-        '' | *[!0-9]*) makeflags_value="" ;;
-      esac
-      ;;
-    *) makeflags_value="" ;;
-  esac
+  makeflags_value=$(Rscript scripts/setup-makeflags.R 2>/dev/null || echo "")
   if [ -n "${makeflags_value}" ]; then
     export MAKEFLAGS="${makeflags_value}"
     echo "Setting MAKEFLAGS=${makeflags_value} for parallel compilation"
@@ -65,8 +53,8 @@ rm -f Makevars.system-lib
 #     checking that the DUCKDB_SOURCE_ID string in the vendored
 #     pragma_version.cpp is embedded in libduckdb.{so,dylib}.
 #   * Under `R CMD check`, the package is first tarballed by `R CMD
-#     build`, which runs cleanup and packs src/duckdb/ into
-#     src/duckdb.tar. We extract that tar below so the headers
+#     build`, which runs cleanup and compresses src/duckdb/ into
+#     src/duckdb.tar.xz. We extract that tarball below so the headers
 #     are available for compilation of the glue code.
 if [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "1" ] || [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "true" ]; then
   uname_s=$(uname -s)
@@ -81,16 +69,12 @@ if [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "1" ] || [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "t
 
   # Resolve libduckdb directory.
   # Precedence: DUCKDB_R_LIB_DIR -> pkg-config duckdb -> standard system paths.
-  # ${HOME}/.local/lib leads the fallbacks because it is where
-  # scripts/install-libduckdb.sh writes by default, so it is the copy most
-  # likely to match the vendored commit; a system one that does not match is
-  # rejected by the check below either way.
   duckdb_lib_dir="${DUCKDB_R_LIB_DIR}"
   if [ -z "${duckdb_lib_dir}" ] && command -v pkg-config >/dev/null 2>&1 && pkg-config --exists duckdb 2>/dev/null; then
     duckdb_lib_dir=$(pkg-config --variable=libdir duckdb 2>/dev/null)
   fi
   if [ -z "${duckdb_lib_dir}" ]; then
-    for candidate in "${HOME:-/nonexistent}/.local/lib" /usr/local/lib /opt/homebrew/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/lib; do
+    for candidate in /usr/local/lib /opt/homebrew/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/lib; do
       if [ -f "${candidate}/libduckdb.${lib_ext}" ]; then
         duckdb_lib_dir="${candidate}"
         break
@@ -105,12 +89,17 @@ if [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "1" ] || [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "t
   fi
   echo "Using system libduckdb from: ${duckdb_lib_dir}/libduckdb.${lib_ext}"
 
-  # Extract the vendored headers if R CMD build has packed them.
+  # Extract the vendored headers if R CMD build has compressed them.
   # Must happen before the version check, which reads from the vendored
   # pragma_version.cpp, and before the glue compile, which resolves
   # #include "duckdb/..." under -Iduckdb/src/include.
-  if [ -f duckdb.tar ]; then
-    tar xf duckdb.tar
+  if [ -f duckdb.tar.xz ]; then
+    if command -v gtar >/dev/null 2>&1 && command -v xz >/dev/null 2>&1; then
+      TAR=gtar
+    else
+      TAR=tar
+    fi
+    $TAR xJf duckdb.tar.xz
   fi
 
   # Hard-fail unless the system libduckdb was built from the same upstream
@@ -123,10 +112,6 @@ if [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "1" ] || [ "${DUCKDB_R_USE_SYSTEM_LIB}" = "t
   # commit hash to 10 chars in the binary (CMake SUBSTRING 0 10), while the
   # vendored pragma_version.cpp sometimes carries 11. Both abbreviate the
   # same SHA, so we compare on the shared 10-char prefix.
-  #
-  # Newly vendored trees carry 10, because the vendor scripts pin core.abbrev
-  # in the upstream clone; the prefix comparison stays for the trees vendored
-  # before that, which a branch keeps until its next vendor commit.
   version_file=duckdb/src/function/table/version/pragma_version.cpp
   if [ -f "${version_file}" ]; then
     vendored_version=$(sed -n 's/^#define DUCKDB_VERSION "\(.*\)"$/\1/p' "${version_file}")
@@ -193,9 +178,15 @@ else
   cp include/to-tar.mk Makevars.duckdb
 fi
 
-# The cleanup script packs the duckdb sources into an uncompressed tar,
-# see handbook/build/source-build/README.md.
+# The duckdb sources are xz-compressed in the tarball to keep it under 5000000 bytes.
+# This happens in the cleanup script.
 
-if [ -f duckdb.tar ]; then
-  tar xf duckdb.tar
+if [ -f duckdb.tar.xz ]; then
+  # Use gtar if available (e.g., on macOS via Homebrew), otherwise tar.
+  if command -v gtar >/dev/null 2>&1 && command -v xz >/dev/null 2>&1; then
+    TAR=gtar
+  else
+    TAR=tar
+  fi
+  $TAR xJf duckdb.tar.xz
 fi

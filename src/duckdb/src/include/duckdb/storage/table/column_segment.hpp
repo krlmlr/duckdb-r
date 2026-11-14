@@ -55,7 +55,7 @@ public:
 	                                                         DataPointer &data_pointer);
 	static unique_ptr<ColumnSegment> CreateTransientSegment(DatabaseInstance &db, const CompressionFunction &function,
 	                                                        const LogicalType &type, const idx_t segment_size,
-	                                                        BlockManager &block_manager, bool zero_initialize = false);
+	                                                        BlockManager &block_manager);
 
 public:
 	void InitializePrefetch(PrefetchState &prefetch_state, ColumnScanState &scan_state);
@@ -63,8 +63,7 @@ public:
 	//! Scan one vector from this segment
 	void Scan(ColumnScanState &state, idx_t scan_count, Vector &result, idx_t result_offset, ScanVectorType scan_type);
 	//! Scan a subset of a vector (defined by the selection vector)
-	void Select(ColumnScanState &state, idx_t scan_count, Vector &result, const SelectionVector &sel, idx_t sel_count,
-	            idx_t result_offset, ScanVectorType scan_type);
+	void Select(ColumnScanState &state, idx_t scan_count, Vector &result, const SelectionVector &sel, idx_t sel_count);
 	//! Scan one vector while applying a filter to the vector, returning only the matching elements
 	void Filter(ColumnScanState &state, idx_t scan_count, Vector &result, SelectionVector &sel, idx_t &sel_count,
 	            const TableFilter &filter, TableFilterState &filter_state);
@@ -103,8 +102,6 @@ public:
 	//! Updates pointers to refer to the given block and offset. This is only used
 	//! when sharing a block among segments. This is invoked only AFTER the block is written.
 	void MarkAsPersistent(shared_ptr<BlockHandle> block, uint32_t offset_in_block);
-	//! Read the copy in the partial block from now on, so the segment's own buffer can be freed.
-	void UsePackedCopy(shared_ptr<BlockHandle> block, uint32_t offset_in_block);
 	void SetBlock(shared_ptr<BlockHandle> block, uint32_t offset);
 	//! Gets a data pointer from a persistent column segment
 	DataPointer GetDataPointer(idx_t row_start);

@@ -123,12 +123,15 @@ struct BitStringAggOperation {
 		if (min > max) {
 			throw InvalidInputException("Invalid explicit bitstring range: Minimum (%d) > maximum (%d)", min, max);
 		}
-		// the difference of two (at most 64-bit) values does not always fit in their own type, but it fits in a hugeint
-		const auto range = Hugeint::Convert(max) - Hugeint::Convert(min);
-		if (range >= Hugeint::Convert(NumericLimits<idx_t>::Maximum())) {
+		INPUT_TYPE result;
+		if (!TrySubtractOperator::Operation(max, min, result)) {
 			return NumericLimits<idx_t>::Maximum();
 		}
-		return Hugeint::Cast<idx_t>(range) + 1;
+		auto val = NumericCast<idx_t>(result);
+		if (val == NumericLimits<idx_t>::Maximum()) {
+			return val;
+		}
+		return val + 1;
 	}
 
 	template <class INPUT_TYPE, class STATE>
@@ -248,7 +251,6 @@ template <class TYPE>
 void BindBitString(AggregateFunctionSet &bitstring_agg, const LogicalTypeId &type) {
 	auto function = AggregateFunction::UnaryAggregate<BitAggState<TYPE>, TYPE, string_t, BitStringAggOperation>(
 	    type, LogicalType::BIT);
-	function.SetFallible(); // out-of-range inputs and invalid or missing min/max bounds throw at runtime
 	function.SetBindCallback(BindBitstringAgg); // create new a 'BitstringAggBindData'
 	function.SetSerializeCallback(BitstringAggBindData::Serialize);
 	function.SetDeserializeCallback(BitstringAggBindData::Deserialize);

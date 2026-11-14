@@ -17,18 +17,12 @@ an unbounded scan would flood the queue,
 and a run that quietly built nothing is indistinguishable from one that had
 nothing left to build — so a ref move half-finished stays visible instead of
 passing for a green run while every commit pushed after it goes unjudged.
-An rc strand, `<S>-rc-dev`, has no green and is bounded by its own seed instead,
-the newest `chore: Add fifth version component` on it
-([`series-rc`](/.claude/skills/series-rc/SKILL.md)),
-and one with no seed plans nothing.
-Other branches without a green sibling fall back to first-parent history since `SINCE`.
+Branches without a green sibling fall back to first-parent history since `SINCE`.
 
 That fallback is the one path that can reach past the store's retention window
 ([`store/`](/handbook/operations/ci/per-commit/store/README.md#retention-is-one-window)):
-`SINCE` defaults to a fixed date, while records are dropped after 180 days,
-so a commit older than the window reads as undecided and is replanned —
-and because `SINCE` is fixed and the window is not,
-the gap between them widens with every month that passes.
+`SINCE` defaults to a fixed date months back, while records are dropped after 30
+days, so a commit older than the window reads as undecided and is replanned.
 A series branch never sees it — `<S>-green` is far newer than the window — and
 the cost where it does bite is a rebuild, never a wrong verdict.
 Narrow `SINCE` on a branch with no green sibling if the rebuild is not wanted.
@@ -66,7 +60,7 @@ The remaining selection details:
   A store that cannot be read stops the plan rather than reporting nothing
   decided, which would replan the whole range.
 * A `retry-<S>-dev` branch — the series' own branch name with a prefix, see
-  [`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md) — replans **its tip**
+  [`series-loop.md`](/.claude/skills/series-loop.md) — replans **its tip**
   even when that commit already carries a verdict,
   so one commit can be judged again on its own SHA
   instead of being amended and taking its descendants with it.
@@ -98,13 +92,3 @@ The `pending` status is a **display** artifact:
 it tells a human looking at the commit list that something is happening.
 `each-shard.sh` treats it as undecided,
 because it is the state a killed leg leaves behind.
-
-The backstop is the one writer that reads statuses at all,
-and it honours the same rule:
-[`scripts/rcc-logs.sh`](/scripts/rcc-logs.sh) reconstructs a record
-only from a status that is a verdict — `success`, `failure` or `error` —
-and leaves a commit whose status is still `pending` undecided.
-Recording it would be durable,
-and a durable `pending` is the one state nothing can leave:
-selection reads presence, so the planner would skip the commit for good,
-while `series-check.sh` read the state and waited for it for good.

@@ -14,7 +14,6 @@
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
@@ -39,17 +38,6 @@ static unique_ptr<Expression> CreatePredicateFromConditions(const vector<JoinCon
 		}
 	}
 	return predicate;
-}
-
-//! PhysicalHashAggregate requires that the arguments to aggregate functions are bound references.
-//! Binding an aggregate can add casts or collations to the arguments, which then no longer are.
-static bool HasOnlyReferenceChildren(const Expression &aggregate) {
-	for (auto &child : aggregate.Cast<BoundAggregateExpression>().GetChildren()) {
-		if (child->GetExpressionClass() != ExpressionClass::BOUND_REF) {
-			return false;
-		}
-	}
-	return true;
 }
 
 optional_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op,
@@ -156,7 +144,6 @@ optional_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalCo
 		case ExpressionType::COMPARE_EQUAL:
 		case ExpressionType::COMPARE_NOTEQUAL:
 		case ExpressionType::COMPARE_DISTINCT_FROM:
-		case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
 			break;
 		default:
 			//	Unsupported NLJ comparison
@@ -223,9 +210,6 @@ optional_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalCo
 		    GetBuiltinAggregateFunction(context, FirstFun::Name, {col_type})->Bind(context, std::move(aggr_children));
 
 		D_ASSERT(col_type == aggr_expr->GetReturnType());
-		if (!HasOnlyReferenceChildren(*aggr_expr)) {
-			return nullptr;
-		}
 		aggregates.emplace_back(std::move(aggr_expr));
 	}
 
@@ -256,9 +240,6 @@ optional_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalCo
 		auto aggr_expr = function_binder.BindAggregateFunction(bound_function, std::move(aggr_children), nullptr,
 		                                                       AggregateType::NON_DISTINCT);
 		D_ASSERT(col_type == aggr_expr->GetReturnType());
-		if (!HasOnlyReferenceChildren(*aggr_expr)) {
-			return nullptr;
-		}
 		aggregates.emplace_back(std::move(aggr_expr));
 	}
 
@@ -341,16 +322,6 @@ static idx_t ValidateAsOfConditions(LogicalComparisonJoin &op, vector<idx_t> &eq
 }
 
 PhysicalOperator &PhysicalPlanGenerator::PlanAsOfJoin(LogicalComparisonJoin &op) {
-#ifdef D_ASSERT_IS_ENABLED
-	// The sorted ASOF operator emits the full left payload in child order (see column_lifetime_analyzer.cpp),
-	// so the only supported left projection maps are empty or full-width identity.
-	if (op.join_type != JoinType::MARK && !op.left_projection_map.empty()) {
-		D_ASSERT(op.left_projection_map.size() == op.children[0]->GetColumnBindings().size());
-		for (idx_t i = 0; i < op.left_projection_map.size(); i++) {
-			D_ASSERT(op.left_projection_map[i].GetIndex() == i);
-		}
-	}
-#endif
 	// If we have a predicate and its a "simple" join, then we can just plan a regular join
 	switch (op.join_type) {
 	case JoinType::SEMI:
@@ -388,11 +359,6 @@ PhysicalOperator &PhysicalPlanGenerator::PlanAsOfJoin(LogicalComparisonJoin &op)
 			auto result = PlanAsOfLoopJoin(op, left, right, join_cardinality);
 			if (result) {
 				return *result;
-			}
-			if (has_predicate) {
-				//	PhysicalAsOfJoin only evaluates the comparisons
-				throw NotImplementedException("Unsupported ASOF JOIN: the join predicate cannot be evaluated together "
-				                              "with these join conditions");
 			}
 		}
 

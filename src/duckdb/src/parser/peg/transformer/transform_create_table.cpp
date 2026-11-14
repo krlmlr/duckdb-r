@@ -110,22 +110,9 @@ PEGTransformerFactory::TransformCreateTableAs(PEGTransformer &transformer, optio
 	}
 	result.select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(statement));
 	if (with_data && *with_data) {
-		// WITH NO DATA: limit the query to zero rows - an existing LIMIT is replaced
-		auto &modifiers = result.select_statement->node->modifiers;
-		optional_ptr<LimitModifier> existing_limit;
-		for (auto &modifier : modifiers) {
-			if (modifier->type == ResultModifierType::LIMIT_MODIFIER) {
-				existing_limit = modifier->Cast<LimitModifier>();
-			}
-		}
-		if (existing_limit) {
-			existing_limit->limit = ConstantExpression::Integer(0);
-			existing_limit->offset = nullptr;
-		} else {
-			auto limit_modifier = make_uniq<LimitModifier>();
-			limit_modifier->limit = ConstantExpression::Integer(0);
-			modifiers.push_back(std::move(limit_modifier));
-		}
+		auto limit_modifier = make_uniq<LimitModifier>();
+		limit_modifier->limit = ConstantExpression::Integer(0);
+		result.select_statement->node->modifiers.push_back(std::move(limit_modifier));
 	}
 	return result;
 }

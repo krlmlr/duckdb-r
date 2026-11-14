@@ -11,9 +11,7 @@ bool EmptyTableRef::Equals(const TableRef &other) const {
 }
 
 unique_ptr<TableRef> EmptyTableRef::Copy() {
-	auto copy = make_uniq<EmptyTableRef>();
-	CopyProperties(*copy);
-	return std::move(copy);
+	return make_uniq<EmptyTableRef>();
 }
 
 } // namespace duckdb
