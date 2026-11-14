@@ -30,16 +30,6 @@ if [ "$upstream_basedir" != "$upstream_dir" ]; then
   git clone "$upstream_basedir" "$upstream_dir"
 fi
 
-# Make the vendored tree depend on the upstream commit and nothing else.
-# `DUCKDB_SOURCE_ID` in pragma_version.cpp comes from upstream's
-# `git describe --tags --long`, run inside this clone, and git auto-sizes that
-# abbreviation from the number of objects the repository holds -- so the same
-# commit vendored twice, from clones that have grown apart, writes two different
-# strings and two different trees. Ten is DuckDB's own length: its CMake
-# truncates the id to ten characters in the built library, which is what
-# ./configure's commit-match guard compares against.
-git -C "$upstream_dir" config core.abbrev 10
-
 if [ -n "$(git status --porcelain)" ]; then
   echo "Error: working directory not clean"
   exit 1
@@ -55,7 +45,7 @@ fi
 # changelog nobody chose. The same rule, and the same bound, as vendored_sha()
 # in scripts/series-advance.sh; scripts/vendor-one.sh has its own copy.
 base_scan_depth="${BASE_SCAN_DEPTH:-20}"
-subjects=$(git log -n "${base_scan_depth}" --format="%s" -- ${vendor_dir} | tee >(cat >&2))
+subjects=$(git log -n "${base_scan_depth}" --format="%s" -- ${vendor_dir} | tee /dev/stderr)
 base=$(sed -nr '/^.*'${repo_org}.${repo_name}'@([0-9a-f]+)( .*)?$/{s//\1/;p;}' <<<"$subjects" | head -n 1)
 if [ -z "$base" ]; then
   n=$(grep -c . <<<"$subjects" || true)
@@ -74,11 +64,8 @@ is_tag=
 for commit in $original; do
   echo "Importing commit $commit"
 
-  # The tree is not deleted here: rconfigure.py moves it aside itself and puts
-  # back the inode of every regenerated file that did not change, so a file
-  # whose content is the same keeps its stat cache entry and every later git
-  # command over ~3550 files stays cheap. Files upstream dropped still go -- they
-  # are in the tree that was moved aside, and never come back from it.
+  rm -rf ${vendor_dir}
+
   echo "R: configure"
   DUCKDB_PATH="$upstream_dir" python3 scripts/rconfigure.py
 
@@ -87,7 +74,6 @@ for commit in $original; do
   # stdin is a terminal.
   # scripts/vendor-one.sh has the same three-way split and the same exit 4.
   for f in patch/*.patch; do
-    [ -e "$f" ] || continue # an empty stack leaves the glob unmatched
     if patch -i "$f" -p1 --forward --dry-run; then
       patch -i "$f" -p1 --forward --no-backup-if-mismatch
     elif patch -i "$f" -p1 --reverse --forward --dry-run; then
@@ -149,7 +135,7 @@ git add .
   git -C "$upstream_dir" log -1 --format="Date: %ai" "${commit}"
   echo
   git -C "$upstream_dir" log --first-parent --format="%s" "${base}".."${commit}" |
-    tee >(cat >&2) |
+    tee /dev/stderr |
     sed -r 's%#([0-9]+)%https://redirect.github.com/'${repo_org}/${repo_name}'/pull/\1%g'
 ) | git commit --file /dev/stdin
 

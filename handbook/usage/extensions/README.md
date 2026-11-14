@@ -15,17 +15,17 @@ and how to get more.
   and none is coming —
   upstream declined a second distribution channel
   ([#1582](https://github.com/duckdb/duckdb-r/issues/1582)).
-* **Autoload and autoinstall are both on.**
-  The engine defaults `autoload_known_extensions` and `autoinstall_known_extensions` to true
-  ([`settings.hpp`](/src/duckdb/src/include/duckdb/main/settings.hpp)),
-  and `duckdb()` keeps both unless extensions are disallowed for the driver, which turns both off
-  ([`R/Driver.R`](/R/Driver.R)):
-  a known extension that a query needs is downloaded on first use and loads by itself.
-  A query can need one that is not bundled without naming it:
-  since DuckDB 2.0, creating a macro around `ST_AsGeoJSON()` needs `json`.
-  `SET autoinstall_known_extensions = false`, or that key in the `config` of `duckdb()`, stops the downloads,
-  and then only an extension installed with `INSTALL` loads on first use.
-  `-DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT` in [`src/Makevars.in`](/src/Makevars.in) is inert: no engine source reads it.
+* **Autoload is on, autoinstall is off.**
+  The build flips `autoload_known_extensions`
+  (`-DDUCKDB_EXTENSION_AUTOLOAD_DEFAULT`)
+  but leaves `autoinstall_known_extensions` false:
+  an *installed* extension loads on first use,
+  but nothing is downloaded without being asked
+  ([#2306](https://github.com/duckdb/duckdb-r/issues/2306)) —
+  the CLI behaves differently because it flips both.
+  `INSTALL icu` once per DuckDB version and platform,
+  and ICU autoloads everywhere from then on;
+  `SET autoinstall_known_extensions = true` restores CLI behavior.
 * **Where installed extensions live**, and how to move or share
   the store, is [`storage/`](/handbook/usage/storage/README.md).
 * **Whether loading is allowed at all** is decided per driver:
@@ -35,52 +35,32 @@ and how to get more.
   `?duckdb`, section "DuckDB extensions on Linux",
   owns that decision tree
   ([#1107](https://github.com/duckdb/duckdb-r/issues/1107)).
-* **What an extension's values become in R** is [`types/`](/handbook/usage/types/README.md)'s, geometry's included.
+* **What an extension's values become in R** —
+  spatial's geometry, ICU's timestamps —
+  is [`types/`](/handbook/usage/types/README.md)'s.
 * **Community extensions come from a second repository:**
   `INSTALL <name> FROM community` fetches from
   `community-extensions.duckdb.org`,
   whose build matrix and platform coverage are its own —
   what one repository carries says nothing about the other.
 * **Windows** fetches extensions for the `windows_amd64_mingw` platform,
-  and that directory is a per-extension subset of the MSVC
-  `windows_amd64` one beside it.
-  An extension built in duckdb/duckdb's own tree opts out through the
-  `NOT MINGW` guards in
-  [`.github/config/extensions`](https://github.com/duckdb/duckdb/tree/main/.github/config/extensions);
-  one built in a repository of its own decides there instead,
-  so no single list covers both — the repository does.
-  A `HEAD` request for
-  `extensions.duckdb.org/<version>/<platform>/<name>.duckdb_extension.gz`
-  answers for one name, on one platform, at one version,
-  and is what the troubleshooting link in the download error looks up.
-  Probe it rather than remember it:
-  the answer moves in both directions,
-  and `spatial` published for mingw at 1.3.2, not at 1.4.0,
-  and again from 1.4.1 on
-  ([#100](https://github.com/duckdb/duckdb-r/issues/100)).
-* **Every mingw gap today is an extension built outside the engine's
-  tree** — which on its own predicts nothing,
-  because `spatial` and `sqlite_scanner` are built that way and publish.
-  The 2026-08 probe at 1.5.5 finds `aws`, `azure`, `iceberg`,
-  `motherduck`, `mysql_scanner` and `postgres_scanner` absent,
-  and every other name probed present
-  ([#100](https://github.com/duckdb/duckdb-r/issues/100)).
-  A missing build is asked for at the extension's own repository —
-  [`duckdb/duckdb-postgres`](https://github.com/duckdb/duckdb-postgres)
-  for `postgres_scanner`
-  ([#1581](https://github.com/duckdb/duckdb-r/issues/1581),
-  [#2503](https://github.com/duckdb/duckdb-r/issues/2503)) —
-  where such a pull request is
-  [accepted](https://github.com/duckdb/duckdb-r/issues/2425#issuecomment-5182746870);
-  `motherduck` has no public repository to ask at.
+  which DuckDB has distributed since 1.4.1 —
+  as a per-extension subset:
+  a core extension can opt out of the mingw flavor upstream,
+  and the `NOT MINGW` guards in duckdb/duckdb's
+  [`.github/config/extensions`](https://github.com/duckdb/duckdb/tree/main/.github/config/extensions)
+  are the list.
+  As of 2026-08, `INSTALL postgres` is a 404
+  where `INSTALL spatial` works
+  ([#1581](https://github.com/duckdb/duckdb-r/issues/1581));
+  the troubleshooting link in the download error
+  looks up the failing extension, version, and platform.
   The standing gaps are the toolchain epic
   ([#2234](https://github.com/duckdb/duckdb-r/issues/2234),
   upstream
-  [duckdb/duckdb#24431](https://github.com/duckdb/duckdb/issues/24431)).
-  Reaching one of these extensions from R meanwhile means leaving this
-  package's engine for a DuckDB ADBC driver built with the toolchain the
-  platform's own DuckDB uses
-  ([`integrations/`](/handbook/usage/integrations/README.md)).
+  [duckdb/duckdb#24431](https://github.com/duckdb/duckdb/issues/24431)),
+  and the fix for a missing flavor is an upstream pull request per extension
+  ([#2425, maintainer's offer](https://github.com/duckdb/duckdb-r/issues/2425#issuecomment-5182746870)).
 * **Some platforms are not covered**, and which ones is DuckDB's to say
   and does change:
   [Extension Distribution](https://duckdb.org/docs/stable/extensions/extension_distribution)

@@ -4,7 +4,7 @@
 #
 # The claims in handbook/operations/ci/per-commit/store/README.md are
 # measurements, so they should be reproducible: this is what produced them.
-# Six things are checked.
+# Seven things are checked.
 #
 #   1. N concurrent writers publishing at once lose nothing. Records land at
 #      disjoint paths, so the only contention is on the ref, and the loser
@@ -14,15 +14,19 @@
 #      affordable at all. This is the one that regresses silently: a stray
 #      `git write-tree` without `--missing-ok` backfills every blob on the branch.
 #   3. A newer verdict for a commit that already has one overwrites it -- which is
-#      what a retry needs (.claude/skills/series-loop/SKILL.md), and what a re-publish
+#      what a retry needs (.claude/skills/series-loop.md), and what a re-publish
 #      of the *same* verdict must not cost anything -- and a verdict that stops
 #      being a failure takes its log with it.
-#   4. scripts/rcc-consolidate.sh is a no-op as a dry run, drops records and logs
-#      past their retention and keeps a record just inside it, squashes to two
-#      commits, inherits its empty root on a second pass, and refuses to push over
-#      a writer that landed in between.
-#   5. It survives every shape the branch can legitimately have.
-#   6. scripts/rcc-cutover.sh turns an `rcc`-shaped tree into a two-commit `rcc2`:
+#   4. A fan-in whose run is *older* than what the branch already records leaves
+#      it alone. Legs publish within seconds while a run takes hours, so an
+#      earlier run's fan-in can outlive a retry that corrected it; replaying its
+#      artifact must not put the overturned verdict back. A newer run still
+#      replaces, and one unreadable record does not abort the whole fan-in.
+#   5. scripts/rcc-consolidate.sh is a no-op as a dry run, drops records and logs
+#      past their retention, squashes to two commits, inherits its empty root on a
+#      second pass, and refuses to push over a writer that landed in between.
+#   6. It survives every shape the branch can legitimately have.
+#   7. scripts/rcc-cutover.sh turns an `rcc`-shaped tree into a two-commit `rcc2`:
 #      the aggregate's records become parts, the flat logs move under the
 #      fan-out, an attributable legacy log is recovered, and everything past the
 #      window is gone.
@@ -57,14 +61,6 @@ fail() { echo "  FAIL  $*"; failures=$(( failures + 1 )); }
 
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ancient="2020-01-01T00:00:00Z"
-
-# UTC timestamp <n> hours ago. Spelled out here rather than taken from
-# rcc_cutoff, so a fixture dated against the window does not move with the code
-# under test. GNU and BSD `date` spell it differently.
-hours_ago() { # <n>
-  date -u -d "$1 hours ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-    || date -u -v "-$1H" +%Y-%m-%dT%H:%M:%SZ
-}
 
 sha_for() { # <n> -> a 40-hex pseudo-sha
   printf '%040x' "$(( $1 * 2654435761 & 0xffffffffffff ))"
@@ -117,7 +113,7 @@ export GITHUB_RUN_ID=0
 # ---------------------------------------------------------------- the seed ---
 # An `rcc`-shaped source tree, which check 7 cuts over and everything before it
 # uses only for its bulk. Seeded from the real branch when asked, because the
-# clone-size check is only meaningful against real collected logs.
+# clone-size check is only meaningful against real harvested logs.
 echo "== 0. seeding the old-layout rcc branch =="
 if [ -n "${SEED_FROM}" ]; then
   git -C "${repo}" push -q "${work}/remote.git" "${SEED_FROM}:refs/heads/rcc"
@@ -251,28 +247,97 @@ on_branch "logs2.d/${retry_sha:0:2}/${retry_sha}.log" \
   || pass "the leg dropped the log its own new verdict overturned"
 
 echo
-echo "== 4. consolidation =="
+echo "== 4. the fan-in respects what the branch already says =="
+export RUNNER_TEMP="${work}/runner-temp"
+mkdir -p "${RUNNER_TEMP}"
+
+harvest() { # <artifacts> <stage> <run-id> -> runs the fan-in and publishes it
+  rm -rf "$2"
+  ARTIFACTS="$1" OUT_DIR="$2" RUN_ID="$3" GH_TOKEN=x \
+    RCC_READ_DIR="${work}/harvest-read" "${here}/each-harvest.sh" || return 1
+  RCC_DIR="${work}/harvest-push" "${here}/rcc-publish.sh" "fan-in: run $3" "$2"
+}
+
+# The branch carries run 2's success (a retry, which corrected run 1).
+stale_sha="$(sha_for 556001)"
+publish "${work}/w1" "${stale_sha}" success "" "${now}" 2 > /dev/null
+
+# Run 1's artifact, decided hours earlier, is what its slow fan-in replays.
+mkdir -p "${work}/art1/each-logs-1/parts"
+record_for "${stale_sha}" failure "${now}" 1 \
+  > "${work}/art1/each-logs-1/parts/${stale_sha}.ndjson"
+printf 'the overturned failure\n' > "${work}/art1/each-logs-1/${stale_sha}.log"
+printf '{"commit":"%s","state":"failure","shard":1,"duration_seconds":1,"exit_code":1}\n' \
+  "${stale_sha}" > "${work}/art1/each-logs-1/index.ndjson"
+
+harvest "${work}/art1" "${work}/stage1" 1 > "${work}/harvest1.log" 2>&1
+after="$(git -C "${work}/remote.git" cat-file -p \
+  "rcc2:runs2.d/${stale_sha:0:2}/${stale_sha}.ndjson" | jq -r '.status.state')"
+[ "${after}" = "success" ] \
+  && pass "the newer run's verdict survived the older fan-in" \
+  || fail "an older fan-in overwrote a newer verdict with ${after}"
+on_branch "logs2.d/${stale_sha:0:2}/${stale_sha}.log" \
+  && fail "the overturned failure log was restored" \
+  || pass "and it did not resurrect the overturned log"
+grep -q 'newer than this run' "${work}/harvest1.log" \
+  && pass "the fan-in said why it kept the record" \
+  || fail "the fan-in was silent about superseding"
+
+# The reverse direction must still work: a *newer* run does replace, and takes
+# the stale log with it.
+publish "${work}/w1" "${stale_sha}" failure "${work}/retry-log" "${now}" 2 > /dev/null
+mkdir -p "${work}/art9/each-logs-1/parts"
+record_for "${stale_sha}" success "${now}" 9 \
+  > "${work}/art9/each-logs-1/parts/${stale_sha}.ndjson"
+printf '{"commit":"%s","state":"success","shard":1,"duration_seconds":1,"exit_code":0}\n' \
+  "${stale_sha}" > "${work}/art9/each-logs-1/index.ndjson"
+harvest "${work}/art9" "${work}/stage9" 9 > "${work}/harvest9.log" 2>&1
+after="$(git -C "${work}/remote.git" cat-file -p \
+  "rcc2:runs2.d/${stale_sha:0:2}/${stale_sha}.ndjson" | jq -r '.status.state')"
+if [ "${after}" = "success" ] && ! on_branch "logs2.d/${stale_sha:0:2}/${stale_sha}.log"; then
+  pass "a newer run replaces the record and drops the stale log"
+else
+  fail "a newer run failed to replace (state=${after})"
+fi
+
+# A malformed record on the branch must not take the whole run down with it.
+bad="ff$(sha_for 557001 | cut -c3-)"
+ok_sha="$(sha_for 557002)"
+mkdir -p "${work}/bad-stage/runs2.d/${bad:0:2}" "${work}/artbad/each-logs-1/parts"
+printf 'not json\n' > "${work}/bad-stage/runs2.d/${bad:0:2}/${bad}.ndjson"
+RCC_DIR="${work}/w1" "${here}/rcc-publish.sh" "a malformed record" \
+  "${work}/bad-stage" > /dev/null
+for c in "${bad}" "${ok_sha}"; do
+  record_for "${c}" success > "${work}/artbad/each-logs-1/parts/${c}.ndjson"
+  printf '{"commit":"%s","state":"success","shard":1,"duration_seconds":1,"exit_code":0}\n' \
+    "${c}" >> "${work}/artbad/each-logs-1/index.ndjson"
+done
+if harvest "${work}/artbad" "${work}/stagebad" 10 > "${work}/harvestbad.log" 2>&1 \
+   && on_branch "runs2.d/${ok_sha:0:2}/${ok_sha}.ndjson"; then
+  pass "one unreadable record does not abort the fan-in"
+else
+  fail "a malformed record aborted the whole fan-in (see ${work}/harvestbad.log)"
+fi
+
+echo
+echo "== 5. consolidation =="
 rm -rf "${work}/cons"
 git clone -q --single-branch --branch rcc2 "${work}/remote.git" "${work}/cons"
 git -C "${work}/cons" config user.name t
 git -C "${work}/cons" config user.email t@e
 
-# A record old enough to age out, with a log; a log whose commit has no record
-# at all; and a record twelve hours inside the window, which must survive. Dated
-# at the edge rather than today, so a window even a day short drops it.
+# A record old enough to age out, with a log; and a log whose commit has no
+# record at all.
 legacy_sha="$(sha_for 666001)"
 orphan_sha="$(sha_for 666002)"
-ok_sha="$(sha_for 666003)"
-mkdir -p "${work}/cons/runs2.d/${legacy_sha:0:2}" "${work}/cons/runs2.d/${ok_sha:0:2}" \
+mkdir -p "${work}/cons/runs2.d/${legacy_sha:0:2}" \
   "${work}/cons/logs2.d/${legacy_sha:0:2}" "${work}/cons/logs2.d/${orphan_sha:0:2}"
 record_for "${legacy_sha}" failure "${ancient}" 1 \
   > "${work}/cons/runs2.d/${legacy_sha:0:2}/${legacy_sha}.ndjson"
-record_for "${ok_sha}" success "$(hours_ago $(( ${RCC_RETENTION_DAYS:-180} * 24 - 12 )))" 1 \
-  > "${work}/cons/runs2.d/${ok_sha:0:2}/${ok_sha}.ndjson"
 printf 'an ancient log\n' > "${work}/cons/logs2.d/${legacy_sha:0:2}/${legacy_sha}.log"
 printf 'a log nothing records\n' > "${work}/cons/logs2.d/${orphan_sha:0:2}/${orphan_sha}.log"
 git -C "${work}/cons" add -A
-git -C "${work}/cons" commit -qm "an aged record, an orphaned log, and one just inside the window"
+git -C "${work}/cons" commit -qm "an aged record and an orphaned log"
 git -C "${work}/cons" push -q origin HEAD:rcc2
 
 before_state="$(git -C "${work}/cons" rev-parse HEAD:)"
@@ -350,7 +415,7 @@ else
 fi
 
 echo
-echo "== 5. consolidation survives every branch shape =="
+echo "== 6. consolidation survives every branch shape =="
 for shape in records-only logs-only empty; do
   d="${work}/shape-${shape}"
   rm -rf "${d}"
@@ -375,7 +440,7 @@ for shape in records-only logs-only empty; do
 done
 
 echo
-echo "== 6. the cutover =="
+echo "== 7. the cutover =="
 # Against a *second* remote, so the rcc2 built above stays where the checks left
 # it and the cutover's own refusal to overwrite is testable on its own terms.
 git init -q --bare "${work}/cut.git"

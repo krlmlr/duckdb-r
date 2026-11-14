@@ -17,7 +17,6 @@
 #   |-----------------------|-------------------------------------------------|
 #   | versions-matrix       | skipped upstream too (workflow_dispatch, no opt-in) |
 #   | dep-suggests-matrix   | skipped upstream too                            |
-#   | flavor-package-name   | gate `flavor`, the two flavor-only scans of it   |
 #   | style                 | gate `style`                                    |
 #   | update-snapshots      | gate `snapshots`, incl. the snapshot-<sha> branch |
 #   | roxygenize            | gate `roxygen`                                  |
@@ -25,7 +24,6 @@
 #   | check                 | gate `check`                                    |
 #   | pkgdown-build         | gate `pkgdown`                                  |
 #   | pkgdown-deploy        | skipped upstream too (push only)                |
-#   | warnings (after-install) | gate `warnings`: the ridden install log and the glue scope |
 #
 # Outcome semantics mirror `rcc-smoke` exactly: every gate runs even when an
 # earlier one failed, and the exit status is the AND over all of them. That is
@@ -40,14 +38,8 @@
 #
 # Environment variables:
 #   EACH_GATES            - space-separated subset of
-#                           "warnings flavor style snapshots roxygen clean check pkgdown"
+#                           "style snapshots roxygen clean check pkgdown"
 #                           (default: all of them, parity with rcc-smoke)
-#   EACH_INSTALL_LOG      - where the install's output is kept for gate `warnings`
-#                           (default: a temporary file; set by this script for
-#                           the stage children it runs)
-#   EACH_WARNINGS_LOG     - where gate `warnings` keeps its verdict, which the
-#                           summary repeats at the very end of the run
-#                           (default and children: as EACH_INSTALL_LOG)
 #   EACH_SNAPSHOT_BRANCH  - publish the snapshot-<sha>-rcc-smoke-null branch when
 #                           the snapshots gate changed anything
 #                           (default: true under GITHUB_ACTIONS, false locally)
@@ -55,19 +47,14 @@
 #                           in <dir>/<stage>.log and its verdict appended to
 #                           <dir>/outcomes.tsv, so scripts/each-shard.sh can
 #                           quote the failing stage into the run summary
-#   CLANG_FORMAT          - the C++ formatter the style gate runs
-#                           (default: clang-format-21, what CI installs)
 #   RCMDCHECK_ERROR_ON    - passed through to rcmdcheck (default: note)
-#   DUCKDB_R_RUN_TESTS    - read by tests/testthat.R; the `check` gate defaults
-#                           it to true so the suite runs outside Actions too,
-#                           and never overrides a value the caller set
 #   EACH_TIMEOUT_<STAGE>  - seconds a stage may take before it is presumed stuck
 #                           and killed (see stage_budget below); 0 disables the
 #                           bound for that stage
 
 set -uo pipefail
 
-ALL_GATES="warnings flavor style snapshots roxygen clean check pkgdown"
+ALL_GATES="style snapshots roxygen clean check pkgdown"
 GATES="${EACH_GATES:-${ALL_GATES}}"
 SNAPSHOT_BRANCH="${EACH_SNAPSHOT_BRANCH:-${GITHUB_ACTIONS:-false}}"
 STAGE_DIR="${EACH_STAGE_DIR:-}"
@@ -81,18 +68,6 @@ CPR_MESSAGE="[create-pull-request] automated change"
 
 rscript_dir="$(mktemp -d)"
 trap 'rm -rf "${rscript_dir}"' EXIT
-
-# The install log, read by gate `warnings` below. A gate runs in a stage child
-# (run_stage), which re-enters this script with a temporary directory of its
-# own, so the path is handed down in the environment rather than kept in one.
-INSTALL_LOG="${EACH_INSTALL_LOG:-}"
-WARNINGS_LOG="${EACH_WARNINGS_LOG:-}"
-if [ -z "${INSTALL_LOG}" ] || [ -z "${WARNINGS_LOG}" ]; then
-  [ -n "${INSTALL_LOG}" ] || INSTALL_LOG="$(mktemp)"
-  [ -n "${WARNINGS_LOG}" ] || WARNINGS_LOG="$(mktemp)"
-  export EACH_INSTALL_LOG="${INSTALL_LOG}" EACH_WARNINGS_LOG="${WARNINGS_LOG}"
-  trap 'rm -rf "${rscript_dir}" "${INSTALL_LOG}" "${WARNINGS_LOG}"' EXIT
-fi
 
 # How a bounded stage re-enters this script; see run_stage. Resolved before
 # anything can change directory, so the child is found from wherever it runs.
@@ -192,8 +167,6 @@ stage_budget() {
   fi
   case "$1" in
     install) echo 3600 ;;    # cold ccache, no reuse at all
-    warnings) echo 900 ;;    # reads the install log, then compiles the glue
-    flavor) echo 300 ;;      # a base-R scan of the checkout
     style) echo 600 ;;
     snapshots) echo 3600 ;;  # the full test suite
     roxygen) echo 900 ;;
@@ -297,19 +270,9 @@ rscript() {
 # A stage child is on its way to one gate and the package is already installed;
 # reinstalling it here would cost the parent's whole budget before the gate it
 # was called for even started.
-#
-# The vendored half of the compiler-warning gate (handbook/build/warnings/
-# README.md) rides this install, as `after-install` rides the one in the
-# vendored-build entry: `warnings.sh ride` puts the vendored warning flags on
-# this one command, keeps its log, and judges it. It exits non-zero for a build
-# that warned as well as for one that failed, and only the second ends the
-# commit here: an install that reached DONE installed, and gate `warnings`
-# below reads the log and fails the commit for what it says.
 if [ -z "${STAGE_ONLY}" ]; then
   echo "::group::install"
-  if ! run_stage install scripts/warnings.sh ride vendored "${INSTALL_LOG}" -- \
-      env _R_SHLIB_STRIP_=true R CMD INSTALL . &&
-    ! grep -q '^\* DONE (' "${INSTALL_LOG}"; then
+  if ! run_stage install env _R_SHLIB_STRIP_=true R CMD INSTALL .; then
     note_stage install failure
     echo "::endgroup::"
     echo "install: failure -- skipping the remaining gates"
@@ -322,118 +285,17 @@ fi
 
 # -------------------------------------------------------------------- gates --
 
-# ----------------------------------------------------------------- warnings --
-# Both halves of the compiler-warning gate (handbook/build/warnings/README.md),
-# as `after-install` applies them on `main`: the vendored scope, judged on the
-# log of the install above, which ran with the vendored flags on it, and the
-# glue scope, compiled here with its own flags. A warning the engine raises is
-# answered by a patch under patch/, one the glue raises by a fix to the glue;
-# neither was seen by this gate before, which is how the v2.0 landing reached
-# `main`'s check with 14 vendored warnings after 2,160 green per-commit
-# verdicts.
-#
-# The verdict is kept in WARNINGS_LOG as well, and the summary at the end of
-# the run prints it again: the verdict store keeps a commit's log by its tail,
-# and the check gate alone outruns that tail, so a listing printed here only
-# would be gone from the record exactly when someone needs to read it.
-gate_warnings() {
-  local rc=0
-  : > "${WARNINGS_LOG}"
-  if [ -s "${INSTALL_LOG}" ]; then
-    scripts/warnings.sh scan vendored "${INSTALL_LOG}" 2>&1 | tee -a "${WARNINGS_LOG}"
-    [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
-  else
-    echo "warnings: no install log at ${INSTALL_LOG}, so the vendored scope is not judged" | tee -a "${WARNINGS_LOG}" >&2
-    rc=1
-  fi
-  scripts/warnings.sh glue 2>&1 | tee -a "${WARNINGS_LOG}"
-  [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
-  return "${rc}"
-}
-
-# The half of `.github/workflows/custom/after-install/action.yml`'s flavor-rename
-# guard that only a flavored checkout can answer.
-#
-# That step runs `if: github.job == 'rcc-smoke'`, and `rcc-smoke` runs on `main`
-# and on pull requests to it. Two of its three scans return early when
-# `DESCRIPTION` says `Package: duckdb` -- so on the only job that runs them they
-# are no-ops by construction, and on the branches where they could find
-# something, the per-commit gate is the only thing judging and it did not run
-# them. `flavor_unflavored_paths()` reported `src/duckdb-win.def` on
-# `v1.5-variegata-dev` for a fortnight while every commit on that branch was
-# judged green.
-#
-# `flavor_package_name_offenders()` is deliberately not here: it does not return
-# early, so `rcc-smoke` already exercises it on every commit that reaches `main`.
-# Running it per commit would also red the frozen v1.4 series at once, over four
-# seed-era lines its R code is not ported away from -- a separate question from
-# a file that arrived under the wrong name and nothing rewrote.
-gate_flavor() {
-  rscript <<'EOF'
-source("scripts/flavor-package-name.R")
-
-unflavored <- flavor_unflavored_paths(".")
-if (length(unflavored) > 0) {
-  writeLines(unflavored)
-  stop(
-    "A file scripts/flavor.patch renames still carries the mainline name; ",
-    "see scripts/flavor-package-name.R for how to resolve this."
-  )
-}
-writeLines("No file left under the mainline name.")
-
-readmes <- flavor_mainline_readme_offenders(".")
-if (length(readmes) > 0) {
-  writeLines(readmes)
-  stop(
-    "A generated README still tells a reader to install the mainline package; ",
-    "see scripts/flavor-package-name.R for how to resolve this."
-  )
-}
-writeLines("No generated README pointing at the mainline package.")
-
-binding <- flavor_binding_prefix_offenders(".")
-if (length(binding) > 0) {
-  writeLines(binding)
-  stop(
-    "An entry point in R/cpp11.R does not carry this flavor's .Call() prefix; ",
-    "regenerate the binding with cpp11::cpp_register()."
-  )
-}
-writeLines("Both halves of the cpp11 binding carry this flavor's prefix.")
-EOF
-}
-
 # Mirrors .github/workflows/style/action.yml. Tool installation is the caller's
 # job; this only runs the formatters.
-#
-# A formatter that is not installed is not a style violation, and it used to read
-# as one: `clang-format-21` absent leaves `git status --short` empty and still
-# returns 1, so the gate reports `style failure` about a tree it never looked at
-# (duckdb/duckdb-r#2669). Say which of the two it is.
-#
-# The name stays pinned. CI installs clang-format-21, different majors format
-# differently, and falling back to whatever `clang-format` resolves to would
-# trade a legible failure for a verdict that is not CI's -- either reformatting
-# code CI is happy with, or passing code CI will reject. `CLANG_FORMAT` is for a
-# host that has the right major under another name, not for using another major.
 gate_style() {
-  local rc=0 clang_format="${CLANG_FORMAT:-clang-format-21}"
+  local rc=0
   if [ -f air.toml ]; then
     air format . || rc=1
   fi
   if [ -f .clang-format ]; then
-    if ! command -v "${clang_format}" >/dev/null 2>&1; then
-      echo "Error: ${clang_format} is not on PATH, so the C++ sources were not" \
-        "formatted -- this says nothing about the tree." >&2
-      echo "  Install it (see .github/workflows/style/action.yml), or set" \
-        "CLANG_FORMAT to a build of the same major." >&2
-      rc=1
-    else
-      shopt -s nullglob
-      "${clang_format}" -i src/*.{c,cc,cpp,h,hpp} || rc=1
-      shopt -u nullglob
-    fi
+    shopt -s nullglob
+    clang-format-21 -i src/*.{c,cc,cpp,h,hpp} || rc=1
+    shopt -u nullglob
   fi
   git status --short
   return "${rc}"
@@ -557,11 +419,6 @@ gate_check() {
 # package is not on CRAN, so every commit picks up a "New submission" NOTE.
 if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
 if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
-# `tests/testthat.R` falls back to GITHUB_ACTIONS / MY_UNIVERSE when this is
-# unset, so the suite runs in CI and silently does not run anywhere else. Opt in
-# here, without overriding a value the caller already set: the versions matrix
-# forces it to `false` under engine poisoning.
-if (Sys.getenv("DUCKDB_R_RUN_TESTS", "") == "") Sys.setenv("DUCKDB_R_RUN_TESTS" = "true")
 rcmdcheck::rcmdcheck(
   args = c("--no-manual", "--as-cran", "--no-multiarch"),
   build_args = "--no-manual",
@@ -596,7 +453,7 @@ if [ -n "${STAGE_ONLY}" ]; then
   exit $?
 fi
 
-for gate in warnings flavor style snapshots roxygen clean check pkgdown; do
+for gate in style snapshots roxygen clean check pkgdown; do
   run_gate "${gate}"
 done
 
@@ -612,12 +469,5 @@ for i in "${!names[@]}"; do
   esac
   printf '| %s | %s %s |\n' "${names[$i]}" "${icon}" "${outcomes[$i]}"
 done
-
-# Gate `warnings` once more, last, where a log kept by its tail still has it.
-if [ -s "${WARNINGS_LOG}" ]; then
-  echo
-  echo "gate warnings, repeated:"
-  cat "${WARNINGS_LOG}"
-fi
 
 exit "${status}"

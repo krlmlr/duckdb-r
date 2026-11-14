@@ -55,9 +55,6 @@ public:
 	}
 
 private:
-	//! Merge the statistics of an update into those of the segment
-	void MergeStatistics(const SegmentStatistics &update_stats);
-
 	//! The lock for the update segment
 	mutable StorageLock lock;
 	//! The root node (if any)

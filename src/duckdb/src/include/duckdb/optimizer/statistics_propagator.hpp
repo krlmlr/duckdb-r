@@ -26,7 +26,6 @@ class ClientContext;
 class LogicalOperator;
 class TableFilter;
 struct BoundOrderByNode;
-struct FunctionStatisticsInput;
 
 enum class StatisticsPropagationMode : uint8_t { FILTER_SIMPLIFICATION, FULL };
 
@@ -36,10 +35,6 @@ public:
 	                     StatisticsPropagationMode mode = StatisticsPropagationMode::FULL);
 
 	unique_ptr<NodeStatistics> PropagateStatistics(unique_ptr<LogicalOperator> &node_ptr);
-	//! Propagate statistics through a standalone expression, given the statistics of the columns it references
-	unique_ptr<BaseStatistics>
-	PropagateExpressionStatistics(unique_ptr<Expression> &expr,
-	                              column_binding_map_t<unique_ptr<BaseStatistics>> column_statistics);
 
 	column_binding_map_t<unique_ptr<BaseStatistics>> GetStatisticsMap() {
 		return std::move(statistics_map);
@@ -60,9 +55,6 @@ public:
 	static unique_ptr<BaseStatistics> PropagateMonotoneBounds(ClientContext &context,
 	                                                          const BoundFunctionExpression &func,
 	                                                          const vector<BaseStatistics> &child_stats);
-	//! Statistics callback for monotone functions that return NULL for infinite arguments
-	DUCKDB_API static unique_ptr<BaseStatistics> PropagateFiniteMonotoneBounds(ClientContext &context,
-	                                                                           FunctionStatisticsInput &input);
 	//! Compare two sets of statistics and return whether the comparison is always true or false
 	static FilterPropagateResult PropagateComparison(const BaseStatistics &left, const BaseStatistics &right,
 	                                                 ExpressionType comparison);
@@ -103,10 +95,6 @@ private:
 	void UpdateFilterStatistics(const Expression &condition);
 	//! Set the statistics of a specific column binding to not contain null values
 	void SetStatisticsNotNull(ColumnBinding binding);
-	//! Reset additive statistics of bindings whose rows an operator can emit more than once
-	void ResetAdditiveStatistics(const vector<ColumnBinding> &bindings);
-	//! Reset additive statistics in the verification statistics of an expression tree
-	void ResetAdditiveVerificationStats(Expression &expr);
 	//! Determine whether a propagated condition can be pruned
 	FilterPropagateResult ClassifyFilter(Expression &condition);
 	//! Simplify conjunctions using filter truth semantics
@@ -182,8 +170,6 @@ private:
 	unique_ptr<NodeStatistics> node_stats;
 	//! Whether statistics changed which relations a filter depends on
 	bool filter_bindings_changed = false;
-	//! Whether propagated statistics are attached to the expressions as verification statistics
-	bool attach_verification_stats = true;
 	//! The chain of operators from the root down to the operator currently being propagated
 	vector<reference<unique_ptr<LogicalOperator>>> propagation_path;
 };

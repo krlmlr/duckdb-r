@@ -1,7 +1,7 @@
 ## usethis namespace: start
-#' @useDynLib duckdb.2.0.dev, .registration = TRUE
+#' @useDynLib duckdb.dev, .registration = TRUE
 ## usethis namespace: end
-#' @name duckdb.2.0.dev-package
+#' @name duckdb.dev-package
 #' @keywords internal
 "_PACKAGE"
 NULL

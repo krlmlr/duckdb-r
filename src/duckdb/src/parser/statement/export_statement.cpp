@@ -1,6 +1,5 @@
 #include "duckdb/parser/statement/export_statement.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
-#include "duckdb/common/sql_identifier.hpp"
 
 namespace duckdb {
 
@@ -20,11 +19,11 @@ string ExportStatement::ToString() const {
 	string result = "";
 	result += "EXPORT DATABASE";
 	if (!database.empty()) {
-		result += " " + SQLIdentifier(database) + " TO";
+		result += " " + database + " TO";
 	}
 	auto &path = info->file_path;
 	D_ASSERT(info->is_from == false);
-	result += " " + SQLString(path);
+	result += StringUtil::Format(" '%s'", path);
 	result += info->CopyOptionsToString();
 	result += ";";
 	return result;

@@ -27,7 +27,6 @@ public:
 	//! Verify that a borrowed guard holds this index's mutex.
 	void AssertHeld(const BoundIndex &index) const DUCKDB_ASSERT_CAPABILITY(this) DUCKDB_ASSERT_CAPABILITY(index.lock) {
 		D_ASSERT(&locked_index == &index);
-		(void)locked_index;
 	}
 
 private:

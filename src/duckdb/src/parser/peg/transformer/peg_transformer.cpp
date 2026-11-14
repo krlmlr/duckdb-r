@@ -29,20 +29,12 @@ arena_ptr<TransformResultValue> TransformStep::TakeResult() {
 
 GeneratedTransformProcess::GeneratedTransformProcess(PEGTransformer &transformer_p, TransformInput input,
                                                      const TransformFrameOps &info_p)
-    : parse_result(input.parse_result), info(info_p), child_results(transformer_p.process_allocator),
-      transformer(transformer_p), pending_children(transformer_p.process_allocator) {
+    : parse_result(input.parse_result), info(info_p), child_results(transformer_p.GetAllocator()),
+      transformer(transformer_p), pending_children(transformer_p.GetAllocator()) {
 	if (!info.initialize || !info.finalize) {
 		throw InternalException("Incomplete transformer process for rule '%s'", info.name);
 	}
 	info.initialize(transformer, *this);
-}
-
-void GeneratedTransformProcess::ThrowMissingResult(idx_t slot) const {
-	throw InternalException("Missing transformer result for slot %llu in rule '%s'", slot, info.name);
-}
-
-void GeneratedTransformProcess::ThrowUnexpectedResultType(idx_t slot) const {
-	throw InternalException("Unexpected transformer result type for slot %llu in rule '%s'", slot, info.name);
 }
 
 void GeneratedTransformProcess::ReserveChildSlots(idx_t count) {
@@ -133,7 +125,6 @@ TransformStackFrame::TransformStackFrame(TransformInput input)
 }
 
 TransformStack::TransformStack(PEGTransformer &transformer_p) : transformer(transformer_p) {
-	frames.reserve(32);
 }
 
 TransformStack::~TransformStack() {
@@ -144,9 +135,8 @@ TransformStack::~TransformStack() {
 }
 
 void TransformStack::PushFrame(TransformInput input) {
-	frames.emplace_back(input);
-	auto &frame = frames.back();
-	frame.process_arena_position = transformer.process_allocator.GetPosition();
+	frames.emplace(input);
+	auto &frame = frames.top();
 	auto weight = transformer.ExpressionDepthWeight(frame.rule, frame.parse_result);
 	if (weight) {
 		// recorded first: the frame is released (and the weight subtracted) when entering throws
@@ -156,12 +146,10 @@ void TransformStack::PushFrame(TransformInput input) {
 }
 
 void TransformStack::PopFrame() {
-	const auto process_arena_position = frames.back().process_arena_position;
-	if (frames.back().expression_depth_weight) {
-		transformer.ExitExpression(frames.back().expression_depth_weight);
+	if (frames.top().expression_depth_weight) {
+		transformer.ExitExpression(frames.top().expression_depth_weight);
 	}
-	frames.pop_back();
-	transformer.process_allocator.Rewind(process_arena_position);
+	frames.pop();
 }
 
 void TransformStack::InitializeFrame(TransformStackFrame &frame) {
@@ -192,16 +180,17 @@ arena_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
 	}
 	PushFrame(input);
 	while (!frames.empty()) {
-		auto result = ExecuteFrame(frames.back());
+		auto &frame = frames.top();
+		auto result = ExecuteFrame(frame);
 		if (!result) {
 			continue;
 		}
-		transformer.SetResultLocation(frames.back().parse_result, *result);
+		transformer.SetResultLocation(frame.parse_result, *result);
 		PopFrame();
 		if (frames.empty()) {
 			return result;
 		}
-		auto &parent = frames.back();
+		auto &parent = frames.top();
 		D_ASSERT(!parent.child_result);
 		parent.child_result = std::move(result);
 	}
@@ -217,9 +206,8 @@ string TransformStack::FormatStack() const {
 		}
 		auto &parse_result = frames[i].parse_result;
 		result << "#" << i << " " << parse_result.Name();
-		auto offset = parse_result.GetOffset();
-		if (offset.IsValid()) {
-			result << " offset=" << offset.GetIndex();
+		if (parse_result.offset.IsValid()) {
+			result << " offset=" << parse_result.offset.GetIndex();
 		}
 	}
 	return result.str();
@@ -289,15 +277,6 @@ void PEGTransformer::ExitExpression(idx_t weight) {
 	expression_depth -= weight;
 }
 
-const CompiledGrammarRule &PEGTransformer::GetRule(PEGRuleId rule_id) const {
-	auto rule = grammar.GetRule(rule_id);
-	if (!rule) {
-		auto rule_name = PEGRuleIdToString(rule_id);
-		throw InternalException("No registered data exists for rule '%s'", rule_name ? rule_name : "<runtime rule>");
-	}
-	return *rule;
-}
-
 const CompiledGrammarRule &PEGTransformer::GetRule(const string &rule_name) const {
 	auto rule = grammar.GetRule(rule_name);
 	if (!rule) {
@@ -307,7 +286,7 @@ const CompiledGrammarRule &PEGTransformer::GetRule(const string &rule_name) cons
 }
 
 void PEGTransformer::SetResultLocation(ParseResult &parse_result, TransformResultValue &result) {
-	if (!parse_result.GetOffset().IsValid()) {
+	if (!parse_result.offset.IsValid()) {
 		return;
 	}
 	auto expression_result = TryGetTransformResult<unique_ptr<ParsedExpression>>(result);

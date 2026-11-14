@@ -3,7 +3,6 @@
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -109,59 +108,35 @@ void StatisticsPropagator::UpdateExpressionFilterStatistics(BaseStatistics &inpu
 	}
 }
 
-//! Whether all arguments are the filter column or non-NULL constants, with at least one being the column
-static bool ArgumentsAreColumnOrConstant(const vector<unique_ptr<Expression>> &children, idx_t start_idx) {
-	bool has_column = false;
-	for (idx_t child_idx = start_idx; child_idx < children.size(); child_idx++) {
-		auto &child = *children[child_idx];
-		if (child.GetExpressionType() == ExpressionType::BOUND_REF) {
-			has_column = true;
-		} else if (child.GetExpressionType() != ExpressionType::VALUE_CONSTANT ||
-		           child.Cast<BoundConstantExpression>().GetValue().IsNull()) {
-			// e.g. CASE or COALESCE can be NULL independently of the column
-			return false;
-		}
-	}
-	return has_column;
-}
-
-//! Whether a filter expression is NULL exactly when the filter column is NULL
-static bool IsNullOnlyForNullColumn(Expression &expr) {
-	switch (expr.GetExpressionClass()) {
-	case ExpressionClass::BOUND_REF:
-		return true;
-	case ExpressionClass::BOUND_FUNCTION: {
-		auto &func = expr.Cast<BoundFunctionExpression>();
-		if (ConstantOrNull::IsConstantOrNull(func, Value::BOOLEAN(true))) {
-			return ArgumentsAreColumnOrConstant(func.GetChildren(), 1);
-		}
-		if (func.Function().GetNullHandling() != FunctionNullHandling::DEFAULT_NULL_HANDLING) {
-			return false;
-		}
-		return ArgumentsAreColumnOrConstant(func.GetChildren(), 0);
-	}
-	case ExpressionClass::BOUND_OPERATOR: {
-		auto &op = expr.Cast<BoundOperatorExpression>();
-		if (op.GetExpressionType() == ExpressionType::OPERATOR_NOT && op.GetChildren().size() == 1) {
-			return IsNullOnlyForNullColumn(*op.GetChildren()[0]);
-		}
-		if (op.GetExpressionType() == ExpressionType::COMPARE_IN) {
-			return op.GetChildren()[0]->GetExpressionType() == ExpressionType::BOUND_REF &&
-			       ArgumentsAreColumnOrConstant(op.GetChildren(), 0);
-		}
+static bool IsConstantOrNullFilter(const TableFilter &table_filter) {
+	auto &expr_filter = ExpressionFilter::GetExpressionFilter(table_filter, "IsConstantOrNullFilter");
+	if (expr_filter.expr->GetExpressionType() != ExpressionType::BOUND_FUNCTION) {
 		return false;
 	}
-	case ExpressionClass::BOUND_CONJUNCTION: {
-		for (auto &child : expr.Cast<BoundConjunctionExpression>().GetChildren()) {
-			if (!IsNullOnlyForNullColumn(*child)) {
+	auto &func = expr_filter.expr->Cast<BoundFunctionExpression>();
+	return ConstantOrNull::IsConstantOrNull(func, Value::BOOLEAN(true));
+}
+
+static bool CanReplaceConstantOrNull(const TableFilter &table_filter) {
+	if (!IsConstantOrNullFilter(table_filter)) {
+		throw InternalException("CanReplaceConstantOrNull() called on unexpected Table Filter");
+	}
+	auto &expr_filter = ExpressionFilter::GetExpressionFilter(table_filter, "CanReplaceConstantOrNull");
+	auto &func = expr_filter.expr->Cast<BoundFunctionExpression>();
+	if (ConstantOrNull::IsConstantOrNull(func, Value::BOOLEAN(true))) {
+		for (auto child = ++func.GetChildren().begin(); child != func.GetChildren().end(); child++) {
+			switch (child->get()->GetExpressionType()) {
+			case ExpressionType::BOUND_REF:
+			case ExpressionType::VALUE_CONSTANT:
+				continue;
+			default:
+				// expression type could be a function like Coalesce
 				return false;
 			}
 		}
-		return true;
 	}
-	default:
-		return false;
-	}
+	// all children of constant or null are bound refs to the table filter column
+	return true;
 }
 
 unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalGet &get,
@@ -216,9 +191,7 @@ unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalGet 
 			removed_expressions = true;
 			break;
 		case FilterPropagateResult::FILTER_TRUE_OR_NULL: {
-			auto &expr_filter =
-			    ExpressionFilter::GetExpressionFilter(filter, "StatisticsPropagator::PropagateStatistics");
-			if (!IsNullOnlyForNullColumn(*expr_filter.expr)) {
+			if (IsConstantOrNullFilter(filter) && !CanReplaceConstantOrNull(filter)) {
 				break;
 			}
 			// filter is true or null; we can replace this with a not null filter

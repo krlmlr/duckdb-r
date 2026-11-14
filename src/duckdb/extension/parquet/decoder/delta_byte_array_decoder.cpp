@@ -8,8 +8,6 @@
 #include "parquet_reader.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/helper.hpp"
-#include "duckdb/common/limits.hpp"
-#include "duckdb/common/operator/add.hpp"
 #include "duckdb/common/operator/multiply.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector.hpp"
@@ -42,12 +40,6 @@ void DeltaByteArrayDecoder::ReadDbpData(Allocator &allocator, ResizeableBuffer &
 }
 
 void DeltaByteArrayDecoder::InitializePage() {
-	auto &schema = reader.Schema();
-	if (schema.parquet_type != duckdb_parquet::Type::BYTE_ARRAY &&
-	    schema.parquet_type != duckdb_parquet::Type::FIXED_LEN_BYTE_ARRAY) {
-		throw DataCorruptionException(
-		    "DELTA_BYTE_ARRAY encoding is only supported for BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY data");
-	}
 	auto &block = *reader.block;
 	auto &allocator = reader.reader.allocator;
 	idx_t prefix_count, suffix_count;
@@ -73,6 +65,7 @@ void DeltaByteArrayDecoder::InitializePage() {
 	// Decode DELTA_BYTE_ARRAY into plain Parquet page format
 	// Plain format for BYTE_ARRAY: [4-byte length][data] repeated
 	// Plain format for FIXED_LEN_BYTE_ARRAY: [data] repeated (no length prefix)
+	auto &schema = reader.Schema();
 	bool is_fixed_len = (schema.parquet_type == duckdb_parquet::Type::FIXED_LEN_BYTE_ARRAY);
 	idx_t fixed_len = is_fixed_len ? schema.type_length : 0;
 
@@ -80,25 +73,17 @@ void DeltaByteArrayDecoder::InitializePage() {
 	idx_t total_size = 0;
 	idx_t max_len = 0;
 	for (idx_t i = 0; i < prefix_count; i++) {
-		// the lengths are read from the file - add them as idx_t so the sum cannot wrap around
-		idx_t len = idx_t(prefix_data[i]) + idx_t(suffix_data[i]);
-		if (len >= NumericLimits<uint32_t>::Maximum()) {
-			throw InvalidInputException("DELTA_BYTE_ARRAY - value length is out of range - corrupt file?");
-		}
+		idx_t len = prefix_data[i] + suffix_data[i];
 		if (is_fixed_len && len != fixed_len) {
 			throw std::runtime_error(
 			    "DELTA_BYTE_ARRAY on FIXED_LEN_BYTE_ARRAY: decoded length does not match type length");
 		}
-		if (!TryAddOperator::Operation<idx_t, idx_t, idx_t>(total_size, len, total_size)) {
-			throw InvalidInputException("DELTA_BYTE_ARRAY - total length is too large - corrupt file?");
-		}
+		total_size += len;
 		max_len = MaxValue(max_len, len);
 	}
 
 	if (!is_fixed_len) {
-		if (!TryAddOperator::Operation<idx_t, idx_t, idx_t>(total_size, prefix_count * sizeof(uint32_t), total_size)) {
-			throw InvalidInputException("DELTA_BYTE_ARRAY - total length is too large - corrupt file?");
-		}
+		total_size += prefix_count * sizeof(uint32_t);
 	}
 
 	plain_data->resize(allocator, total_size);
@@ -107,9 +92,9 @@ void DeltaByteArrayDecoder::InitializePage() {
 
 	auto output = plain_data->ptr;
 	for (idx_t i = 0; i < prefix_count; i++) {
-		idx_t prefix_len = prefix_data[i];
-		idx_t suffix_len = suffix_data[i];
-		idx_t value_len = prefix_len + suffix_len;
+		auto prefix_len = prefix_data[i];
+		auto suffix_len = suffix_data[i];
+		auto value_len = prefix_len + suffix_len;
 
 		if (prefix_len > prev_len) {
 			throw std::runtime_error("DELTA_BYTE_ARRAY - prefix is out of range - corrupt file?");
@@ -120,13 +105,12 @@ void DeltaByteArrayDecoder::InitializePage() {
 			output += sizeof(uint32_t);
 		}
 
+		memcpy(output, prev_value.data(), prefix_len);
 		block.available(suffix_len);
-		if (value_len > 0) {
-			memcpy(output, prev_value.data(), prefix_len);
-			memcpy(output + prefix_len, block.ptr, suffix_len);
-			memcpy(prev_value.data(), output, value_len);
-		}
+		memcpy(output + prefix_len, block.ptr, suffix_len);
 		block.inc(suffix_len);
+
+		memcpy(prev_value.data(), output, value_len);
 		prev_len = value_len;
 		output += value_len;
 	}

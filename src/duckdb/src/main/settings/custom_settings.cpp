@@ -81,7 +81,7 @@ static idx_t ParseMemoryLimitOrPercentage(const string &input, BASE &&get_base) 
 		return DBConfig::ParseMemoryLimitOrMaximum(input);
 	}
 	double percentage;
-	if (!TryDoubleCast(input.c_str(), input.size() - 1, percentage, false) || !(percentage >= 0 && percentage <= 100)) {
+	if (!TryDoubleCast(input.c_str(), input.size() - 1, percentage, false) || percentage < 0 || percentage > 100) {
 		throw InvalidInputException("Unable to parse valid percentage (input: %s)", input);
 	}
 	auto result = percentage * static_cast<double>(get_base()) / 100.0;
@@ -312,7 +312,7 @@ void AllowedConfigsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) 
 Value AllowedConfigsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	vector<Value> configs;
-	for (auto &cfg : config.GetAllowedConfigs()) {
+	for (auto &cfg : config.options.allowed_configs) {
 		configs.emplace_back(cfg);
 	}
 	return Value::LIST(LogicalType::VARCHAR, std::move(configs));
@@ -331,18 +331,18 @@ void AllowedDirectoriesSetting::SetGlobal(DatabaseInstance *db, DBConfig &config
 	if (!config.file_system) {
 		throw InvalidInputException("Cannot change/set allowed_directories before the database is started");
 	}
-	vector<string> directories;
-	for (auto &val : ListValue::GetChildren(input)) {
-		directories.push_back(val.GetValue<string>());
+	config.options.allowed_directories.clear();
+	auto &list = ListValue::GetChildren(input);
+	for (auto &val : list) {
+		config.AddAllowedDirectory(val.GetValue<string>());
 	}
-	config.SetAllowedDirectories(directories);
 }
 
 void AllowedDirectoriesSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	if (!Settings::Get<EnableExternalAccessSetting>(config)) {
 		throw InvalidInputException("Cannot change allowed_directories when enable_external_access is disabled");
 	}
-	config.ResetAllowedDirectories();
+	config.options.allowed_directories = DBConfigOptions().allowed_directories;
 }
 
 Value AllowedDirectoriesSetting::GetSetting(const ClientContext &context) {
@@ -368,18 +368,18 @@ void AllowedPathsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, cons
 		throw InvalidInputException("Cannot change/set allowed_paths before the database is started");
 	}
 
-	vector<string> paths;
-	for (auto &val : ListValue::GetChildren(input)) {
-		paths.push_back(val.GetValue<string>());
+	config.options.allowed_paths.clear();
+	auto &list = ListValue::GetChildren(input);
+	for (auto &val : list) {
+		config.AddAllowedPath(val.GetValue<string>());
 	}
-	config.SetAllowedPaths(paths);
 }
 
 void AllowedPathsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	if (!Settings::Get<EnableExternalAccessSetting>(config)) {
 		throw InvalidInputException("Cannot change allowed_paths when enable_external_access is disabled");
 	}
-	config.ResetAllowedPaths();
+	config.options.allowed_paths = DBConfigOptions().allowed_paths;
 }
 
 Value AllowedPathsSetting::GetSetting(const ClientContext &context) {
@@ -592,9 +592,6 @@ void DisabledFilesystemsSetting::SetGlobal(DatabaseInstance *db_p, DBConfig &con
 	auto &db = GetDB<DisabledFilesystemsSetting>(db_p);
 	auto &fs = FileSystem::GetFileSystem(db);
 	auto list = StringUtil::Split(input.ToString(), ",");
-	for (auto &entry : list) {
-		StringUtil::Trim(entry);
-	}
 	fs.SetDisabledFileSystems(list);
 }
 
@@ -622,17 +619,17 @@ void DisabledOptimizersSetting::SetGlobal(DatabaseInstance *db, DBConfig &config
 		}
 		disabled_optimizers.insert(OptimizerTypeFromString(param));
 	}
-	config.SetDisabledOptimizers(std::move(disabled_optimizers));
+	config.options.disabled_optimizers = std::move(disabled_optimizers);
 }
 
 void DisabledOptimizersSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.SetDisabledOptimizers(DBConfigOptions().disabled_optimizers);
+	config.options.disabled_optimizers = DBConfigOptions().disabled_optimizers;
 }
 
 Value DisabledOptimizersSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	string result;
-	for (auto &optimizer : config.GetDisabledOptimizers()) {
+	for (auto &optimizer : config.options.disabled_optimizers) {
 		if (!result.empty()) {
 			result += ",";
 		}
@@ -833,7 +830,7 @@ void ForceVariantShredding::ResetGlobal(DatabaseInstance *db, DBConfig &config) 
 
 Value ForceVariantShredding::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
-	return Value(config.GetForceVariantShredding().ToString());
+	return Value(config.options.force_variant_shredding.ToString());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1170,7 +1167,7 @@ void IndexScanPercentageSetting::OnSet(SettingCallbackInfo &, Value &input) {
 		throw InvalidInputException("%s setting cannot be NULL", IndexScanPercentageSetting::Name);
 	}
 	auto index_scan_percentage = input.GetValue<double>();
-	if (!(index_scan_percentage >= 0 && index_scan_percentage <= 1.0)) {
+	if (index_scan_percentage < 0 || index_scan_percentage > 1.0) {
 		throw InvalidInputException("the index scan percentage must be within [0, 1]");
 	}
 }
@@ -1420,10 +1417,6 @@ void ProfilingRendererSettingsSetting::SetLocal(ClientContext &context, const Va
 	unordered_map<string, Value> new_settings;
 	for (auto &entry : MapValue::GetChildren(input)) {
 		auto &key_value = StructValue::GetChildren(entry);
-		if (key_value[1].IsNull()) {
-			throw InvalidInputException("profiling_renderer_settings: the value of \"%s\" cannot be NULL",
-			                            key_value[0].ToString());
-		}
 		new_settings[StringUtil::Lower(key_value[0].ToString())] = key_value[1];
 	}
 	// eagerly configure the renderer of the current profiler format to validate the setting values
@@ -1514,11 +1507,7 @@ void ProgressBarTimeSetting::SetLocal(ClientContext &context, const Value &input
 	}
 	auto &config = ClientConfig::GetConfig(context);
 	ProgressBar::SystemOverrideCheck(config);
-	auto wait_time = input.GetValue<int32_t>();
-	if (wait_time < 0) {
-		throw InvalidInputException("%s setting cannot be negative", ProgressBarTimeSetting::Name);
-	}
-	config.wait_time = wait_time;
+	config.wait_time = input.GetValue<int32_t>();
 	config.enable_progress_bar = true;
 }
 
@@ -1840,18 +1829,11 @@ void WarningsAsErrorsSetting::OnSet(SettingCallbackInfo &info, Value &input) {
 	if (input.IsNull()) {
 		throw InvalidInputException("%s setting cannot be NULL", WarningsAsErrorsSetting::Name);
 	}
-	if (!input.GetValue<bool>()) {
-		return;
-	}
-	if (!info.context) {
-		throw InvalidInputException(
-		    "Cannot set 'warnings_as_errors=true' in the startup config; no logger is available yet. To "
-		    "solve, run: 'SET enable_logging=true;' and 'SET warnings_as_errors=true;' after startup");
-	}
 	auto &log_manager = LogManager::Get(*info.context);
-	if (!log_manager.GetConfig().enabled) {
-		throw InvalidInputException(
-		    "Cannot set 'warnings_as_errors=true'; no logger is available. To solve, run: 'SET enable_logging=true;'");
+	if (input == Value(true) && !log_manager.GetConfig().enabled) {
+		throw Exception(
+		    ExceptionType::SETTINGS,
+		    "Can not set 'warnings_as_errors=true'; no logger is available. To solve, run: 'SET enable_logging=true;'");
 	}
 }
 
@@ -1993,8 +1975,7 @@ void ActiveGrammarExtensionsSetting::SetLocal(ClientContext &context, const Valu
 		return;
 	}
 
-	auto compiled_grammar =
-	    DatabaseInstance::GetDatabase(context).GetParserCache().GetMatcher(context, selected_extensions);
+	auto compiled_grammar = CompiledGrammar::Create(context, selected_extensions);
 	client_config.active_grammar_extensions = std::move(selected_extensions);
 	client_config.cached_grammar = std::move(compiled_grammar);
 }
@@ -2029,11 +2010,66 @@ Value ActiveGrammarExtensionsSetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 // Deprecated Settings
 //===----------------------------------------------------------------------===//
+//! Settings below are still honored, but are scheduled for removal. Setting one emits a deprecation warning;
+//! resetting it back to its default does not.
+static void WarnDeprecatedSetting(SettingCallbackInfo &info, const char *name) {
+	if (info.is_reset) {
+		return;
+	}
+	auto message = StringUtil::Format("The '%s' setting is deprecated and will be removed in a future release.", name);
+	if (info.context) {
+		DUCKDB_LOG_WARNING(*info.context, message);
+	} else if (info.db) {
+		DUCKDB_LOG_WARNING(*info.db, message);
+	}
+}
+
+void DelimJoinAsCteSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, DelimJoinAsCteSetting::Name);
+}
+
+void EnableObjectCacheSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, EnableObjectCacheSetting::Name);
+}
+
+void ErrorOnDivisionByZeroSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, ErrorOnDivisionByZeroSetting::Name);
+}
+
+void ExperimentalMetadataReuseSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, ExperimentalMetadataReuseSetting::Name);
+}
+
+void ForceColumnMetadataReuseSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, ForceColumnMetadataReuseSetting::Name);
+}
+
+void LegacyDisableNullTypeSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, LegacyDisableNullTypeSetting::Name);
+}
+
+void LegacyMetricsFormatSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, LegacyMetricsFormatSetting::Name);
+}
+
+void ProduceArrowStringViewSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, ProduceArrowStringViewSetting::Name);
+}
+
+void ExtensionDirectorySetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, ExtensionDirectorySetting::Name);
+}
+
+void OldImplicitCastingSetting::OnSet(SettingCallbackInfo &info, Value &) {
+	WarnDeprecatedSetting(info, OldImplicitCastingSetting::Name);
+}
+
 void RegexMatchOperatorSemanticsSetting::OnSet(SettingCallbackInfo &info, Value &input) {
 	if (input.IsNull()) {
 		throw InvalidInputException("regex_match_operator_semantics setting cannot be NULL");
 	}
 	EnumUtil::FromString<RegexMatchOperatorSemantics>(StringValue::Get(input));
+	WarnDeprecatedSetting(info, RegexMatchOperatorSemanticsSetting::Name);
 }
 
 void TableFunctionIdentifierConversionSetting::OnSet(SettingCallbackInfo &info, Value &input) {
@@ -2041,5 +2077,6 @@ void TableFunctionIdentifierConversionSetting::OnSet(SettingCallbackInfo &info, 
 		throw InvalidInputException("table_function_identifier_conversion setting cannot be NULL");
 	}
 	EnumUtil::FromString<TableFunctionIdentifierConversion>(StringValue::Get(input));
+	WarnDeprecatedSetting(info, TableFunctionIdentifierConversionSetting::Name);
 }
 } // namespace duckdb

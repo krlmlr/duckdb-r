@@ -77,17 +77,8 @@ FixedSizeBuffer::~FixedSizeBuffer() {
 	}
 	if (OnDisk()) {
 		// marking a block as modified decreases the reference count of multi-use blocks
-		// this must not throw out of a destructor, e.g., if the block ids of a corrupt file overlap
-		try {
-			block_manager.MarkBlockAsModified(block_pointer.block_id);
-		} catch (...) { // NOLINT
-		}
+		block_manager.MarkBlockAsModified(block_pointer.block_id);
 	}
-}
-
-void FixedSizeBuffer::DisownBlock() {
-	lock_guard<mutex> l(lock);
-	block_pointer = BlockPointer();
 }
 
 void FixedSizeBuffer::Serialize(PartialBlockManager &partial_block_manager, const idx_t available_segments,
@@ -165,21 +156,11 @@ void FixedSizeBuffer::LoadFromDisk() {
 	auto &buffer_manager = block_manager.buffer_manager;
 	auto pinned_buffer_handle = buffer_manager.Pin(block_handle);
 
-	// block_pointer.offset and allocation_size come straight from the index's on-disk metadata - verify the read
-	// stays within the (fixed-size) source and destination blocks before copying out of either of them.
-	auto block_size = block_manager.GetBlockSize();
-	if (allocation_size > block_size || block_pointer.offset > block_size - allocation_size) {
-		throw DataCorruptionException("Corrupted index buffer: offset %llu with allocation size %llu exceeds the "
-		                              "block size %llu",
-		                              block_pointer.offset, allocation_size, block_size);
-	}
-
 	// Copy the (partial) data into a new (not yet disk-backed) buffer handle.
 	shared_ptr<BlockHandle> new_block_handle;
 	auto new_buffer_handle = buffer_manager.Allocate(MemoryTag::ART_INDEX, &block_manager, false);
 	new_block_handle = new_buffer_handle.GetBlockHandle();
 	memcpy(new_buffer_handle.GetDataMutable(), pinned_buffer_handle.Ptr() + block_pointer.offset, allocation_size);
-	memset(new_buffer_handle.GetDataMutable() + allocation_size, 0, block_size - allocation_size);
 
 	buffer_handle = std::move(new_buffer_handle);
 	block_handle = std::move(new_block_handle);

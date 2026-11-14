@@ -21,7 +21,6 @@ permissions: {}
 jobs:
   pkgdown:
     runs-on: ubuntu-26.04
-    timeout-minutes: 120 # longest run seen: 137 min, in duckdb-r
 
     name: "pkgdown"
 
@@ -32,35 +31,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Report the GitHub API rate limit
-        uses: cynkra/cynkratemplate/.github/actions/rate-limit@main
+      - uses: ./.github/workflows/rate-limit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure the Git identity
-        uses: cynkra/cynkratemplate/.github/actions/git-identity@main
+      - uses: ./.github/workflows/git-identity
         if: github.event_name == 'push'
 
-      - name: Run the repository-specific before-install steps
-        uses: ./.github/workflows/custom/before-install
+      - uses: ./.github/workflows/custom/before-install
         if: hashFiles('.github/workflows/custom/before-install/action.yml') != ''
 
-      - name: Install R and the package dependencies
-        uses: cynkra/cynkratemplate/.github/actions/install@main
+      - uses: ./.github/workflows/install
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           cache-version: pkgdown-2
           needs: website
           extra-packages: r-lib/pkgdown local::.
 
-      - name: Run the repository-specific after-install steps
-        uses: ./.github/workflows/custom/after-install
+      - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Build the pkgdown website
-        uses: cynkra/cynkratemplate/.github/actions/pkgdown-build@main
+      - uses: ./.github/workflows/pkgdown-build
         if: github.event_name != 'push'
 
-      - name: Build and deploy the pkgdown website
-        uses: cynkra/cynkratemplate/.github/actions/pkgdown-deploy@main
+      - uses: ./.github/workflows/pkgdown-deploy
         if: github.event_name == 'push'

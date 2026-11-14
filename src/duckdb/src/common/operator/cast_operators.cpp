@@ -10,7 +10,6 @@
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/limits.hpp"
-#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/common/types/cast_helpers.hpp"
@@ -36,10 +35,6 @@
 #include <cstdlib>
 
 namespace duckdb {
-
-void TryCast::ThrowUnimplemented(PhysicalType source, PhysicalType target, optional_ptr<CastParameters> parameters) {
-	throw UnimplementedErrorMessage(source, target, parameters);
-}
 
 ConversionException TryCast::UnimplementedErrorMessage(PhysicalType source, PhysicalType target,
                                                        optional_ptr<CastParameters> parameters) {
@@ -2192,9 +2187,9 @@ struct HugeIntCastData {
 	idx_t digits;
 
 	ResultType decimal;
-	idx_t decimal_total_digits;
+	uint16_t decimal_total_digits;
 	ResultType decimal_intermediate;
-	idx_t decimal_intermediate_digits;
+	uint16_t decimal_intermediate_digits;
 
 	bool Flush() {
 		if (digits == 0 && intermediate == 0) {
@@ -2324,7 +2319,7 @@ struct HugeIntegerCastOperation {
 				remainder = negate_result;
 			}
 			state.decimal = remainder;
-			state.decimal_total_digits = static_cast<idx_t>(-e);
+			state.decimal_total_digits = static_cast<uint16_t>(-e);
 			state.decimal_intermediate = 0;
 			state.decimal_intermediate_digits = 0;
 			return Finalize<T, NEGATIVE>(state);
@@ -2343,19 +2338,16 @@ struct HugeIntegerCastOperation {
 			return Finalize<T, NEGATIVE>(state);
 		}
 
-		const auto shift = static_cast<int64_t>(exponent) - static_cast<int64_t>(state.decimal_total_digits);
-		if (shift < 0) {
-			if (shift < -38) {
-				// all of decimal is fractional
-				remainder = state.decimal;
-				state.decimal = 0;
-			} else {
-				state.decimal = T::Operation::DivMod(state.decimal, T::Operation::POWERS_OF_TEN[-shift], remainder);
+		e = exponent - state.decimal_total_digits;
+		if (e < 0) {
+			if (e < -38) {
+				return false;
 			}
-			state.decimal_total_digits -= static_cast<idx_t>(exponent);
+			state.decimal = T::Operation::DivMod(state.decimal, T::Operation::POWERS_OF_TEN[-e], remainder);
+			state.decimal_total_digits -= (exponent);
 		} else {
-			if (shift > 38 ||
-			    !TryMultiplyOperator::Operation(state.decimal, T::Operation::POWERS_OF_TEN[shift], state.decimal)) {
+			if (e > 38 ||
+			    !TryMultiplyOperator::Operation(state.decimal, T::Operation::POWERS_OF_TEN[e], state.decimal)) {
 				return false;
 			}
 		}
@@ -2375,11 +2367,6 @@ struct HugeIntegerCastOperation {
 	static bool HandleDecimal(T &state, uint8_t digit) {
 		if (!state.Flush()) {
 			return false;
-		}
-		// digits past this position cannot affect the result for any int16_t exponent. Ignore them!
-		static constexpr uint16_t MAX_DECIMAL_DIGITS = -NumericLimits<int16_t>::Minimum();
-		if (DUCKDB_UNLIKELY(state.decimal_total_digits + state.decimal_intermediate_digits == MAX_DECIMAL_DIGITS)) {
-			return true;
 		}
 		if (DUCKDB_UNLIKELY(state.decimal_intermediate > (NumericLimits<int64_t>::Maximum() - digit) / 10)) {
 			if (!state.FlushDecimal()) {
@@ -2408,7 +2395,7 @@ struct HugeIntegerCastOperation {
 			state.decimal /= T::Operation::POWERS_OF_TEN[MAX_DIGITS];
 			state.decimal_total_digits -= MAX_DIGITS;
 		}
-		D_ASSERT(state.decimal_total_digits >= 1 && state.decimal_total_digits - 1 <= MAX_DIGITS);
+		D_ASSERT((state.decimal_total_digits - 1) >= 0 && (state.decimal_total_digits - 1) <= MAX_DIGITS);
 		state.decimal /= T::Operation::POWERS_OF_TEN[state.decimal_total_digits - 1];
 
 		if (state.decimal >= 5) {
@@ -2523,14 +2510,12 @@ string_t StringCastFromDecimal::Operation(hugeint_t input, uint8_t width, uint8_
 //===--------------------------------------------------------------------===//
 template <class T, class OP = NumericHelper>
 bool TryCastBoolToDecimal(bool input, T &result, CastParameters &parameters, uint8_t width, uint8_t scale) {
-	// a decimal without integer digits cannot hold true
-	if (input && width <= scale) {
-		string error = StringUtil::Format("Could not cast value true to DECIMAL(%d,%d)", width, scale);
-		HandleCastError::AssignError(error, parameters);
-		return false;
+	if (width > scale) {
+		result = UnsafeNumericCast<T>(input ? OP::POWERS_OF_TEN[scale] : 0);
+		return true;
+	} else {
+		return TryCast::Operation<bool, T>(input, result);
 	}
-	result = UnsafeNumericCast<T>(input ? OP::POWERS_OF_TEN[scale] : 0);
-	return true;
 }
 
 template <>
@@ -2915,7 +2900,7 @@ bool TryCastToDecimal::Operation(uhugeint_t input, hugeint_t &result, CastParame
 template <class SRC, class DST>
 bool DoubleToDecimalCast(SRC input, DST &result, CastParameters &parameters, uint8_t width, uint8_t scale) {
 	double value = input * NumericHelper::DOUBLE_POWERS_OF_TEN[scale];
-	double roundedValue = RoundToNearestAwayFromZero(value);
+	double roundedValue = round(value);
 	if (roundedValue <= -NumericHelper::DOUBLE_POWERS_OF_TEN[width] ||
 	    roundedValue >= NumericHelper::DOUBLE_POWERS_OF_TEN[width] || !Value::IsFinite(roundedValue)) {
 		string error = StringUtil::Format("Could not cast value %f to DECIMAL(%d,%d)", input, width, scale);
@@ -3330,7 +3315,6 @@ static void FillDecimalDigits(SRC input, duckdb_fast_float::decimal &decimal, bo
 }
 
 static void FillDecimalDigits(hugeint_t input, duckdb_fast_float::decimal &decimal, bool &negative) {
-	negative = false;
 	if (input == 0) {
 		return;
 	}
@@ -3338,6 +3322,8 @@ static void FillDecimalDigits(hugeint_t input, duckdb_fast_float::decimal &decim
 	if (input < 0) {
 		negative = true;
 		Hugeint::NegateInPlace(input);
+	} else {
+		negative = false;
 	}
 
 	// a hugeint can have one more digit than the maximum decimal width
@@ -3360,7 +3346,7 @@ bool TryCastDecimalToFloatingPoint(SRC input, DST &result, uint8_t width, uint8_
 	}
 
 	duckdb_fast_float::decimal decimal;
-	bool negative = false;
+	bool negative;
 	FillDecimalDigits(input, decimal, negative);
 	decimal.decimal_point = UnsafeNumericCast<int32_t>(decimal.num_digits) - UnsafeNumericCast<int32_t>(scale);
 	while (decimal.num_digits > 0 && decimal.digits[decimal.num_digits - 1] == 0) {

@@ -51,8 +51,7 @@ which is enough to tell a compile error from a failing test.
 Setting the variable to `0` turns the excerpts off.
 
 The excerpt is not the record.
-The whole per-commit log goes to `<sha>.log` in the leg's artifact —
-where the series loop reads it — and to `logs2.d/<xx>/<sha>.log` on `rcc2`,
+The whole per-commit log still goes to `logs2.d/<xx>/<sha>.log` on `rcc2`,
 which is what [`series-check.sh`](/scripts/series-check.sh) classifies against;
 the summary is the fast path for a human.
 Two details make it work in practice:
@@ -74,31 +73,29 @@ Two details make it work in practice:
   record and log published from the leg,
   failed stages' tails in the job summary.
 * **A leg runs out of budget** — remaining commits stay statusless,
-  and the run's follow-up replans them
-  ([`legs/`](/handbook/operations/ci/per-commit/legs/README.md#the-follow-up-run)).
+  the next run replans them.
 * **A leg dies hard mid-commit** — that commit has no record,
-  and the run's follow-up replans it
-  ([`legs/`](/handbook/operations/ci/per-commit/legs/README.md#the-follow-up-run));
+  so the next run replans it;
   every commit the leg had already decided is on the `rcc2` branch.
 * **A leg is re-run after dying** — commits it already decided are skipped,
   not rebuilt.
 * **A leg cannot reach the `rcc2` branch** — logged, never fatal;
-  the record is in the leg's artifact, which is what a firing reads,
-  and reaches the store only if an operator runs
-  [`rcc-logs.sh`](/scripts/rcc-logs.sh).
-* **The whole run is cancelled** — the legs' own records are already on the
-  branch; run [`rcc-logs.sh`](/scripts/rcc-logs.sh) by hand for whatever is left.
-  A cancelled run dispatches no follow-up.
-* **The `plan` job fails** — `build` is skipped.
+  the fan-in collects the record from the artifact.
+* **The whole run is cancelled** — no fan-in,
+  but the legs' own records are already on the branch;
+  `rcc-logs.yaml` covers whatever is left on its next tick.
+* **The `plan` job fails** — `build` and the fan-in are both skipped.
 * **History is force-pushed mid-run** — unreachable SHAs fail checkout
   and are skipped; new SHAs are picked up next run.
 * **More than `MAX_SHARDS` shards planned** — oldest shards deferred,
-  reported in the job summary, and planned by the run's follow-up.
+  reported in the job summary.
 * **Two writers publish at once** — different files, no conflict;
   the loser of the ref race re-reads the tip and re-stages its own files
   ([`rcc-publish.sh`](/scripts/rcc-publish.sh)).
 * **A retry overturns a verdict** — the newer record and log replace the older
   ones.
+* **An earlier run's fan-in lands after a retry** — it sees a higher run id on
+  the branch and keeps that record; the stale verdict is not replayed.
 * **A retry turns a failure green** — the record is replaced and the log it
   overturned is dropped, on whichever path publishes first.
 * **A leg is re-run after publishing failed** — its artifact is named per
@@ -115,8 +112,8 @@ Every file in the store belongs to exactly one commit,
 so two writers adding different commits cannot conflict at all.
 A shared concurrency group would be worse than the race:
 only one run may be *pending* per group,
-so a third writer queued behind the second cancels it outright —
-and a cancelled writer is a verdict that never reaches the store.
+so a third writer queued behind the second cancels it outright,
+and a cancelled fan-in takes the only copy of its per-commit logs with it.
 Losing the ref race costs a tree fetch and a re-commit —
 no rebase, no re-derivation, no producer running twice.
 The reset-and-re-derive recovery an aggregate needed went with the aggregate

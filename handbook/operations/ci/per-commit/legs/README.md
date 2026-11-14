@@ -1,8 +1,7 @@
 # The legs
 
-The jobs, the scripts behind them,
-what one leg does with its workspace, what a lost leg costs,
-and the follow-up a run dispatches for the commits it left undecided.
+The three jobs, the scripts behind them,
+what one leg does with its workspace, and what a lost leg costs.
 How its commits were chosen is
 [`selection/`](/handbook/operations/ci/per-commit/selection/README.md)'s;
 how they were packed into shards is
@@ -13,7 +12,7 @@ One run is three jobs:
 ```
 plan  (1 job, ~30 s)
   ├─ git log --first-parent --after=$SINCE          → candidate commits
-  ├─ scripts/rcc-decided.sh (one tree-only fetch)   → verdicts already on `rcc2`
+  ├─ scripts/rcc-decided.sh (one tree-only fetch)   → verdicts already on `rcc`
   ├─ scripts/each-cost.py                           → objects each commit invalidates
   ├─ scripts/each-partition.py
   │    ├─ greedy contiguous fill under the leg deadline → fewest shards
@@ -29,19 +28,16 @@ build (one job per shard, throttled by max-parallel)
        → capture the log, whole and per stage
        → on failure, quote each failed stage's tail into the job summary
        → publish record + log to the `rcc2` branch   ← seconds after the verdict
-     ... stops at its own deadline and defers the rest,
-         a commit cut short after others among them
+     ... stops at its own deadline and defers the rest
 
-follow-up  (1 job, after the legs, unless the run was cancelled)
-  └─ scripts/each-follow-up.sh
-       planned commits still without a record on `rcc2`, some decided, branch unmoved?
-       → dispatch `each-rcc` on the branch once more    ← waits for this run to end
+harvest (1 job, if: always())
+  └─ fill in records and logs for commits whose leg never got to publish
 ```
 
 The files:
 
 * [`.github/workflows/each.yaml`](/.github/workflows/each.yaml) —
-  plan → build → follow-up.
+  plan → build → harvest.
 * [`scripts/each-plan.sh`](/scripts/each-plan.sh) —
   enumerate, read verdicts, weigh, partition.
 * [`scripts/each-cost.py`](/scripts/each-cost.py) —
@@ -50,8 +46,6 @@ The files:
   the cost model, the greedy fill, and the rebalance pass.
 * [`scripts/each-shard.sh`](/scripts/each-shard.sh) —
   one leg: many commits, one workspace.
-* [`scripts/each-follow-up.sh`](/scripts/each-follow-up.sh):
-  whether the run dispatches a follow-up, and the dispatch.
 * [`scripts/rcc-one.sh`](/scripts/rcc-one.sh) —
   the per-commit gate, extracted from `rcc-smoke`.
 * [`scripts/rcc-lib.sh`](/scripts/rcc-lib.sh) —
@@ -64,8 +58,10 @@ The files:
   manual: drop what has aged out, squash the branch.
 * [`scripts/rcc-cutover.sh`](/scripts/rcc-cutover.sh) —
   one-shot: build `rcc2` from what the old `rcc` branch held.
+* [`scripts/each-harvest.sh`](/scripts/each-harvest.sh) —
+  fan-in: reconcile what the legs could not publish.
 * [`scripts/rcc-run-fields.jq`](/scripts/rcc-run-fields.jq) —
-  the run-object projection both writers share.
+  the run-object projection all three writers share.
 * [`scripts/rcc-store-test.sh`](/scripts/rcc-store-test.sh) —
   offline checks for the store's invariants,
   and the source of the concurrency measurements below.
@@ -128,10 +124,8 @@ What survives a runner that stops executing steps:
 * **The plan** — the `each-plan` artifact from the `plan` job. Survives.
 * **A commit in flight** — no record, so the next run replans it.
 * **Records a leg never got to publish** — only in the leg's artifact,
-  uploaded in its last step, so a lost runner never gets there.
-  A firing reads the artifact directly, which is where they are;
-  the store learns of them only if an operator runs
-  [`rcc-logs.sh`](/scripts/rcc-logs.sh).
+  uploaded in its last step, so a lost runner never gets there;
+  the fan-in reconstructs them.
 
 A re-run resumes rather than restarts:
 the leg skips a commit that already carries a decided record,
@@ -141,60 +135,27 @@ that is precisely the state a killed leg leaves behind,
 and redoing it is what the re-run is for.
 The planner's artifact carries `overwrite: true` and the leg's is
 named per attempt, so "Re-run all jobs" collides on neither.
+The fan-in is guarded on the planner having succeeded,
+so it does not reconcile a run that never built.
 
 Two edges are worth stating plainly.
 
-**Nothing schedules `each-rcc`, but a run follows itself up.**
+**Nothing schedules `each-rcc`.**
 It fires on push to `each-*`/`*-dev`, on `workflow_dispatch`, and on
 `workflow_call`.
 After a lost leg the branch is left with one `pending` commit and a tail of
-statusless ones, and the run's follow-up replans them, as it replans what a leg deferred
-([the follow-up run](#the-follow-up-run)).
-Where no follow-up fires, the replanning waits until somebody pushes to that branch or dispatches the workflow.
+statusless ones, and the replanning that would pick them up does not happen
+until somebody pushes to that branch or dispatches the workflow.
+The replanning is correct; it is not automatic.
 
-**The series loop's recovery for a lost commit waits 12 hours.**
-[`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md) presumes a commit
-still without a verdict after that long lost, and pushes `retry-<S>-dev` at it,
-which replans it on its own SHA and rewrites nothing above it.
-Dispatching `each-rcc` again needs no wait, and costs only the commits that are undecided.
-Re-running the failed job costs as little,
-but it queues in the branch's concurrency group behind the follow-up the run dispatched, if it dispatched one,
-and that follow-up has usually replanned the lost commit by the time the re-run starts.
-
-## The follow-up run
-
-A leg that reaches its deadline defers the commits it did not get to,
-and the planner defers the oldest commits past `MAX_SHARDS` legs.
-So the run's last job dispatches `each-rcc` once more on the same branch,
-with the run's inputs except `force`,
-and the follow-up plans whatever the store still lacks when it starts.
-It waits as pending in the branch's concurrency group until the run that dispatched it has completed.
-The job runs, and [`each-follow-up.sh`](/scripts/each-follow-up.sh) dispatches, only when all of these hold:
-
-* **The run was not cancelled**, which the job's `if:`, `!cancelled()`, checks.
-  Nothing in the series tooling cancels a run, a landing included,
-  and a force-push does not either, because the group's `cancel-in-progress` is `false`:
-  a cancelled run is one somebody retired by hand, and it stays retired.
-  A leg that failed or timed out is not a cancellation, and its undecided commits are followed up.
-* **The branch has not moved** since the plan was made, because a push brings a run of its own.
-  The branch is read after the store, and a dispatch refused because the branch moved meanwhile ends the job without failing it.
-* **Commits remain** that a follow-up can decide:
-  a planned commit without a record on `rcc2`, read as the planner reads it;
-  a commit deferred past the shard cap that still has none;
-  or a `retry-<S>-dev` tip whose record does not name this run.
-* **The run made progress**: fewer of the commits it set out to decide are undecided than when the plan was made.
-  A planned commit that had no record counts as decided once it has one,
-  and one planned despite a record, a forced run's or a retry tip, once its record names this run.
-  Every follow-up decides a commit or ends the chain, so a chain is finite.
-  A commit that alone outlasts a leg's budget cannot stall one, because the first commit a leg builds is never deferred.
-* **No other run is waiting on the branch.**
-  GitHub keeps only the newest pending run of a group,
-  so a dispatch would cancel a push's or an operator's run, which plans the same commits anyway.
-  A push in the moment between this check and the dispatch still loses its pending run,
-  but the follow-up that takes its place plans from the new tip.
-
-A follow-up never forces, so a forced run's commits that a leg deferred keep the verdicts they had.
-A retry tip is forced again only when the run before did not judge it:
-that run sends the commit it planned from, `follow-up-head`, only once the tip's record names it,
-and the planner forces a retry tip that differs from that head, as on any push.
-So a tip a leg deferred is judged by the follow-up, and a tip judged once is not judged twice.
+**The series loop's documented recovery discards good results.**
+[`series-loop.md`](/.claude/skills/series-loop.md) says that a commit still
+missing from the harvest after 12 hours should be presumed lost, and repaired by
+amending it and replaying the tail.
+Replaying mints a new SHA for every commit after it,
+so one lost leg costs a rebuild of every *already-green* commit newer than the
+commit it was in the middle of.
+That recovery is the right answer when a commit genuinely cannot get a verdict,
+but it is the last resort:
+re-running the failed job, or dispatching `each-rcc` again,
+costs only the commits that are undecided.

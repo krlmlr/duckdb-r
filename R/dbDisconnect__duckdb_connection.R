@@ -4,8 +4,7 @@
 #' it is no longer necessary to set `shutdown = TRUE` or to call `duckdb_shutdown()`.
 #'
 #' @param conn A `duckdb_connection` object
-#' @param shutdown Unused.
-#' The database instance is shut down automatically.
+#' @param shutdown Unused. The database instance is shut down automatically.
 #' @rdname duckdb
 #' @usage NULL
 dbDisconnect__duckdb_connection <- function(conn, ..., shutdown = TRUE) {

@@ -19,11 +19,7 @@ struct ConvertOpts {
 
 	enum class ArrowConversion { DISABLED, ENABLED };
 
-	// Whether the engine may hand back a result that streams rather than one
-	// it materialized before returning; statement.cpp decides it in
-	// StreamsByDefault(). Distinct from the user-facing `stream` argument of
-	// dbSendQuery(), which expresses intent at the R level.
-	enum class AllowStreamResult { DISABLED, ENABLED };
+	enum class ResultStreaming { DISABLED, ENABLED };
 
 	enum class ExperimentalFeatures { DISABLED, ENABLED };
 
@@ -37,15 +33,9 @@ struct ConvertOpts {
 	GeometryConversion geometry = GeometryConversion::BLOB;
 	MapShape map = MapShape::DATA_FRAME;
 	ArrowConversion arrow = ArrowConversion::DISABLED;
-	AllowStreamResult allow_stream_result = AllowStreamResult::DISABLED;
+	ResultStreaming streaming = ResultStreaming::DISABLED;
 	ExperimentalFeatures experimental = ExperimentalFeatures::DISABLED;
 	StrictRelational strict_relational = StrictRelational::ENABLED;
-
-	// Session-derived timezone used to display TIMESTAMP WITH TIME ZONE values.
-	// Populated from `result.client_properties.time_zone` at result materialization
-	// time, so explicit `SET TimeZone = ...` (e.g. via the ICU extension) is
-	// respected. Empty string means "fall back to `timezone_out`".
-	string session_time_zone = "";
 
 	// Constructor with defaults
 	ConvertOpts() = default;

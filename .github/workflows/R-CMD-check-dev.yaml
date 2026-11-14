@@ -19,7 +19,6 @@ permissions:
 jobs:
   matrix:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30 # longest run seen: 2 min
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
@@ -28,40 +27,40 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Report the GitHub API rate limit
-        uses: cynkra/cynkratemplate/.github/actions/rate-limit@main
+      - uses: ./.github/workflows/rate-limit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: r-lib/actions/setup-r@v2
 
-      - name: Collect the dependencies into a matrix
-        id: set-matrix
-        uses: cynkra/cynkratemplate/.github/actions/dep-matrix@main
+      - id: set-matrix
+        uses: ./.github/workflows/dep-matrix
 
   check-matrix:
     runs-on: ubuntu-26.04
-    timeout-minutes: 15 # longest run seen: 1 min
     needs: matrix
 
     name: Check deps
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Install json2yaml
+        run: |
+          sudo npm install -g json2yaml
 
       - name: Check matrix definition
-        uses: cynkra/cynkratemplate/.github/actions/matrix-check@main
-        with:
-          matrix: ${{ needs.matrix.outputs.matrix }}
+        # Passed through the environment rather than spliced into the script:
+        # the matrix is generated from DESCRIPTION in the checkout.
+        env:
+          MATRIX: ${{ needs.matrix.outputs.matrix }}
+        run: |
+          printf '%s\n' "${MATRIX}"
+          printf '%s' "${MATRIX}" | jq .
+          printf '%s' "${MATRIX}" | json2yaml
 
   R-CMD-check-base:
     runs-on: ubuntu-26.04
-    timeout-minutes: 120 # longest run seen: 46 min
 
     name: base
-
-    outputs:
-      binary: ${{ steps.binary.outputs.artifact-name }}
 
     permissions:
       # Both required by the update-snapshots action, which opens a pull
@@ -75,39 +74,33 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run the repository-specific before-install steps
-        uses: ./.github/workflows/custom/before-install
+      - uses: ./.github/workflows/custom/before-install
         if: hashFiles('.github/workflows/custom/before-install/action.yml') != ''
 
-      - name: Install R and the package dependencies
-        uses: cynkra/cynkratemplate/.github/actions/install@main
+      - uses: ./.github/workflows/install
         with:
           cache-version: rcc-dev-base-1
           needs: build, check
-          extra-packages: "any::rcmdcheck any::remotes"
+          extra-packages: "any::rcmdcheck any::remotes ."
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Session info
-        uses: cynkra/cynkratemplate/.github/actions/session-info@main
+        run: |
+          options(width = 100)
+          if (!requireNamespace("sessioninfo", quietly = TRUE)) install.packages("sessioninfo")
+          pkgs <- installed.packages()[, "Package"]
+          sessioninfo::session_info(pkgs, include_base = TRUE)
+        shell: Rscript {0}
 
-      - name: Run the repository-specific after-install steps
-        uses: ./.github/workflows/custom/after-install
+      - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Build, install and upload the binary package
-        id: binary
-        uses: cynkra/cynkratemplate/.github/actions/build-binary@main
-        with:
-          name: ubuntu-26.04-rrelease-base
-
-      - name: Update the testthat snapshots
-        uses: cynkra/cynkratemplate/.github/actions/update-snapshots@main
+      - uses: ./.github/workflows/update-snapshots
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
-      - name: Run R CMD check
-        uses: cynkra/cynkratemplate/.github/actions/check@main
+      - uses: ./.github/workflows/check
         with:
-          results: base
+          results: ${{ matrix.package }}
 
   R-CMD-check-dev:
     needs:
@@ -115,7 +108,6 @@ jobs:
       - R-CMD-check-base
 
     runs-on: ubuntu-26.04
-    timeout-minutes: 120 # longest run seen: 57 min
 
     name: 'rcc-dev: ${{ matrix.package }}'
 
@@ -131,23 +123,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run the repository-specific before-install steps
-        uses: ./.github/workflows/custom/before-install
+      - uses: ./.github/workflows/custom/before-install
         if: hashFiles('.github/workflows/custom/before-install/action.yml') != ''
 
-      - name: Install R and the package dependencies
-        uses: cynkra/cynkratemplate/.github/actions/install@main
+      - uses: ./.github/workflows/install
         with:
           cache-version: rcc-dev-${{ matrix.package }}-1
           needs: build, check
-          extra-packages: "any::rcmdcheck r-lib/remotes@f-618-universe"
+          extra-packages: "any::rcmdcheck r-lib/remotes@f-618-universe ."
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Same runner and R version as the base job, so its binary fits.
-      - name: Install the package from the base job's binary
-        uses: cynkra/cynkratemplate/.github/actions/install-binary@main
-        with:
-          name: ${{ needs.R-CMD-check-base.outputs.binary }}
 
       - name: Install dev version of ${{ matrix.package }}
         env:
@@ -160,17 +144,19 @@ jobs:
         shell: Rscript {0}
 
       - name: Session info
-        uses: cynkra/cynkratemplate/.github/actions/session-info@main
+        run: |
+          options(width = 100)
+          if (!requireNamespace("sessioninfo", quietly = TRUE)) install.packages("sessioninfo")
+          pkgs <- installed.packages()[, "Package"]
+          sessioninfo::session_info(pkgs, include_base = TRUE)
+        shell: Rscript {0}
 
-      - name: Run the repository-specific after-install steps
-        uses: ./.github/workflows/custom/after-install
+      - uses: ./.github/workflows/custom/after-install
         if: hashFiles('.github/workflows/custom/after-install/action.yml') != ''
 
-      - name: Update the testthat snapshots
-        uses: cynkra/cynkratemplate/.github/actions/update-snapshots@main
+      - uses: ./.github/workflows/update-snapshots
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
-      - name: Run R CMD check
-        uses: cynkra/cynkratemplate/.github/actions/check@main
+      - uses: ./.github/workflows/check
         with:
           results: ${{ matrix.package }}
