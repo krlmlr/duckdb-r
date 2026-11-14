@@ -387,11 +387,7 @@ void ParquetVariantIterator::BeginRow(idx_t row) {
 
 const VariantMetadata &ParquetVariantIterator::GetMetadata() const {
 	if (!current_metadata) {
-		auto metadata_entry = metadata[current_row];
-		if (!metadata_entry.IsValid()) {
-			throw DataCorruptionException("VARIANT metadata cannot be NULL");
-		}
-		current_metadata = make_uniq<VariantMetadata>(metadata_entry.GetValue());
+		current_metadata = make_uniq<VariantMetadata>(metadata[current_row].GetValueUnsafe());
 	}
 	return *current_metadata;
 }
@@ -627,13 +623,6 @@ ParquetArrayIterator ParquetVariantNode::GetArrayChildren() const {
 void ParquetObjectIterator::Finalize() {
 	std::sort(ordered_entries.begin(), ordered_entries.end(),
 	          [](const ParquetObjectEntry &a, const ParquetObjectEntry &b) { return a.key < b.key; });
-	// the keys of a Variant object have to be unique
-	for (idx_t i = 1; i < ordered_entries.size(); i++) {
-		if (ordered_entries[i].key == ordered_entries[i - 1].key) {
-			throw InvalidInputException("Invalid VARIANT: object contains the key \"%s\" more than once",
-			                            ordered_entries[i].key.GetString());
-		}
-	}
 }
 
 ParquetObjectIterator::ParquetObjectIterator(const ParquetVariantIterator &state, const ShreddedGroupView &view,

@@ -70,9 +70,8 @@ public:
 	void DetachResourceBorrowers(ClientContext &context, const string &resource_name);
 	//! Alter operation dispatcher
 	void Alter(ClientContext &context, AlterInfo &info);
-	//! Rollback the attach of a database, given the database only when its name still refers to it
-	shared_ptr<AttachedDatabase> DetachInternal(const Identifier &name,
-	                                            optional_ptr<AttachedDatabase> database = nullptr);
+	//! Rollback the attach of a database
+	shared_ptr<AttachedDatabase> DetachInternal(const Identifier &name);
 	//! Returns a reference to the system catalog
 	Catalog &GetSystemCatalog();
 
@@ -132,8 +131,6 @@ public:
 	}
 	//! Gets a list of all attached database paths
 	vector<string> GetAttachedDatabasePaths();
-	//! Whether the file at the path (or its WAL) belongs to an attached database
-	bool IsAttachedDatabaseFile(ClientContext &context, const string &path);
 
 	shared_ptr<AttachedDatabase> GetDatabaseInternal(const lock_guard<mutex> &, const Identifier &name);
 

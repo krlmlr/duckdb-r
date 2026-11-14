@@ -34,16 +34,9 @@ static bool IsCharacter(char c) {
 //===--------------------------------------------------------------------===//
 struct ExplainSpan {
 	ExplainSpan(string text_p, TreeRenderType type_p) : text(std::move(text_p)), type(type_p) {
-		width = RenderLength(text);
-	}
-	void SetText(string text_p) {
-		text = std::move(text_p);
-		width = RenderLength(text);
 	}
 	string text;
 	TreeRenderType type;
-	//! The render width of the text, measured once, as lines are measured many times while a plan is laid out
-	idx_t width;
 };
 
 using ExplainLine = vector<ExplainSpan>;
@@ -60,7 +53,7 @@ struct ExplainBlock {
 static idx_t LineWidth(const ExplainLine &line) {
 	idx_t width = 0;
 	for (auto &span : line) {
-		width += span.width;
+		width += RenderLength(span.text);
 	}
 	return width;
 }
@@ -110,7 +103,7 @@ static void AppendAt(ExplainLine &dst, const ExplainLine &src, idx_t content_col
 		}
 		if (i < span.text.size()) {
 			ExplainSpan trimmed = span;
-			trimmed.SetText(span.text.substr(i));
+			trimmed.text = span.text.substr(i);
 			dst.push_back(std::move(trimmed));
 		}
 	}
@@ -120,7 +113,7 @@ static void AppendAt(ExplainLine &dst, const ExplainLine &src, idx_t content_col
 static bool RenderCharEquals(const ExplainLine &line, idx_t col, const char *expected) {
 	idx_t col_offset = 0;
 	for (auto &span : line) {
-		idx_t span_width = span.width;
+		idx_t span_width = RenderLength(span.text);
 		if (col >= col_offset + span_width) {
 			col_offset += span_width;
 			continue;
@@ -147,7 +140,7 @@ static bool RenderCharEquals(const ExplainLine &line, idx_t col, const char *exp
 static void SetLayoutChar(ExplainLine &line, idx_t col, const char *replacement) {
 	idx_t col_offset = 0;
 	for (auto &span : line) {
-		idx_t span_width = span.width;
+		idx_t span_width = RenderLength(span.text);
 		if (col >= col_offset + span_width) {
 			col_offset += span_width;
 			continue;
@@ -166,7 +159,7 @@ static void SetLayoutChar(ExplainLine &line, idx_t col, const char *replacement)
 				char_idx++;
 			}
 		}
-		span.SetText(span.text.substr(0, byte_start) + replacement + span.text.substr(byte_end));
+		span.text = span.text.substr(0, byte_start) + replacement + span.text.substr(byte_end);
 		return;
 	}
 }

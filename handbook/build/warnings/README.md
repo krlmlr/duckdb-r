@@ -37,9 +37,6 @@ and what another scope owns is counted rather than listed.
   `src/cpp11.cpp` (from `cpp11::cpp_register()`),
   `yyjson.cpp` (upstream's amalgamation),
   and libpg_query's bison and flex output.
-  `main`'s v2.0 engine parses with a PEG parser and vendors no libpg_query,
-  but the lines before v2.0 still do, and they run this check too, because every series takes `main`'s tooling
-  ([`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md)).
   This is a list, not a rule — the files carry no marker to match on —
   so it grows when a generated file starts warning.
 
@@ -173,14 +170,6 @@ it found these two, and named the same two GCC 15 did.
   puts the flags on the install that entry runs anyway
   and judges the log it produces:
   reading a build that already takes an hour beats running a second one.
-* **On every commit CI judges one by one**, both scopes, as gate `warnings` of
-  [`scripts/rcc-one.sh`](/scripts/rcc-one.sh)
-  ([`operations/ci/per-commit/`](/handbook/operations/ci/per-commit/README.md)):
-  the install every commit gets is ridden the same way, and the glue scope compiled after it.
-  Until the v2.0 landing it was not: 2,160 vendor commits were judged green one by one,
-  and `main`'s check then met 14 vendored warnings on their tip
-  ([#2937](https://github.com/duckdb/duckdb-r/pull/2937)),
-  because the per-commit build installed with R's flags alone.
 
 That last split is what keeps newly vendored code honest without
 paying for it twice, and it is also the gate's one blind spot:

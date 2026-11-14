@@ -68,8 +68,6 @@
 
 #include "src/main/capi/v2/capi_v2_qname.cpp"
 
-#include "src/main/capi/v2/capi_v2_query_metrics.cpp"
-
 #include "src/main/capi/v2/capi_v2_replacement_scan.cpp"
 
 #include "src/main/capi/v2/capi_v2_result.cpp"
@@ -77,8 +75,6 @@
 #include "src/main/capi/v2/capi_v2_schema.cpp"
 
 #include "src/main/capi/v2/capi_v2_statement.cpp"
-
-#include "src/main/capi/v2/capi_v2_stats.cpp"
 
 #include "src/main/capi/v2/capi_v2_stubs.cpp"
 

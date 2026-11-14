@@ -25,7 +25,12 @@ CSVWriterState::CSVWriterState(DatabaseInstance &db, idx_t flush_size_p)
     : flush_size(flush_size_p), stream(make_uniq<MemoryStream>(BufferAllocator::Get(db), flush_size)) {
 }
 
-CSVWriterState::~CSVWriterState() = default;
+CSVWriterState::~CSVWriterState() {
+	if (stream && !Exception::UncaughtException()) {
+		// Ensure we don't accidentally destroy unflushed data
+		D_ASSERT(stream->GetPosition() == 0);
+	}
+}
 
 CSVWriterOptions::CSVWriterOptions(const string &delim, const char &quote, const string &write_newline,
                                    char comment_char) {

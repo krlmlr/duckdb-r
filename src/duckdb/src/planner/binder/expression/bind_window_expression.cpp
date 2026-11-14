@@ -141,18 +141,11 @@ BindResult BaseSelectBinder::BindWindowExpression(WindowExpression &window, idx_
 	}
 	vector<unique_ptr<Expression>> bound_partitions;
 	for (auto &child : window.PartitionsMutable()) {
-		auto bound_partition = BindChild(child, depth, error);
-		if (!error.HasError() && bound_partition->IsVolatile()) {
-			throw BinderException(error_context, "PARTITION BY window expressions cannot be volatile");
-		}
-		bound_partitions.push_back(std::move(bound_partition));
+		bound_partitions.push_back(BindChild(child, depth, error));
 	}
 	vector<unique_ptr<Expression>> bound_orders;
 	for (auto &order : window.OrderByMutable()) {
 		auto bound_order = BindChild(order.expression, depth, error);
-		if (!error.HasError() && bound_order->IsVolatile()) {
-			throw BinderException(error_context, "ORDER BY window expressions cannot be volatile");
-		}
 
 		//	If the frame is a RANGE frame and the type is a time,
 		//	then we have to convert the time to a timestamp to avoid wrapping.
@@ -233,9 +226,7 @@ BindResult BaseSelectBinder::BindWindowExpression(WindowExpression &window, idx_
 
 		// bind the aggregate
 		FunctionBinder function_binder(binder);
-		auto window_bound_aggregate = function_binder.BindAggregateFunction(
-		    func, std::move(arguments), error, nullptr,
-		    window.Distinct() ? AggregateType::DISTINCT : AggregateType::NON_DISTINCT);
+		auto window_bound_aggregate = function_binder.BindAggregateFunction(func, std::move(arguments), error, nullptr);
 		// No function found, throw an error
 		if (!window_bound_aggregate) {
 			error.AddQueryLocation(window);
@@ -272,20 +263,20 @@ BindResult BaseSelectBinder::BindWindowExpression(WindowExpression &window, idx_
 		// TODO: Move this into the binder
 		auto &bound_function = *window_bound_function->WindowFunction();
 		if (window.Distinct() && !bound_function.CanDistinct()) {
-			throw BinderException(error_context, "DISTINCT is not implemented for the window function %s",
+			throw BinderException(error_context, "DISTINCT is not implemented for the window function \"%s\"",
 			                      window.FunctionName());
 		}
 		if (window.Filter() && !bound_function.CanFilter()) {
-			throw BinderException(error_context, "FILTER is not implemented for the window function %s",
+			throw BinderException(error_context, "FILTER is not implemented for the window function \"%s\"",
 			                      window.FunctionName());
 		}
 		if (!window.ArgOrders().empty() && !bound_function.CanOrderBy()) {
-			throw BinderException(error_context, "ORDER BY is not supported for the window function %s",
+			throw BinderException(error_context, "ORDER BY is not supported for the window function \"%s\"",
 			                      window.FunctionName());
 		}
 		if (window.WindowExclude() != WindowExcludeMode::NO_OTHER && !window.ArgOrders().empty() &&
 		    !bound_function.CanExclude()) {
-			throw BinderException(error_context, "EXCLUDE is not supported for the window function %s",
+			throw BinderException(error_context, "EXCLUDE is not supported for the window function \"%s\"",
 			                      window.FunctionName());
 		}
 		if (window.HasIgnoreNulls() && !bound_function.CanIgnoreNulls()) {

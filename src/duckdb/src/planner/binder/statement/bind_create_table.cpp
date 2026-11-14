@@ -43,11 +43,6 @@ static void VerifyCompressionType(ClientContext &context, optional_ptr<StorageMa
 	auto &base = info.base->Cast<CreateTableInfo>();
 	for (auto &col : base.columns.Logical()) {
 		auto compression_type = col.CompressionType();
-		if (col.Generated() && compression_type != CompressionType::COMPRESSION_AUTO) {
-			throw BinderException("Can't set a compression type on generated column %s, generated columns are "
-			                      "not stored",
-			                      col.Name());
-		}
 		auto compression_availability_result = CompressionTypeIsAvailable(compression_type, storage_manager);
 		if (!compression_availability_result.IsAvailable()) {
 			if (compression_availability_result.IsDeprecated()) {
@@ -203,7 +198,7 @@ unique_ptr<BoundConstraint> Binder::BindUniqueConstraint(const Constraint &const
 
 		auto physical_index = col.Physical();
 		if (index_set.find(physical_index) != index_set.end()) {
-			throw ParserException("column %s appears twice in primary key constraint", col_name);
+			throw ParserException("column \"%s\" appears twice in primary key constraint", col_name);
 		}
 		indexes.push_back(physical_index);
 		index_set.insert(physical_index);
@@ -303,7 +298,7 @@ void Binder::BindGeneratedColumns(BoundCreateTableInfo &info) {
 		auto bound_expression = expr_binder.Bind(expression);
 		D_ASSERT(bound_expression);
 		if (bound_expression->HasSubquery()) {
-			throw BinderException("Failed to bind generated column %s because the expression contains a subquery",
+			throw BinderException("Failed to bind generated column '%s' because the expression contains a subquery",
 			                      col.Name());
 		}
 		if (col.Type().id() == LogicalTypeId::ANY) {
@@ -324,20 +319,20 @@ void Binder::BindGeneratedColumns(BoundCreateTableInfo &info) {
 }
 
 void Binder::BindDefaultValue(const ColumnDefinition &column, vector<unique_ptr<Expression>> &bound_defaults,
-                              const string &catalog, const vector<Identifier> &schema_path) {
+                              const string &catalog, const string &schema) {
 	ColumnList col_list;
 	col_list.AddColumn(column.Copy());
-	BindDefaultValues(col_list, bound_defaults, catalog, schema_path);
+	BindDefaultValues(col_list, bound_defaults, catalog, schema);
 }
 
 void Binder::BindDefaultValues(const ColumnList &columns, vector<unique_ptr<Expression>> &bound_defaults,
-                               const string &catalog_name, const vector<Identifier> &schema_p) {
-	vector<Identifier> schema_path = schema_p;
+                               const string &catalog_name, const string &schema_p) {
+	string schema_name = schema_p;
 	if (schema_p.empty()) {
-		schema_path.emplace_back(DEFAULT_SCHEMA);
+		schema_name = DEFAULT_SCHEMA;
 	}
 
-	auto default_binder = CreateBinderWithSearchPath(Identifier(catalog_name), schema_path);
+	auto default_binder = CreateBinderWithSearchPath(Identifier(catalog_name), Identifier(schema_name));
 
 	for (auto &column : columns.Physical()) {
 		unique_ptr<Expression> bound_default;
@@ -627,26 +622,9 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		storage_manager = StorageManager::Get(catalog);
 	}
 
-	if (!base.query) {
-		// the type binder below takes this callback over, so the table depends on the types of its columns
-		SetCatalogLookupCallback([&dependencies, &schema](CatalogEntry &entry) {
-			if (&schema.ParentCatalog() != &entry.ParentCatalog()) {
-				// Don't register dependencies between catalogs
-				return;
-			}
-
-			if (entry.type == CatalogType::TYPE_ENTRY && entry.internal) {
-				// Don't register dependencies on internal types
-				return;
-			}
-
-			dependencies.AddDependency(entry);
-		});
-	}
-
 	// Bind all types by first looking into the same catalog/schema as the table
 	auto type_binder = Binder::CreateBinder(context, *this);
-	type_binder->SetSearchPath(result->schema.catalog, result->schema.GetSchemaPath());
+	type_binder->SetSearchPath(result->schema.catalog, result->schema.name);
 
 	vector<unique_ptr<BoundConstraint>> bound_constraints;
 	if (base.query) {
@@ -691,6 +669,20 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		}
 
 	} else {
+		SetCatalogLookupCallback([&dependencies, &schema](CatalogEntry &entry) {
+			if (&schema.ParentCatalog() != &entry.ParentCatalog()) {
+				// Don't register dependencies between catalogs
+				return;
+			}
+
+			if (entry.type == CatalogType::TYPE_ENTRY && entry.internal) {
+				// Don't register dependencies on internal types
+				return;
+			}
+
+			dependencies.AddDependency(entry);
+		});
+
 		// Bind all physical column types
 		for (idx_t i = 0; i < base.columns.PhysicalColumnCount(); i++) {
 			auto &column = base.columns.GetColumnMutable(PhysicalIndex(i));
@@ -713,7 +705,9 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		if (bind_mode != AlterBindMode::SKIP_BINDING) {
 			// bind the default values
 			auto &catalog_name = schema.ParentCatalog().GetName();
-			BindDefaultValues(base.columns, bound_defaults, catalog_name.GetIdentifierName(), schema.GetSchemaPath());
+			auto &schema_name = schema.name;
+			BindDefaultValues(base.columns, bound_defaults, catalog_name.GetIdentifierName(),
+			                  schema_name.GetIdentifierName());
 		}
 	}
 

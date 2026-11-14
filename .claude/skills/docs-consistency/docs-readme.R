@@ -114,7 +114,7 @@ groups <- list(
   list(
     owner = "handbook/operations/vendoring/pipeline",
     globs = c(
-      "VENDORING.md", "vendor.sh", "vendor-one.sh", "vendor-one-test.sh", "vendor-lib.sh", "rconfigure.py",
+      "VENDORING.md", "vendor.sh", "vendor-one.sh", "rconfigure.py",
       "merge-version.sh", "setup-git.sh"
     )
   ),
@@ -125,10 +125,6 @@ groups <- list(
   list(
     owner = "handbook/operations/releases/versioning",
     globs = c("preview-prefix*")
-  ),
-  list(
-    owner = "handbook/operations/releases/cran",
-    globs = c("cran-*.sh")
   ),
   list(
     owner = "handbook/branches/flavors",
@@ -144,17 +140,13 @@ groups <- list(
   ),
   list(
     owner = "handbook/operations/ci/per-commit/legs",
-    globs = c("each-shard.sh", "each-follow-up.sh", "each-follow-up-test.sh", "rcc-one.sh")
-  ),
-  list(
-    owner = "handbook/operations/ci/per-commit/upstream",
-    globs = c("each-mirror.sh", "each-mirror-test.sh")
+    globs = c("each-shard.sh", "rcc-one.sh")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/store",
     globs = c(
       "each-harvest.sh", "rcc-consolidate.sh", "rcc-cutover.sh",
-      "rcc-drop.sh", "rcc-lib.sh", "rcc-logs.sh", "rcc-publish.sh",
+      "rcc-lib.sh", "rcc-logs.sh", "rcc-publish.sh",
       "rcc-run-fields.jq", "rcc-store-test.sh"
     )
   ),

@@ -19,10 +19,12 @@ class DatabaseFilePathManager;
 
 struct DatabaseCacheEntry {
 	DatabaseCacheEntry();
-	explicit DatabaseCacheEntry(const shared_ptr<DatabaseInstance> &instance);
+	explicit DatabaseCacheEntry(const shared_ptr<DuckDB> &database);
 	~DatabaseCacheEntry();
 
-	//! Connections and unfinished results keep the instance alive after its last handle is closed
+	weak_ptr<DuckDB> database;
+	//! The instance behind that handle: it outlives the handle whenever a ClientContext still holds it,
+	//! which is how an entry with no handle can still be in use rather than shutting down
 	weak_ptr<DatabaseInstance> instance;
 	mutex update_database_mutex;
 };

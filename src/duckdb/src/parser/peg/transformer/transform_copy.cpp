@@ -40,9 +40,7 @@ void SetCopyOptions(unique_ptr<CopyInfo> &info, vector<GenericCopyOption> &optio
 				info->parsed_options[option.name] = std::move(row_func);
 			}
 		} else if (option.name == "HEADER" || option.name == "ESCAPE") {
-			if (option.expression) {
-				info->parsed_options[option.name] = std::move(option.expression);
-			} else if (option.children.empty()) {
+			if (option.children.empty()) {
 				info->parsed_options[option.name] = nullptr;
 			} else {
 				info->parsed_options[option.name] = ConstantExpression::FromValue(option.children[0]);
@@ -185,13 +183,8 @@ unique_ptr<ParsedExpression> PEGTransformerFactory::TransformCopyFileNameStringL
 
 unique_ptr<ParsedExpression> PEGTransformerFactory::TransformCopyFileNameIdentifier(PEGTransformer &transformer,
                                                                                     const Identifier &identifier) {
-	if (identifier == "stdin") {
-		return ConstantExpression::String("/dev/stdin");
-	}
-	if (identifier == "stdout") {
-		return ConstantExpression::String("/dev/stdout");
-	}
-	return ConstantExpression::String(identifier.GetIdentifierName());
+	string file_name = identifier == "stdout" ? "/dev/stdout" : identifier.GetIdentifierName();
+	return ConstantExpression::String(file_name);
 }
 
 unique_ptr<ParsedExpression>

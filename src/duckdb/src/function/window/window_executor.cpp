@@ -35,12 +35,6 @@ WindowExecutor::WindowExecutor(BoundWindowExpression &wexpr, WindowSharedExpress
 
 void WindowExecutor::Evaluate(ExecutionContext &context, idx_t row_idx, DataChunk &eval_chunk, Vector &result,
                               OperatorSinkInput &sink, idx_t count) const {
-	//	Nothing to evaluate for an empty block - the bounds are empty, so skip the executors entirely
-	if (count == 0) {
-		FlatVector::SetSize(result, 0);
-		return;
-	}
-
 	auto &lbstate = sink.local_state.Cast<WindowExecutorLocalState>();
 	lbstate.state.UpdateBounds(row_idx, eval_chunk, count);
 

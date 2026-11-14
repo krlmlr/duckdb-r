@@ -237,9 +237,6 @@ bool ExtensionHelper::TryAutoLoadAvailableExtension(DatabaseInstance &instance, 
 		return true;
 	}
 	try {
-		if (!Settings::Get<AutoloadKnownExtensionsSetting>(instance)) {
-			return false;
-		}
 		auto &fs = FileSystem::GetFileSystem(instance);
 		ExtensionHelper::LoadExternalExtension(instance, fs, AutoLoadOptions(extension_name));
 		return true;
@@ -340,7 +337,7 @@ vector<ExtensionUpdateResult> ExtensionHelper::UpdateExtensions(ClientContext &c
 	// scan the install directory for installed extensions
 	auto ext_directory = ExtensionHelper::ExtensionDirectory(db, fs);
 	fs.ListFiles(ext_directory, [&](const string &path, bool is_directory) {
-		if (!ExtensionHelper::IsInstalledExtensionFile(path)) {
+		if (!StringUtil::EndsWith(path, ".duckdb_extension")) {
 			return;
 		}
 
@@ -876,8 +873,8 @@ vector<string> ExtensionHelper::GetTrustedPublicKeys(DatabaseInstance &db, Exten
 	case ExtensionRepositoryType::USER_PROVIDED: {
 		// when adding repositories has been forbidden, the user repositories are distrusted entirely: their keys are
 		// no longer trusted, so extensions installed from them can no longer be loaded. Note that 'undecided' still
-		// trusts existing repositories
-		if (!ExtensionRepositoryManager::TrustsExistingRepositories(db)) {
+		// trusts existing repositories - only 'forbidden' distrusts them
+		if (ExtensionRepositoryManager::GetAccess(db) == ExtensionRepositoryAccess::FORBIDDEN) {
 			return keys;
 		}
 		// only the keys of the repository the extension came from are trusted

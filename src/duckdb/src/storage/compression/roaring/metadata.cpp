@@ -153,26 +153,14 @@ idx_t ContainerMetadataCollection::Serialize(data_ptr_t dest) const {
 	return types_size + runs_size + arrays_size;
 }
 
-[[noreturn]] static void ThrowRoaringContainerCountOutOfBounds() {
-	throw DataCorruptionException("Corrupted Roaring segment: container count exceeds available metadata space");
-}
-
-void ContainerMetadataCollection::Deserialize(CompressionSegmentReader reader, idx_t container_count) {
-	const auto group_size = BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
-	const auto group_count = container_count / group_size + (container_count % group_size != 0);
-	const auto type_group_size = group_size * CONTAINER_TYPE_BITWIDTH / 8;
-	if (group_count > reader.Remaining() / type_group_size) {
-		ThrowRoaringContainerCountOutOfBounds();
-	}
-
-	// Metadata unpacking reads and writes complete groups, including the final padded group.
+void ContainerMetadataCollection::Deserialize(data_ptr_t src, idx_t container_count) {
 	container_type.resize(AlignValue<idx_t, BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE>(container_count));
 	count_in_segment = container_count;
 
 	// Load the types of the containers
 	idx_t types_size = BitpackingPrimitives::GetRequiredSize(container_type.size(), 2);
-	auto types = reader.ReadBytes(types_size);
-	BitpackingPrimitives::UnPackBuffer<uint8_t>(container_type.data(), types.data(), container_count, 2, true);
+	BitpackingPrimitives::UnPackBuffer<uint8_t>(container_type.data(), src, container_count, 2, true);
+	src += types_size;
 
 	// Figure out how many are run containers
 	idx_t runs_count = 0;
@@ -187,16 +175,16 @@ void ContainerMetadataCollection::Deserialize(CompressionSegmentReader reader, i
 	// Load the run containers
 	if (runs_count) {
 		idx_t runs_size = BitpackingPrimitives::GetRequiredSize(runs_count, RUN_CONTAINER_SIZE_BITWIDTH);
-		auto runs = reader.ReadBytes(runs_size);
-		BitpackingPrimitives::UnPackBuffer<uint8_t>(number_of_runs.data(), runs.data(), runs_count,
-		                                            RUN_CONTAINER_SIZE_BITWIDTH, true);
+		BitpackingPrimitives::UnPackBuffer<uint8_t>(number_of_runs.data(), src, runs_count, RUN_CONTAINER_SIZE_BITWIDTH,
+		                                            true);
+		src += runs_size;
 	}
 
 	// Load the array/bitset containers
 	if (!cardinality.empty()) {
 		idx_t arrays_size = sizeof(uint8_t) * cardinality.size();
 		arrays_in_segment = arrays_size;
-		reader.ReadBytesInto(cardinality.data(), arrays_size);
+		memcpy(cardinality.data(), src, arrays_size);
 	}
 }
 
