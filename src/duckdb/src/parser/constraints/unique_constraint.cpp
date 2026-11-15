@@ -42,7 +42,11 @@ string UniqueConstraint::ToString() const {
 }
 
 unique_ptr<Constraint> UniqueConstraint::Copy() const {
-	return make_uniq<UniqueConstraint>(*this);
+	if (!HasIndex()) {
+		return make_uniq<UniqueConstraint>(columns, is_primary_key, check_mode);
+	}
+
+	return make_uniq<UniqueConstraint>(index, columns.empty() ? Identifier() : columns[0], is_primary_key, check_mode);
 }
 
 bool UniqueConstraint::IsPrimaryKey() const {

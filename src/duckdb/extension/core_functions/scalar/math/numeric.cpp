@@ -223,9 +223,10 @@ static unique_ptr<BaseStatistics> PropagateAbsStats(ClientContext &context, Func
 }
 
 template <class OP>
-static void DecimalUnaryOpResolveTypes(ResolveScalarFunctionTypesInput &input) {
+static unique_ptr<FunctionData> DecimalUnaryOpBind(BindScalarFunctionInput &input) {
 	auto &bound_function = input.GetBoundFunction();
-	auto &decimal_type = input.GetArgumentType(0);
+	auto &arguments = input.GetArguments();
+	auto decimal_type = arguments[0]->GetReturnType();
 	switch (decimal_type.InternalType()) {
 	case PhysicalType::INT16:
 		bound_function.SetFunctionCallback(ScalarFunction::GetScalarUnaryFunction<OP>(LogicalTypeId::SMALLINT));
@@ -242,18 +243,16 @@ static void DecimalUnaryOpResolveTypes(ResolveScalarFunctionTypesInput &input) {
 	}
 	bound_function.GetArguments()[0] = decimal_type;
 	bound_function.SetReturnType(decimal_type);
+	return nullptr;
 }
 
 ScalarFunctionSet AbsOperatorFun::GetFunctions() {
 	ScalarFunctionSet abs;
 	for (auto &type : LogicalType::Numeric()) {
 		switch (type.id()) {
-		case LogicalTypeId::DECIMAL: {
-			ScalarFunction function({}, type, nullptr);
-			function.SetResolveTypesCallback(DecimalUnaryOpResolveTypes<AbsOperator>);
-			abs.AddFunction(NameXArgument(std::move(function), type));
+		case LogicalTypeId::DECIMAL:
+			abs.AddFunction(NameXArgument(ScalarFunction({}, type, nullptr, DecimalUnaryOpBind<AbsOperator>), type));
 			break;
-		}
 		case LogicalTypeId::TINYINT:
 		case LogicalTypeId::SMALLINT:
 		case LogicalTypeId::INTEGER:
@@ -515,10 +514,11 @@ static void GenericRoundFunctionDecimal(DataChunk &input, ExpressionState &state
 }
 
 template <class OP>
-static void GenericRoundFunctionDecimalResolveTypes(ResolveScalarFunctionTypesInput &input) {
+static unique_ptr<FunctionData> BindGenericRoundFunctionDecimal(BindScalarFunctionInput &input) {
 	auto &bound_function = input.GetBoundFunction();
+	auto &arguments = input.GetArguments();
 	// ceil essentially removes the scale
-	auto &decimal_type = input.GetArgumentType(0);
+	auto &decimal_type = arguments[0]->GetReturnType();
 	auto scale = DecimalType::GetScale(decimal_type);
 	auto width = DecimalType::GetWidth(decimal_type);
 	if (scale == 0) {
@@ -541,6 +541,7 @@ static void GenericRoundFunctionDecimalResolveTypes(ResolveScalarFunctionTypesIn
 	}
 	bound_function.GetArguments()[0] = decimal_type;
 	bound_function.SetReturnType(LogicalType::DECIMAL(width, 0));
+	return nullptr;
 }
 
 namespace {
@@ -565,7 +566,7 @@ ScalarFunctionSet CeilFun::GetFunctions() {
 	ScalarFunctionSet ceil;
 	for (auto &type : LogicalType::Numeric()) {
 		scalar_function_t func = nullptr;
-		resolve_scalar_types_t resolve_func = nullptr;
+		bind_scalar_function_t bind_func = nullptr;
 		if (type.IsIntegral()) {
 			// no ceil for integral numbers
 			continue;
@@ -578,14 +579,12 @@ ScalarFunctionSet CeilFun::GetFunctions() {
 			func = ScalarFunction::UnaryFunction<double, double, CeilOperator>;
 			break;
 		case LogicalTypeId::DECIMAL:
-			resolve_func = GenericRoundFunctionDecimalResolveTypes<CeilDecimalOperator>;
+			bind_func = BindGenericRoundFunctionDecimal<CeilDecimalOperator>;
 			break;
 		default:
 			throw InternalException("Unimplemented numeric type for function \"ceil\"");
 		}
-		ScalarFunction ceil_function({}, type, func);
-		ceil_function.SetResolveTypesCallback(resolve_func);
-		ceil.AddFunction(NameXArgument(std::move(ceil_function), type));
+		ceil.AddFunction(NameXArgument(ScalarFunction({}, type, func, bind_func), type));
 	}
 	ceil.SetUnaryArgProperties(ArgProperties().NonDecreasing());
 	return ceil;
@@ -623,7 +622,7 @@ ScalarFunctionSet FloorFun::GetFunctions() {
 	ScalarFunctionSet floor;
 	for (auto &type : LogicalType::Numeric()) {
 		scalar_function_t func = nullptr;
-		resolve_scalar_types_t resolve_func = nullptr;
+		bind_scalar_function_t bind_func = nullptr;
 		if (type.IsIntegral()) {
 			// no floor for integral numbers
 			continue;
@@ -636,14 +635,12 @@ ScalarFunctionSet FloorFun::GetFunctions() {
 			func = ScalarFunction::UnaryFunction<double, double, FloorOperator>;
 			break;
 		case LogicalTypeId::DECIMAL:
-			resolve_func = GenericRoundFunctionDecimalResolveTypes<FloorDecimalOperator>;
+			bind_func = BindGenericRoundFunctionDecimal<FloorDecimalOperator>;
 			break;
 		default:
 			throw InternalException("Unimplemented numeric type for function \"floor\"");
 		}
-		ScalarFunction floor_function({}, type, func);
-		floor_function.SetResolveTypesCallback(resolve_func);
-		floor.AddFunction(NameXArgument(std::move(floor_function), type));
+		floor.AddFunction(NameXArgument(ScalarFunction({}, type, func, bind_func), type));
 	}
 	floor.SetUnaryArgProperties(ArgProperties().NonDecreasing());
 	return floor;
@@ -679,15 +676,18 @@ void GenericRoundPrecisionDecimal(DataChunk &input, ExpressionState &state, Vect
 	OP::template Operation<T, POWERS_OF_TEN>(input, state, result);
 }
 
-//! Resolves the types and the function of a decimal round with a precision, given the original decimal type
-template <typename NEGOP, typename POSOP, bool CAN_CARRY>
-unique_ptr<FunctionData> ResolveDecimalRoundPrecision(BoundScalarFunction &bound_function,
-                                                      const LogicalType &decimal_type, int32_t round_value) {
+template <typename NEGOP, typename POSOP, bool CAN_CARRY = false>
+unique_ptr<FunctionData> BindDecimalRoundPrecision(BindScalarFunctionInput &input) {
+	auto &bound_function = input.GetBoundFunction();
+	auto &arguments = input.GetArguments();
+	auto &decimal_type = arguments[0]->GetReturnType();
+	auto val = input.GetNonNullConstant(1).DefaultCastAs(LogicalType::INTEGER);
 	// our new precision becomes the round value
 	// e.g. ROUND(DECIMAL(18,3), 1) -> DECIMAL(18,1)
 	// but ONLY if the round value is positive
 	// if it is negative the scale becomes zero
 	// i.e. ROUND(DECIMAL(18,3), -1) -> DECIMAL(18,0)
+	int32_t round_value = IntegerValue::Get(val);
 	uint8_t target_scale;
 	auto width = DecimalType::GetWidth(decimal_type);
 	auto scale = DecimalType::GetScale(decimal_type);
@@ -747,22 +747,6 @@ unique_ptr<FunctionData> ResolveDecimalRoundPrecision(BoundScalarFunction &bound
 	bound_function.GetArguments()[0] = argument_type;
 	bound_function.SetReturnType(LogicalType::DECIMAL(result_width, target_scale));
 	return make_uniq<RoundPrecisionFunctionData>(round_value, width, check_overflow);
-}
-
-template <typename NEGOP, typename POSOP, bool CAN_CARRY = false>
-void DecimalRoundPrecisionResolveTypes(ResolveScalarFunctionTypesInput &input) {
-	auto val = input.GetNonNullConstant(1).DefaultCastAs(LogicalType::INTEGER);
-	ResolveDecimalRoundPrecision<NEGOP, POSOP, CAN_CARRY>(input.GetBoundFunction(), input.GetArgumentType(0),
-	                                                      IntegerValue::Get(val));
-}
-
-//! The bind data is derived from the type the function was called with, before it was cast
-template <typename NEGOP, typename POSOP, bool CAN_CARRY = false>
-unique_ptr<FunctionData> BindDecimalRoundPrecision(BindScalarFunctionInput &input) {
-	auto &bound_function = input.GetBoundFunction();
-	auto val = input.GetNonNullConstant(1).DefaultCastAs(LogicalType::INTEGER);
-	return ResolveDecimalRoundPrecision<NEGOP, POSOP, CAN_CARRY>(
-	    bound_function, bound_function.GetLogicalArguments()[0], IntegerValue::Get(val));
 }
 
 struct TruncOperatorPrecision {
@@ -871,9 +855,8 @@ ScalarFunctionSet TruncFun::GetFunctions() {
 	for (auto &type : LogicalType::Numeric()) {
 		scalar_function_t trunc_func = nullptr;
 		scalar_function_t trunc_prec_func = nullptr;
-		resolve_scalar_types_t resolve_func = nullptr;
+		bind_scalar_function_t bind_func = nullptr;
 		bind_scalar_function_t bind_prec_func = nullptr;
-		resolve_scalar_types_t resolve_prec_func = nullptr;
 		//	Truncation of integers gets generated by some tools (e.g., Tableau/JDBC:Postgres)
 		switch (type.id()) {
 		case LogicalTypeId::FLOAT:
@@ -885,11 +868,9 @@ ScalarFunctionSet TruncFun::GetFunctions() {
 			trunc_prec_func = ScalarFunction::BinaryFunction<double, int32_t, double, TruncOperatorPrecision>;
 			break;
 		case LogicalTypeId::DECIMAL:
-			resolve_func = GenericRoundFunctionDecimalResolveTypes<TruncDecimalOperator>;
+			bind_func = BindGenericRoundFunctionDecimal<TruncDecimalOperator>;
 			bind_prec_func =
 			    BindDecimalRoundPrecision<TruncDecimalNegativePrecisionOperator, TruncDecimalPositivePrecisionOperator>;
-			resolve_prec_func = DecimalRoundPrecisionResolveTypes<TruncDecimalNegativePrecisionOperator,
-			                                                      TruncDecimalPositivePrecisionOperator>;
 			break;
 		case LogicalTypeId::TINYINT:
 			trunc_func = ScalarFunction::NopFunction;
@@ -934,12 +915,8 @@ ScalarFunctionSet TruncFun::GetFunctions() {
 		default:
 			throw InternalException("Unimplemented numeric type for function \"trunc\"");
 		}
-		ScalarFunction trunc_function({}, type, trunc_func);
-		trunc_function.SetResolveTypesCallback(resolve_func);
-		trunc.AddFunction(NameXArgument(std::move(trunc_function), type));
-		ScalarFunction trunc_prec_function({}, type, trunc_prec_func, bind_prec_func);
-		trunc_prec_function.SetResolveTypesCallback(resolve_prec_func);
-		trunc.AddFunction(NameXPrecisionArguments(std::move(trunc_prec_function), type));
+		trunc.AddFunction(NameXArgument(ScalarFunction({}, type, trunc_func, bind_func), type));
+		trunc.AddFunction(NameXPrecisionArguments(ScalarFunction({}, type, trunc_prec_func, bind_prec_func), type));
 	}
 	trunc.SetUnaryArgProperties(ArgProperties().NonDecreasing());
 	return trunc;
@@ -1005,14 +982,9 @@ struct RoundOperatorPrecision {
 		double rounded_value;
 		if (precision < 0) {
 			double modifier = std::pow(10, -TA(precision));
-			if (std::isinf(modifier)) {
-				// every finite value rounds to zero
-				return Value::IsFinite(input) ? 0 : input;
-			}
 			rounded_value = ROUND_POLICY::Nearest(input / modifier) * modifier;
 			if (std::isinf(rounded_value) || std::isnan(rounded_value)) {
-				// the input is too large to be rounded to this precision
-				return input;
+				return 0;
 			}
 		} else {
 			double modifier = std::pow(10, TA(precision));
@@ -1154,9 +1126,8 @@ ScalarFunctionSet RoundFun::GetFunctions() {
 	for (auto &type : LogicalType::Numeric()) {
 		scalar_function_t round_prec_func = nullptr;
 		scalar_function_t round_func = nullptr;
-		resolve_scalar_types_t resolve_func = nullptr;
+		bind_scalar_function_t bind_func = nullptr;
 		bind_scalar_function_t bind_prec_func = nullptr;
-		resolve_scalar_types_t resolve_prec_func = nullptr;
 		switch (type.id()) {
 		case LogicalTypeId::FLOAT:
 			round_func = ScalarFunction::UnaryFunction<float, float, RoundOperator>;
@@ -1169,13 +1140,10 @@ ScalarFunctionSet RoundFun::GetFunctions() {
 			    ScalarFunction::BinaryFunction<double, int32_t, double, RoundOperatorPrecision<RoundHalfAwayFromZero>>;
 			break;
 		case LogicalTypeId::DECIMAL:
-			resolve_func = GenericRoundFunctionDecimalResolveTypes<RoundDecimalOperator>;
+			bind_func = BindGenericRoundFunctionDecimal<RoundDecimalOperator>;
 			bind_prec_func =
 			    BindDecimalRoundPrecision<DecimalRoundNegativePrecisionOperator<RoundHalfAwayFromZero>,
 			                              DecimalRoundPositivePrecisionOperator<RoundHalfAwayFromZero>, true>;
-			resolve_prec_func =
-			    DecimalRoundPrecisionResolveTypes<DecimalRoundNegativePrecisionOperator<RoundHalfAwayFromZero>,
-			                                      DecimalRoundPositivePrecisionOperator<RoundHalfAwayFromZero>, true>;
 			break;
 		case LogicalTypeId::TINYINT:
 			round_func = ScalarFunction::NopFunction;
@@ -1209,12 +1177,9 @@ ScalarFunctionSet RoundFun::GetFunctions() {
 			}
 			throw InternalException("Unimplemented numeric type for function \"round\"");
 		}
-		ScalarFunction round_unary_function({}, type, round_func);
-		round_unary_function.SetResolveTypesCallback(resolve_func);
-		auto round_function = NameXArgument(std::move(round_unary_function), type);
-		ScalarFunction round_binary_function({}, type, round_prec_func, bind_prec_func);
-		round_binary_function.SetResolveTypesCallback(resolve_prec_func);
-		auto round_prec_function = NameXPrecisionArguments(std::move(round_binary_function), type);
+		auto round_function = NameXArgument(ScalarFunction({}, type, round_func, bind_func), type);
+		auto round_prec_function =
+		    NameXPrecisionArguments(ScalarFunction({}, type, round_prec_func, bind_prec_func), type);
 		if (type.id() == LogicalTypeId::DECIMAL) {
 			// rounding a DECIMAL can overflow
 			round_function.SetFallible();
@@ -1238,7 +1203,6 @@ ScalarFunctionSet RoundEvenFun::GetFunctions() {
 	for (auto &type : LogicalType::Numeric()) {
 		scalar_function_t round_prec_func = nullptr;
 		bind_scalar_function_t bind_prec_func = nullptr;
-		resolve_scalar_types_t resolve_prec_func = nullptr;
 		switch (type.id()) {
 		case LogicalTypeId::FLOAT:
 			round_prec_func =
@@ -1251,9 +1215,6 @@ ScalarFunctionSet RoundEvenFun::GetFunctions() {
 		case LogicalTypeId::DECIMAL:
 			bind_prec_func = BindDecimalRoundPrecision<DecimalRoundNegativePrecisionOperator<RoundHalfToEven>,
 			                                           DecimalRoundPositivePrecisionOperator<RoundHalfToEven>, true>;
-			resolve_prec_func =
-			    DecimalRoundPrecisionResolveTypes<DecimalRoundNegativePrecisionOperator<RoundHalfToEven>,
-			                                      DecimalRoundPositivePrecisionOperator<RoundHalfToEven>, true>;
 			break;
 		case LogicalTypeId::TINYINT:
 			round_prec_func =
@@ -1282,9 +1243,8 @@ ScalarFunctionSet RoundEvenFun::GetFunctions() {
 			}
 			throw InternalException("Unimplemented numeric type for function \"round_even\"");
 		}
-		ScalarFunction round_even_binary_function({}, type, round_prec_func, bind_prec_func);
-		round_even_binary_function.SetResolveTypesCallback(resolve_prec_func);
-		auto round_even_function = NameXPrecisionArguments(std::move(round_even_binary_function), type);
+		auto round_even_function =
+		    NameXPrecisionArguments(ScalarFunction({}, type, round_prec_func, bind_prec_func), type);
 		if (type.id() == LogicalTypeId::DECIMAL) {
 			// rounding a DECIMAL can overflow
 			round_even_function.SetFallible();
@@ -1313,10 +1273,11 @@ struct ExpOperator {
 } // namespace
 
 ScalarFunction ExpFun::GetFunction() {
-	// not annotated monotone: libm exp is not monotone on every platform (Apple libm inverts adjacent doubles)
-	return NameXArgument(
+	auto func = NameXArgument(
 	    ScalarFunction({}, LogicalType::DOUBLE, ScalarFunction::UnaryFunction<double, double, ExpOperator>),
 	    LogicalType::DOUBLE);
+	func.SetUnaryArgProperties(ArgProperties().NonDecreasing());
+	return func;
 }
 
 //===--------------------------------------------------------------------===//

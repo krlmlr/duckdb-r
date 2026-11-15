@@ -51,13 +51,14 @@ unique_ptr<LogicalOperator> Binder::BindCopyDatabaseSchema(Catalog &from_databas
 
 unique_ptr<LogicalOperator> Binder::BindCopyDatabaseData(Catalog &source_catalog,
                                                          const Identifier &target_database_name) {
-	auto entries = PhysicalExport::GetNaiveExportOrder(context, source_catalog);
+	auto source_schemas = source_catalog.GetSchemas(context);
+
+	// We can just use ExtractEntries here because the order doesn't matter
+	ExportEntries entries;
+	PhysicalExport::ExtractEntries(context, source_schemas, entries);
 
 	vector<unique_ptr<LogicalOperator>> insert_nodes;
-	for (auto &table_ref : entries) {
-		if (table_ref.get().type != CatalogType::TABLE_ENTRY) {
-			continue;
-		}
+	for (auto &table_ref : entries.tables) {
 		auto &table = table_ref.get().Cast<TableCatalogEntry>();
 		// generate the insert statement
 		InsertStatement insert_stmt;
@@ -112,9 +113,6 @@ BoundStatement Binder::Bind(CopyDatabaseStatement &stmt) {
 		throw BinderException("Cannot copy from %s to %s - FROM and TO databases are the same", stmt.from_database,
 		                      stmt.to_database);
 	}
-	if (target_catalog.IsSystemCatalog()) {
-		throw BinderException("Cannot copy to the system catalog");
-	}
 	if (stmt.copy_type == CopyDatabaseType::COPY_SCHEMA) {
 		result.types = {LogicalType::BOOLEAN};
 		result.names = {"Success"};
@@ -130,6 +128,7 @@ BoundStatement Binder::Bind(CopyDatabaseStatement &stmt) {
 	result.plan = std::move(plan);
 
 	auto &properties = GetStatementProperties();
+	properties.output_type = QueryResultOutputType::FORCE_MATERIALIZED;
 	properties.return_type = StatementReturnType::NOTHING;
 
 	DatabaseModificationType modification;

@@ -391,8 +391,7 @@ void OuterJoinSimplification::VisitTopN(LogicalTopN &top_n, LogicalOperator &op)
 	for (const auto &order_node : top_n.orders) {
 		AddRequiredColumns(*order_node.expression);
 	}
-	OuterJoinSimplification child_simplification(required_columns);
-	child_simplification.VisitOperator(*op.children[0]);
+	VisitOperatorChildren(op);
 }
 
 void OuterJoinSimplification::VisitAggregate(LogicalAggregate &aggregate, LogicalOperator &op) {
@@ -447,11 +446,9 @@ void OuterJoinSimplification::VisitOperator(LogicalOperator &op) {
 		VisitTopN(top_n, op);
 		return;
 	}
-	case LogicalOperatorType::LOGICAL_LIMIT: {
-		OuterJoinSimplification child_simplification(required_columns);
-		child_simplification.VisitOperator(*op.children[0]);
+	case LogicalOperatorType::LOGICAL_LIMIT:
+		VisitOperatorChildren(op);
 		return;
-	}
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
 		auto &aggregate = op.Cast<LogicalAggregate>();
 		VisitAggregate(aggregate, op);

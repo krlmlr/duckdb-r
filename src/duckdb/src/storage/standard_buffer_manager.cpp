@@ -41,12 +41,6 @@ struct BufferAllocatorData : PrivateAllocatorData {
 	}
 
 	StandardBufferManager &manager;
-
-	TempBufferPoolReservation Reserve(idx_t size);
-	void Release(idx_t size);
-	data_ptr_t Allocate(idx_t size);
-	void Free(data_ptr_t pointer, idx_t size);
-	data_ptr_t Reallocate(data_ptr_t pointer, idx_t old_size, idx_t size);
 };
 
 unique_ptr<FileBuffer> StandardBufferManager::ConstructManagedBuffer(idx_t size, idx_t block_header_size,
@@ -77,7 +71,9 @@ void StandardBufferManager::SetTemporaryDirectory(const string &new_dir) {
 }
 
 StandardBufferManager::StandardBufferManager(DatabaseInstance &db, string tmp)
-    : BufferManager(), db(db), buffer_pool(db.GetBufferPool()), temporary_id(MAXIMUM_BLOCK), buffer_allocator(*this) {
+    : BufferManager(), db(db), buffer_pool(db.GetBufferPool()), temporary_id(MAXIMUM_BLOCK),
+      buffer_allocator(BufferAllocatorAllocate, BufferAllocatorFree, BufferAllocatorRealloc,
+                       make_uniq<BufferAllocatorData>(*this)) {
 	temp_block_manager =
 	    make_uniq<InMemoryBlockManager>(*this, DEFAULT_BLOCK_ALLOC_SIZE, DEFAULT_BLOCK_HEADER_STORAGE_SIZE);
 	temporary_directory.path = std::move(tmp);
@@ -131,7 +127,7 @@ idx_t StandardBufferManager::GetOperatorMemoryLimit() const {
 template <typename... ARGS>
 TempBufferPoolReservation StandardBufferManager::EvictBlocksOrThrow(QueryContext context, MemoryTag tag,
                                                                     idx_t memory_delta, unique_ptr<FileBuffer> *buffer,
-                                                                    const ARGS &...args) {
+                                                                    ARGS... args) {
 	auto r = buffer_pool.EvictBlocks(context, tag, memory_delta, buffer_pool.maximum_memory, buffer);
 	if (!r.success) {
 		string extra_text = StringUtil::Format(" (%s/%s used)", StringUtil::BytesToHumanReadableString(GetUsedMemory()),
@@ -380,7 +376,7 @@ BufferHandle StandardBufferManager::Pin(const QueryContext &context, shared_ptr<
 		// check if the block is already loaded
 		if (block_memory.GetState() == BlockState::BLOCK_LOADED) {
 			// the block is loaded, increment the reader count and set the BufferHandle
-			buf = handle->Load(lock, context);
+			buf = handle->Load(context);
 		}
 		required_memory = block_memory.GetMemoryUsage();
 	}
@@ -401,11 +397,11 @@ BufferHandle StandardBufferManager::Pin(const QueryContext &context, shared_ptr<
 	if (block_memory.GetState() == BlockState::BLOCK_LOADED) {
 		// the block is loaded, increment the reader count and return a pointer to the handle
 		reservation.Resize(0);
-		buf = handle->Load(lock, context);
+		buf = handle->Load(context);
 	} else {
 		// now we can actually load the current block
 		D_ASSERT(block_memory.GetReaders() == 0);
-		buf = handle->Load(lock, context, std::move(reusable_buffer));
+		buf = handle->Load(context, std::move(reusable_buffer));
 		if (!buf.IsValid()) {
 			reservation.Resize(0);
 			return buf; // Buffer was destroyed (e.g., due to DestroyBufferUpon::Eviction)
@@ -465,7 +461,7 @@ void StandardBufferManager::Unpin(shared_ptr<BlockHandle> &handle) {
 			return;
 		}
 		D_ASSERT(block_memory.GetReaders() > 0);
-		auto new_readers = block_memory.DecrementReaders(lock);
+		auto new_readers = block_memory.DecrementReaders();
 		if (new_readers == 0) {
 			VerifyZeroReaders(lock, handle);
 			if (block_memory.MustAddToEvictionQueue()) {
@@ -514,21 +510,17 @@ string StandardBufferManager::GetTemporaryPath(block_id_t id) {
 }
 
 void StandardBufferManager::RequireTemporaryDirectory() {
-	if (temporary_directory.initialized.load(std::memory_order_acquire)) {
-		return;
-	}
-	lock_guard<mutex> guard(temporary_directory.lock);
-	if (temporary_directory.handle) {
-		return;
-	}
 	if (temporary_directory.path.empty()) {
 		throw InvalidInputException(
 		    "Out-of-memory: cannot write buffer because no temporary directory is specified!\nTo enable "
 		    "temporary buffer eviction set a temporary directory using PRAGMA temp_directory='/path/to/tmp.tmp'");
 	}
-	temporary_directory.handle = make_uniq<TemporaryDirectoryHandle>(
-	    db, temporary_directory.path, temporary_directory.size_on_disk, temporary_directory.maximum_swap_space);
-	temporary_directory.initialized.store(true, std::memory_order_release);
+	lock_guard<mutex> guard(temporary_directory.lock);
+	if (!temporary_directory.handle) {
+		// temp directory has not been created yet: initialize it
+		temporary_directory.handle = make_uniq<TemporaryDirectoryHandle>(
+		    db, temporary_directory.path, temporary_directory.size_on_disk, temporary_directory.maximum_swap_space);
+	}
 }
 
 bool StandardBufferManager::EncryptTemporaryFiles() {
@@ -559,43 +551,32 @@ void StandardBufferManager::WriteTemporaryBuffer(QueryContext context, MemoryTag
 		header_size += DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE;
 	}
 
-	// Create the file and write the size followed by the buffer contents.
-	auto &fs = FileSystem::GetFileSystem(db);
-	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE);
-	bool size_on_disk_increased = false;
-	try {
-		temporary_directory.handle->GetTempFile().IncreaseSizeOnDisk(buffer.AllocSize() + header_size);
-		size_on_disk_increased = true;
-		//! for very large buffers, we store the size of the buffer in plaintext.
-		idx_t block_header_size = buffer.GetHeaderSize();
-		auto user_size = buffer.Size();
-		handle->Write(context, &user_size, sizeof(idx_t), 0);
-		handle->Write(context, &block_header_size, sizeof(idx_t), sizeof(idx_t));
-
-		idx_t offset = sizeof(idx_t) * 2;
-
-		if (EncryptTemporaryFiles()) {
-			uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
-			EncryptionEngine::EncryptTemporaryBuffer(db, buffer.InternalBuffer(), buffer.AllocSize(),
-			                                         encryption_metadata);
-			handle->Write(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
-			offset += DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE;
-		}
-
-		buffer.Write(context, *handle, offset);
-	} catch (...) {
-		// roll back the accounting and remove the partially written file
-		if (size_on_disk_increased) {
-			temporary_directory.handle->GetTempFile().DecreaseSizeOnDisk(buffer.AllocSize() + header_size);
-		}
-		handle.reset();
-		fs.RemoveFile(path);
-		throw;
-	}
 	evicted_data_per_tag[uint8_t(tag)] += buffer.AllocSize();
 	if (context.GetClientContext()) {
 		QueryProfiler::Get(*context.GetClientContext()).TrackBytesSpilled(buffer.AllocSize() + header_size);
 	}
+
+	// Create the file and write the size followed by the buffer contents.
+	auto &fs = FileSystem::GetFileSystem(db);
+	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE);
+	temporary_directory.handle->GetTempFile().IncreaseSizeOnDisk(buffer.AllocSize() + header_size);
+	//! for very large buffers, we store the size of the buffer in plaintext.
+	idx_t block_header_size = buffer.GetHeaderSize();
+	auto user_size = buffer.Size();
+	handle->Write(context, &user_size, sizeof(idx_t), 0);
+	handle->Write(context, &block_header_size, sizeof(idx_t), sizeof(idx_t));
+
+	idx_t offset = sizeof(idx_t) * 2;
+
+	if (EncryptTemporaryFiles()) {
+		uint8_t encryption_metadata[DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE];
+		EncryptionEngine::EncryptTemporaryBuffer(db, buffer.InternalBuffer(), buffer.AllocSize(), encryption_metadata);
+		//! Write the nonce (and tag for GCM).
+		handle->Write(context, encryption_metadata, DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE, offset);
+		offset += DEFAULT_ENCRYPTED_BUFFER_HEADER_SIZE;
+	}
+
+	buffer.Write(context, *handle, offset);
 }
 
 unique_ptr<FileBuffer> StandardBufferManager::ReadTemporaryBuffer(QueryContext context, MemoryTag tag,
@@ -677,8 +658,7 @@ unique_ptr<FileBuffer> StandardBufferManager::ReadTemporaryBuffer(QueryContext c
 }
 
 void StandardBufferManager::DeleteTemporaryFile(BlockMemory &memory) {
-	// Without spill storage, there are no temporary buffers to delete.
-	if (!memory.IsUnloaded() || GetUsedSwap() == 0) {
+	if (!memory.IsUnloaded()) {
 		return;
 	}
 	auto id = memory.BlockId();
@@ -704,11 +684,13 @@ void StandardBufferManager::DeleteTemporaryFile(BlockMemory &memory) {
 	// The file is not in the shared pool of files.
 	auto &fs = FileSystem::GetFileSystem(db);
 	auto path = GetTemporaryPath(id);
-	auto metadata = fs.GetStatsIfExists(path);
-	if (metadata) {
+	if (fs.FileExists(path)) {
 		evicted_data_per_tag[uint8_t(memory.GetMemoryTag())] -= memory.GetMemoryUsage();
+		auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
+		auto content_size = handle->GetFileSize();
+		handle.reset();
 		fs.RemoveFile(path);
-		temporary_directory.handle->GetTempFile().DecreaseSizeOnDisk(NumericCast<idx_t>(metadata->file_size));
+		temporary_directory.handle->GetTempFile().DecreaseSizeOnDisk(content_size);
 	}
 }
 
@@ -759,15 +741,15 @@ vector<TemporaryFileInformation> StandardBufferManager::GetTemporaryFiles() {
 		}
 
 		// Another process or thread can delete the file before we can get its file size.
-		auto path = fs.JoinPath(temporary_directory.path, name);
-		auto metadata = fs.GetStatsIfExists(path);
-		if (!metadata) {
+		auto handle = fs.OpenFile(name, FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_NULL_IF_NOT_EXISTS);
+		if (!handle) {
 			return;
 		}
 
 		TemporaryFileInformation info;
-		info.path = std::move(path);
-		info.size = NumericCast<idx_t>(metadata->file_size);
+		info.path = name;
+		info.size = NumericCast<idx_t>(fs.GetFileSize(*handle));
+		handle.reset();
 		result.push_back(info);
 	});
 	return result;
@@ -803,119 +785,51 @@ void StandardBufferManager::FreeReservedMemory(idx_t size) {
 //===--------------------------------------------------------------------===//
 // Buffer Allocator
 //===--------------------------------------------------------------------===//
-TempBufferPoolReservation BufferAllocatorData::Reserve(idx_t size) {
-	return manager.EvictBlocksOrThrow(QueryContext(), MemoryTag::ALLOCATOR, size, nullptr,
-	                                  "failed to allocate data of size %s%s",
-	                                  StringUtil::BytesToHumanReadableString(size));
+data_ptr_t StandardBufferManager::BufferAllocatorAllocate(PrivateAllocatorData *private_data, idx_t size) {
+	auto &data = private_data->Cast<BufferAllocatorData>();
+	auto reservation = data.manager.EvictBlocksOrThrow(QueryContext(), MemoryTag::ALLOCATOR, size, nullptr,
+	                                                   "failed to allocate data of size %s%s",
+	                                                   StringUtil::BytesToHumanReadableString(size));
+	// We rely on manual tracking of this one. :(
+	reservation.size = 0;
+	return Allocator::Get(data.manager.db).AllocateData(size);
 }
 
-void BufferAllocatorData::Release(idx_t size) {
-	BufferPoolReservation r(MemoryTag::ALLOCATOR, manager.GetBufferPool());
+void StandardBufferManager::BufferAllocatorFree(PrivateAllocatorData *private_data, data_ptr_t pointer, idx_t size) {
+	auto &data = private_data->Cast<BufferAllocatorData>();
+	BufferPoolReservation r(MemoryTag::ALLOCATOR, data.manager.GetBufferPool());
 	r.size = size;
 	r.Resize(0);
+	return Allocator::Get(data.manager.db).FreeData(pointer, size);
 }
 
-data_ptr_t BufferAllocatorData::Allocate(idx_t size) {
-	auto reservation = Reserve(size);
-	auto pointer = BlockAllocator::Get(manager.db).AllocateData(size);
-	// Commit the reservation only after backing allocation succeeds.
-	reservation.size = 0;
-	return pointer;
-}
-
-void BufferAllocatorData::Free(data_ptr_t pointer, idx_t size) {
-	Release(size);
-	BlockAllocator::Get(manager.db).FreeData(pointer, size);
-}
-
-data_ptr_t BufferAllocatorData::Reallocate(data_ptr_t pointer, idx_t old_size, idx_t size) {
+data_ptr_t StandardBufferManager::BufferAllocatorRealloc(PrivateAllocatorData *private_data, data_ptr_t pointer,
+                                                         idx_t old_size, idx_t size) {
 	if (old_size == size) {
 		return pointer;
 	}
-	auto result = BlockAllocator::Get(manager.db).ReallocateData(pointer, old_size, size);
-	// Reallocation only adjusts accounting, and backing failure must leave the old reservation intact.
-	BufferPoolReservation reservation(MemoryTag::ALLOCATOR, manager.GetBufferPool());
-	reservation.size = old_size;
-	reservation.Resize(size);
-	reservation.size = 0;
-	return result;
+	auto &data = private_data->Cast<BufferAllocatorData>();
+	BufferPoolReservation r(MemoryTag::ALLOCATOR, data.manager.GetBufferPool());
+	r.size = old_size;
+	r.Resize(size);
+	r.size = 0;
+	return Allocator::Get(data.manager.db).ReallocateData(pointer, old_size, size);
 }
 
-BufferAllocator::BufferAllocator(StandardBufferManager &manager)
-    : Allocator([](PrivateAllocatorData *data, idx_t size) { return data->Cast<BufferAllocatorData>().Allocate(size); },
-                [](PrivateAllocatorData *data, data_ptr_t pointer, idx_t size) {
-	                data->Cast<BufferAllocatorData>().Free(pointer, size);
-                },
-                [](PrivateAllocatorData *data, data_ptr_t pointer, idx_t old_size, idx_t size) {
-	                return data->Cast<BufferAllocatorData>().Reallocate(pointer, old_size, size);
-                },
-                make_uniq<BufferAllocatorData>(manager)) {
-}
-
-HugeAllocation BufferAllocator::AllocateHuge(idx_t size) {
-	D_ASSERT(size > 0);
-	auto &data = GetPrivateData()->Cast<BufferAllocatorData>();
-	auto reservation = data.Reserve(size);
-	auto pointer = BlockAllocator::Get(data.manager.GetDatabase()).AllocateHugeData(size);
-	reservation.size = 0;
-	return HugeAllocation(*this, pointer, size);
-}
-
-void BufferAllocator::FreeHuge(data_ptr_t pointer, idx_t size) {
-	auto &data = GetPrivateData()->Cast<BufferAllocatorData>();
-	data.Release(size);
-	BlockAllocator::Get(data.manager.GetDatabase()).FreeHugeData(pointer, size);
-}
-
-HugeAllocation::HugeAllocation() : allocator(nullptr), pointer(nullptr), allocated_size(0) {
-}
-
-HugeAllocation::HugeAllocation(BufferAllocator &allocator, data_ptr_t pointer, idx_t allocated_size)
-    : allocator(allocator), pointer(pointer), allocated_size(allocated_size) {
-	D_ASSERT(pointer);
-}
-
-HugeAllocation::~HugeAllocation() {
-	Reset();
-}
-
-HugeAllocation::HugeAllocation(HugeAllocation &&other) noexcept
-    : allocator(other.allocator), pointer(nullptr), allocated_size(0) {
-	std::swap(pointer, other.pointer);
-	std::swap(allocated_size, other.allocated_size);
-}
-
-HugeAllocation &HugeAllocation::operator=(HugeAllocation &&other) noexcept {
-	std::swap(allocator, other.allocator);
-	std::swap(pointer, other.pointer);
-	std::swap(allocated_size, other.allocated_size);
-	return *this;
-}
-
-void HugeAllocation::Reset() {
-	if (!pointer) {
-		return;
-	}
-	D_ASSERT(allocator);
-	allocator->FreeHuge(pointer, allocated_size);
-	pointer = nullptr;
-	allocated_size = 0;
-}
-
-BufferAllocator &BufferAllocator::Get(ClientContext &context) {
+Allocator &BufferAllocator::Get(ClientContext &context) {
 	auto &manager = StandardBufferManager::GetBufferManager(context);
 	return manager.GetBufferAllocator();
 }
 
-BufferAllocator &BufferAllocator::Get(DatabaseInstance &db) {
+Allocator &BufferAllocator::Get(DatabaseInstance &db) {
 	return StandardBufferManager::GetBufferManager(db).GetBufferAllocator();
 }
 
-BufferAllocator &BufferAllocator::Get(AttachedDatabase &db) {
+Allocator &BufferAllocator::Get(AttachedDatabase &db) {
 	return BufferAllocator::Get(db.GetDatabase());
 }
 
-BufferAllocator &StandardBufferManager::GetBufferAllocator() {
+Allocator &StandardBufferManager::GetBufferAllocator() {
 	return buffer_allocator;
 }
 

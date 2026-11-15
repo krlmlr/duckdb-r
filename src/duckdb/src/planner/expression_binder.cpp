@@ -34,10 +34,6 @@ void ExpressionBinder::InitializeStackCheck() {
 	}
 }
 
-void ExpressionBinder::ContinueStackDepth(const ExpressionBinder &parent) {
-	stack_depth = parent.stack_depth;
-}
-
 StackChecker<ExpressionBinder> ExpressionBinder::StackCheck(const ParsedExpression &expr, idx_t extra_stack) {
 	D_ASSERT(stack_depth != DConstants::INVALID_INDEX);
 	auto max_expression_depth = Settings::Get<MaxExpressionDepthSetting>(context);
@@ -286,7 +282,7 @@ unique_ptr<Expression> ExpressionBinder::Bind(unique_ptr<ParsedExpression> &expr
 				result = BoundCastExpression::AddCastToType(context, std::move(result), exchanged_type);
 			}
 		}
-		if (ContainsType(result->GetReturnType(), LogicalTypeId::UNKNOWN)) {
+		if (result->GetReturnType().id() == LogicalTypeId::UNKNOWN) {
 			throw ParameterNotResolvedException();
 		}
 	}

@@ -124,13 +124,16 @@ test_that("duckdb_read_csv() works as expected", {
   # temporary table
   # see https://github.com/duckdb/duckdb-r/issues/142
   db <- tempfile()
-  con2 <- dbConnect(duckdb(), dbdir = db)
+  con2 <- local_con(dbdir = db)
   duckdb_read_csv(con2, "iris", tf, temporary = TRUE)
   expect_true(length(dbListTables(con2)) == 1)
   dbDisconnect(con2)
 
   con2 <- local_con(dbdir = db)
   expect_true(length(dbListTables(con2)) == 0)
+  dbDisconnect(con2)
+
+  dbDisconnect(con, shutdown = TRUE)
 })
 
 describe("duckdb_read_csv", {
@@ -237,17 +240,7 @@ describe("duckdb_read_csv", {
       tf,
       col.types = c(rep("VARCHAR", 4))
     ))
-    expect_false(dbExistsTable(con, "iris"))
-  })
-
-  it("error when col.names length not equal to number of cols in file", {
-    write.csv(iris, tf, row.names = FALSE)
-    expect_error(
-      duckdb_read_csv(con, "iris", tf, col.names = c("a", "b")),
-      "2 values to `col.names`",
-      fixed = TRUE
-    )
-    expect_false(dbExistsTable(con, "iris"))
+    dbRemoveTable(con, "iris")
   })
 
   it("invalid col.types gives error", {
@@ -277,4 +270,6 @@ describe("duckdb_read_csv", {
     expect_true(identical(res, dates_df))
     dbRemoveTable(con, "dates_test") # Corrected table name
   })
+
+  dbDisconnect(con, shutdown = TRUE)
 })

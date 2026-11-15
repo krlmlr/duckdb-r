@@ -65,13 +65,9 @@ and the generator is its list.
 The logos are the one thing in that set that is not a source,
 and they are there because the package shows them:
 the horizontal pair is the banner `.github/README.md` renders,
-the stacked pair is the package logo the site puts in its header.
-They come from upstream with each vendor run,
-so that neither drifts away from the engine it documents,
-except where a `patch/` entry says otherwise:
-the horizontal pair is patched to the package's own versions by
-[`patch/0100-Use-the-updated-horizontal-logos.patch`](/patch/0100-Use-the-updated-horizontal-logos.patch),
-which retires itself once upstream ships them.
+the stacked pair is the package logo the site puts in its header,
+and carrying them on the vendor commit is what keeps either
+from drifting away from the engine it documents.
 The horizontal pair keeps its upstream name;
 the stacked pair is renamed on the way in,
 because pkgdown finds the package logo by the name
@@ -131,10 +127,6 @@ Date: <author date of the upstream commit>
 A tagged release says so in the subject,
 `vendor: Update vendored sources (tag v1.x.x) to duckdb/duckdb@<commit_hash>`,
 and [`vendor-one.sh`](/scripts/vendor-one.sh) ends its run there.
-A tag upstream pushes after its commit was vendored gets a second vendor commit for the same SHA,
-identical but for the marker and the version stamp,
-so the marker is part of what pairs a `-dev` commit with its `-build` twin
-(the procedure is `scripts/VENDORING.md`'s, "A tag upstream pushed late").
 
 [`vendor-one.sh`](/scripts/vendor-one.sh), [`series-advance.sh`](/scripts/series-advance.sh),
 [`series-port.sh`](/scripts/series-port.sh) and the repair skills
@@ -143,5 +135,5 @@ So it is not prose: do not reword it,
 and do not squash vendor commits without keeping the newest SHA in the subject.
 
 *To deepen: absorb `scripts/VENDORING.md`'s remaining sections —
-vendoring by hand, creating a patch, and the commit-by-commit loop
-verified locally.*
+vendoring by hand, creating a patch, the two properties of the
+regenerated tree, and the fork-point rule for a new dev line.*

@@ -167,10 +167,10 @@ interval_parse_time : {
 	// parse the remainder of the time as a Time type
 	dtime_t time;
 	idx_t pos;
-	if (!Time::TryConvertInterval(str + start_pos, len - start_pos, pos, time, false, nullptr, negative)) {
+	if (!Time::TryConvertInterval(str + start_pos, len - start_pos, pos, time)) {
 		return false;
 	}
-	if (!IntervalTryAddition<int64_t>(result.micros, time.value, 1, error_message)) {
+	if (!IntervalTryAddition<int64_t>(result.micros, negative ? -time.value : time.value, 1, error_message)) {
 		return false;
 	}
 	found_any = true;
@@ -564,19 +564,10 @@ interval_t Interval::Invert(interval_t interval) {
 }
 
 date_t Interval::Add(date_t left, interval_t right) {
-	date_t result;
-	if (!TryAdd(left, right, result)) {
-		throw OutOfRangeException("Date out of range");
-	}
-	return result;
-}
-
-bool Interval::TryAdd(date_t left, interval_t right, date_t &result) {
 	if (!left.IsFinite()) {
-		result = left;
-		return true;
+		return left;
 	}
-	result = left;
+	date_t result;
 	if (right.months != 0) {
 		int32_t year, month, day;
 		Date::Convert(left, year, month, day);
@@ -590,38 +581,25 @@ bool Interval::TryAdd(date_t left, interval_t right, date_t &result) {
 			year--;
 			month += Interval::MONTHS_PER_YEAR;
 		}
-		if (month < 1 || month > Interval::MONTHS_PER_YEAR) {
-			return false;
-		}
 		day = MinValue<int32_t>(day, Date::MonthDays(year, month));
-		if (!Date::TryFromDate(year, month, day, result)) {
-			return false;
+		result = Date::FromDate(year, month, day);
+	} else {
+		result = left;
+	}
+	if (right.days != 0) {
+		if (!TryAddOperator::Operation(result.days, right.days, result.days)) {
+			throw OutOfRangeException("Date out of range");
 		}
 	}
-	if (right.days != 0 && !TryAddOperator::Operation(result.days, right.days, result.days)) {
-		return false;
+	if (right.micros != 0) {
+		if (!TryAddOperator::Operation(result.days, int32_t(right.micros / Interval::MICROS_PER_DAY), result.days)) {
+			throw OutOfRangeException("Date out of range");
+		}
 	}
-	if (right.micros != 0 &&
-	    !TryAddOperator::Operation(result.days, int32_t(right.micros / Interval::MICROS_PER_DAY), result.days)) {
-		return false;
+	if (!result.IsFinite()) {
+		throw OutOfRangeException("Date out of range");
 	}
-	return result.IsFinite();
-}
-
-bool Interval::TryAdd(timestamp_t left, interval_t right, timestamp_t &result) {
-	if (!left.IsFinite()) {
-		result = left;
-		return true;
-	}
-	date_t date;
-	dtime_t time;
-	Timestamp::Convert(left, date, time);
-	date_t new_date;
-	if (!TryAdd(date, right, new_date)) {
-		return false;
-	}
-	auto new_time = Interval::Add(time, right, new_date);
-	return Timestamp::TryFromDatetime(new_date, new_time, result);
+	return result;
 }
 
 dtime_t Interval::Add(dtime_t left, interval_t right, date_t &date) {

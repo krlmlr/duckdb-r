@@ -18,8 +18,7 @@
 # Stopping is graceful, not fatal. The leg stops at its own deadline and reports
 # what it did not reach, rather than being killed at GitHub's 6-hour job limit
 # mid-commit. Progress is durable per commit (the status), so the next run simply
-# replans whatever is left; nothing is checkpointed. That next run is normally
-# the follow-up this run dispatches for itself (scripts/each-follow-up.sh).
+# replans whatever is left; nothing is checkpointed.
 #
 # Two consequences of "durable per commit" are load-bearing when a leg dies for
 # reasons of its own -- a lost runner, a cancellation, a platform hiccup:
@@ -419,20 +418,6 @@ for sha in "${commits[@]}"; do
   if [ -s "${stage_dir}/outcomes.tsv" ]; then
     failed_stages="$(awk -F'\t' '$2 == "failure" { print $1 }' "${stage_dir}/outcomes.tsv" \
       | jq -Rsc 'split("\n") | map(select(length > 0))')"
-  fi
-
-  # Killed by the leg deadline rather than judged. Exit 124 comes only from the
-  # `timeout` above: rcc-one.sh records a stage that outruns its own budget as
-  # a failure and exits 1. A commit started after others in this leg outran the
-  # time they left, which says nothing about the commit, so it stays undecided,
-  # as the deadline check above leaves the commits it never starts, and the
-  # next run builds it. The leg's first commit had the whole budget, so its kill
-  # is a verdict and is recorded (scripts/series-check.sh calls it REPAIR).
-  if [ "${rc}" -eq 124 ] && [ "${built}" -gt 0 ]; then
-    echo "::endgroup::"
-    echo "${sha}: killed at the leg deadline after ${last_duration}s; leaving it undecided."
-    skipped=$(( skipped + 1 ))
-    continue
   fi
 
   if [ "${rc}" -eq 0 ]; then

@@ -15,10 +15,10 @@ static bool EnumEnumCast(Vector &source, Vector &result, idx_t count, CastParame
 	UnaryExecutor::Execute<SRC_TYPE, RES_TYPE>(source, result, count, [&](SRC_TYPE value) -> optional<RES_TYPE> {
 		auto key = EnumType::GetPos(res_enum_type, dictionary_data[value]);
 		if (key == -1) {
-			HandleCastError::AssignError(
-			    CastExceptionText<string_t>(dictionary_data[value], source.GetType(), res_enum_type),
-			    vector_cast_data.parameters);
-			vector_cast_data.all_converted = false;
+			if (!parameters.error_message) {
+				HandleCastError::AssignError(CastExceptionText<SRC_TYPE, RES_TYPE>(value), vector_cast_data.parameters);
+				vector_cast_data.all_converted = false;
+			}
 			return nullopt;
 		} else {
 			return UnsafeNumericCast<RES_TYPE>(key);
@@ -101,14 +101,13 @@ static bool EnumToAnyCast(Vector &source, Vector &result, idx_t count, CastParam
 
 	// cast to varchar
 	CastParameters to_varchar_params(parameters, cast_data.to_varchar_cast.GetCastData(), lstate.to_varchar_local);
-	if (!cast_data.to_varchar_cast.Cast(source, varchar_cast, count, to_varchar_params)) {
-		return false;
-	}
+	cast_data.to_varchar_cast.Cast(source, varchar_cast, count, to_varchar_params);
 
 	// cast from varchar to the target
 	CastParameters from_varchar_params(parameters, cast_data.from_varchar_cast.GetCastData(),
 	                                   lstate.from_varchar_local);
-	return cast_data.from_varchar_cast.Cast(varchar_cast, result, count, from_varchar_params);
+	cast_data.from_varchar_cast.Cast(varchar_cast, result, count, from_varchar_params);
+	return true;
 }
 
 BoundCastInfo DefaultCasts::EnumCastSwitch(BindCastInput &input, const LogicalType &source, const LogicalType &target) {

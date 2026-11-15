@@ -164,18 +164,18 @@ static scalar_function_t GetDecimalDivExecuteFunction(PhysicalType result_physic
 //   result_scale = max(6, s1 + p2 + 1)
 //   result_width = p1 - s1 + s2 + result_scale
 // Both are capped at Decimal::MAX_WIDTH_DECIMAL (38).
-static void DecimalDivisionResolveTypes(ResolveScalarFunctionTypesInput &input) {
+static unique_ptr<FunctionData> DecimalDivisionBind(BindScalarFunctionInput &input) {
 	auto &bound_function = input.GetBoundFunction();
-	auto &lhs_type = input.GetArgumentType(0);
-	auto &rhs_type = input.GetArgumentType(1);
+	auto &arguments = input.GetArguments();
 
 	uint8_t p1, s1, p2, s2;
-	if (!lhs_type.GetDecimalProperties(p1, s1) || !rhs_type.GetDecimalProperties(p2, s2)) {
+	if (!arguments[0]->GetReturnType().GetDecimalProperties(p1, s1) ||
+	    !arguments[1]->GetReturnType().GetDecimalProperties(p2, s2)) {
 		throw InvalidInputException("decimal_division: both arguments must be DECIMAL");
 	}
 
 	uint8_t result_scale;
-	if (input.GetArgumentCount() == 3) {
+	if (arguments.size() == 3) {
 		auto scale_val = input.GetNonNullConstant(2);
 		auto scale_i = scale_val.GetValue<int32_t>();
 		if (scale_i < 0 || scale_i > Decimal::MAX_WIDTH_DECIMAL) {
@@ -222,8 +222,8 @@ static void DecimalDivisionResolveTypes(ResolveScalarFunctionTypesInput &input) 
 
 	bound_function.SetReturnType(LogicalType::DECIMAL(result_width, result_scale));
 
-	auto lhs_physical = lhs_type.InternalType();
-	auto rhs_physical = rhs_type.InternalType();
+	auto lhs_physical = arguments[0]->GetReturnType().InternalType();
+	auto rhs_physical = arguments[1]->GetReturnType().InternalType();
 	auto wider = MaxValue<PhysicalType>(lhs_physical, rhs_physical);
 
 	int32_t scale_exp = s2 + result_scale - s1;
@@ -251,8 +251,10 @@ static void DecimalDivisionResolveTypes(ResolveScalarFunctionTypesInput &input) 
 	// during plan deserialization (bind is re-called with the stored argument types, and
 	// changing p changes the result-width formula).
 	// For cross-tier inputs, promote the narrower argument to the wider physical tier.
-	bound_function.GetArguments()[0] = (lhs_physical != wider) ? LogicalType::DECIMAL(input_max_width, s1) : lhs_type;
-	bound_function.GetArguments()[1] = (rhs_physical != wider) ? LogicalType::DECIMAL(input_max_width, s2) : rhs_type;
+	bound_function.GetArguments()[0] =
+	    (lhs_physical != wider) ? LogicalType::DECIMAL(input_max_width, s1) : arguments[0]->GetReturnType();
+	bound_function.GetArguments()[1] =
+	    (rhs_physical != wider) ? LogicalType::DECIMAL(input_max_width, s2) : arguments[1]->GetReturnType();
 
 	switch (wider) {
 	case PhysicalType::INT16:
@@ -280,14 +282,8 @@ static void DecimalDivisionResolveTypes(ResolveScalarFunctionTypesInput &input) 
 		bound_function.SetFunctionCallback(GetDecimalDivExecuteFunction<hugeint_t, hugeint_t>(result_physical));
 		break;
 	}
-}
 
-static unique_ptr<FunctionData> DecimalDivisionBind(BindScalarFunctionInput &input) {
-	auto &bound_function = input.GetBoundFunction();
-	auto lhs_scale = DecimalType::GetScale(bound_function.GetArguments()[0]);
-	auto rhs_scale = DecimalType::GetScale(bound_function.GetArguments()[1]);
-	auto result_scale = DecimalType::GetScale(bound_function.GetReturnType());
-	return make_uniq<DecimalDivBindData>(rhs_scale + result_scale - lhs_scale);
+	return make_uniq<DecimalDivBindData>(scale_exp);
 }
 
 //===--------------------------------------------------------------------===//
@@ -300,7 +296,6 @@ ScalarFunctionSet DecimalDivisionFun::GetFunctions() {
 
 	ScalarFunction two_arg({}, decimal_type, DecimalDivExecute<hugeint_t, hugeint_t, hugeint_t>, DecimalDivisionBind);
 	two_arg.GetSignature().AddParameter("x", decimal_type).AddParameter("y", decimal_type);
-	two_arg.SetResolveTypesCallback(DecimalDivisionResolveTypes);
 	two_arg.SetFallible();
 	set.AddFunction(two_arg);
 
@@ -309,7 +304,6 @@ ScalarFunctionSet DecimalDivisionFun::GetFunctions() {
 	    .AddParameter("x", decimal_type)
 	    .AddParameter("y", decimal_type)
 	    .AddParameter("scale", LogicalType::INTEGER);
-	three_arg.SetResolveTypesCallback(DecimalDivisionResolveTypes);
 	three_arg.SetFallible();
 	set.AddFunction(three_arg);
 

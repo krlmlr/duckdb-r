@@ -106,7 +106,8 @@ BindResult BaseSelectBinder::BindGroupingFunction(OperatorExpression &op, idx_t 
 			ExpressionBinder::QualifyColumnNames(binder, child);
 			auto idx = TryBindGroup(*child);
 			if (!idx.IsValid()) {
-				return BindResult(BinderException(op, "GROUPING child %s must be a grouping column", child->GetName()));
+				return BindResult(
+				    BinderException(op, "GROUPING child \"%s\" must be a grouping column", child->GetName()));
 			}
 			group_indexes.push_back(idx);
 		}

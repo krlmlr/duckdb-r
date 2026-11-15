@@ -223,14 +223,11 @@ public:
 		return true;
 	}
 
-	//! Applies a callback to every radix table of this aggregate (per grouping, plus distinct tables)
-	//! together with its global sink state
-	template <class FUNC>
-	void ForEachRadixTable(FUNC &&callback) {
+	void Reset(ClientContext &context) override {
 		for (idx_t grouping_idx = 0; grouping_idx < op.groupings.size(); grouping_idx++) {
 			auto &grouping = op.groupings[grouping_idx];
 			auto &grouping_state = grouping_states[grouping_idx];
-			callback(grouping.table_data, *grouping_state.table_state);
+			grouping.table_data.ResetGlobalSinkState(context, *grouping_state.table_state);
 			if (!grouping.HasDistinct()) {
 				continue;
 			}
@@ -241,27 +238,11 @@ public:
 				if (!radix_table) {
 					continue;
 				}
-				callback(*radix_table, *distinct_state.radix_states[table_idx]);
+				radix_table->ResetGlobalSinkState(context, *distinct_state.radix_states[table_idx]);
 			}
 		}
-	}
-
-	void Reset(ClientContext &context) override {
-		// The recursive runtime announces how many workers the next iteration schedules at most
-		const auto scheduled_workers = reschedule_worker_limit.IsValid()
-		                                   ? reschedule_worker_limit.GetIndex()
-		                                   : TaskScheduler::GetScheduler(context).NumberOfThreads();
-		ForEachRadixTable([&](const RadixPartitionedHashTable &table, GlobalSinkState &table_state) {
-			table.ResetGlobalSinkState(context, table_state, scheduled_workers);
-		});
 		finished = false;
 		GlobalSinkState::Reset(context);
-	}
-
-	void AdjustRescheduledWorkers(ClientContext &context, idx_t scheduled_workers) override {
-		ForEachRadixTable([&](const RadixPartitionedHashTable &table, GlobalSinkState &table_state) {
-			table.AdjustScheduledWorkers(context, table_state, scheduled_workers);
-		});
 	}
 };
 

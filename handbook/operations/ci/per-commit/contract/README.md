@@ -6,7 +6,6 @@ How the to-do list is computed is
 [`selection/`](/handbook/operations/ci/per-commit/selection/README.md)'s.
 
 * **Commits considered** — `<S>-green..HEAD` on a series branch,
-  everything above its seed on an rc strand,
   else first-parent history since `SINCE`; undecided ones only.
 * **Marker written** — a commit status, context `rcc`,
   `pending` before a commit and `success`/`failure` after it,
@@ -33,8 +32,8 @@ How the to-do list is computed is
   A **run's conclusion is not a verdict**: a leg exits 0 whatever its commits
   did, deliberately, so that a red commit reads as a result rather than as a
   broken job.
-* **Gate applied per commit** — warnings, flavor, style, snapshots, roxygen,
-  clean tree, `R CMD check`, pkgdown. The *order* is the contract;
+* **Gate applied per commit** — flavor, style, snapshots, roxygen, clean tree,
+  `R CMD check`, pkgdown. The *order* is the contract;
   the list is `rcc-one.sh`'s `ALL_GATES`.
   The copy that runs is the **commit's own**, not the branch tip's:
   the leg resets the workspace before each commit, and the gate it then
@@ -42,23 +41,8 @@ How the to-do list is computed is
   So a change to the gate binds the commits at or after it and no others,
   and a range replayed from before one is judged without it.
 * **Accepted snapshots** — pushed as `snapshot-<sha>-rcc-smoke-null`.
-* **The canonical repository**: the commits of an open pull request from the fork show their verdicts there,
-  as `each-rcc (fork)` statuses ([`upstream/`](/handbook/operations/ci/per-commit/upstream/README.md)).
 * **Triggers** — push to `each-*` / `*-dev`, `workflow_dispatch`,
   `workflow_call`.
-
-```mermaid
-flowchart LR
-  push["push to #60;S#62;-dev"] --> plan["plan: #60;S#62;-green..HEAD<br>minus what rcc2 has decided"]
-  plan --> legs["legs: one job per shard,<br>rcc-one.sh per commit"]
-  legs --> art["the run: artifact + job log"]
-  legs --> store["rcc2: one record and<br>one log per commit"]
-  store --> plan
-  art --> firing["a loop firing: reads the run first"]
-  store -.->|fallback| firing
-  store --> check["series-check.sh, series-advance.sh"]
-  store --> upstream["each-mirror.sh:<br>statuses in the canonical repository"]
-```
 
 The snapshot branches are load-bearing, so `rcc-one.sh` reproduces them
 rather than just leaving the accepted snapshots in the tree.
@@ -82,14 +66,11 @@ The commit status is a display surface: nothing decides from it.
 Selection reads the verdict store on the `rcc2` branch instead —
 CI-side, that is what "decided" means, in the planner
 ([`each-plan.sh`](/scripts/each-plan.sh)), in a leg's resume check,
-in the follow-up ([`each-follow-up.sh`](/scripts/each-follow-up.sh)),
 and in the backstop, all of them through
 [`rcc-decided.sh`](/scripts/rcc-decided.sh).
-[`series-check.sh`](/scripts/series-check.sh) and [`series-advance.sh`](/scripts/series-advance.sh)
-read the per-commit record,
+[`series-check.sh`](/scripts/series-check.sh) and
+[`series-advance.sh`](/scripts/series-advance.sh) read the per-commit record,
 so they see a verdict minutes after it happens rather than at the end of a run.
-[`each-mirror.sh`](/scripts/each-mirror.sh) reads the same record on an hourly schedule,
-so a verdict reaches the canonical repository no sooner than its next run.
 [`rcc-logs.sh`](/scripts/rcc-logs.sh) writes records to the same place.
 
 The **series loop reads the runs first** and treats the store as its fallback

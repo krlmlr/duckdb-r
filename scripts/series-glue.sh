@@ -29,8 +29,6 @@
 # leaving them in makes every commit look like a glue commit.
 
 set -euo pipefail
-# shellcheck source=series-lib.sh
-. "$(dirname "$0")/series-lib.sh"
 
 usage='usage: series-glue.sh <series>|<rev-range> [--diff] [--remote <name>]'
 argerr() { echo "$usage" >&2; exit 2; }
@@ -58,11 +56,12 @@ toplevel=${VENDOR_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || true)}
 [ -n "$toplevel" ] || { echo "Error: $PWD is not a git worktree" >&2; exit 1; }
 cd "$toplevel"
 
-GLUE=("${series_glue[@]}" ":(exclude)$series_vendor_dir" ":(exclude)$series_stamp_file" ':(exclude)DESCRIPTION')
+GLUE=(src R NAMESPACE
+  ':(exclude)src/duckdb' ':(exclude)R/version.R' ':(exclude)DESCRIPTION')
 
 # The fifth version component stamped above scripts/flavor.sh's commits is the
-# tip of every seed (.claude/skills/series-open/SKILL.md steps 2 and 3, series-forward/SKILL.md step 1).
-seed_tip_re="^$series_seed_subject"
+# tip of every seed (series-open.md steps 2 and 3, series-forward.md step 1).
+seed_tip_re='^chore: Add fifth version component'
 
 # A series name resolves to its whole span: from its seed to the buffer tip,
 # which is every vendor commit it has, verified or not. Anything containing
@@ -95,7 +94,7 @@ case "$what" in
     ;;
 esac
 
-upstream_sha() { series_sha_of "$(git log -1 --format=%s "$1")"; }
+upstream_sha() { git log -1 --format=%s "$1" | sed -rn 's|^.*duckdb/duckdb@([0-9a-f]+).*$|\1|p'; }
 
 mapfile -t commits < <(git log --reverse --format=%H "$range" -- "${GLUE[@]}")
 
@@ -105,7 +104,7 @@ echo
 
 for c in "${commits[@]}"; do
   up=$(upstream_sha "$c")
-  echo "--- $(git rev-parse --short "$c")${up:+  $series_upstream_repo@${up:0:9}}"
+  echo "--- $(git rev-parse --short "$c")${up:+  duckdb/duckdb@${up:0:9}}"
   git log -1 --format=%s "$c" | sed 's/^/    /'
   git show --stat=100 --format= "$c" -- "${GLUE[@]}" | sed '/^$/d; s/^/    /'
   # The prose the fold left behind: what upstream changed, and what the glue

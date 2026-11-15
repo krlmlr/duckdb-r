@@ -181,7 +181,13 @@ LogicalType BindEnumType(BindLogicalTypeInput &input) {
 	Vector enum_vector(LogicalType::VARCHAR, NumericCast<idx_t>(arguments.size()));
 	auto string_data = FlatVector::Writer<string_t>(enum_vector, arguments.size());
 
-	for (auto &arg : arguments) {
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx),
+			                      "ENUM type arguments cannot have names (argument %d has name \"%s\")", arg_idx + 1,
+			                      arg.GetName());
+		}
 		string_data.WriteValue(string_t(StringValue::Get(arg.GetValue())));
 	}
 
@@ -190,7 +196,7 @@ LogicalType BindEnumType(BindLogicalTypeInput &input) {
 
 void RegisterEnumConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddArgs("args", LogicalType::VARCHAR);
+	signature.SetVarArgs(LogicalType::VARCHAR);
 	set.AddFunction(TypeConstructor(std::move(signature), BindEnumType));
 }
 
@@ -237,11 +243,24 @@ void RegisterArrayConstructors(TypeConstructorSet &set) {
 LogicalType BindStructType(BindLogicalTypeInput &input) {
 	auto &arguments = input.modifiers;
 
+	identifier_set_t name_collision_set;
 	child_list_t<LogicalType> children;
 	children.reserve(arguments.size());
 
-	for (auto &arg : arguments) {
-		children.emplace_back(Identifier(arg.GetName()), TypeValue::GetType(arg.GetValue()));
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (!arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx), "STRUCT type arguments must have names");
+		}
+
+		auto name = Identifier(arg.GetName());
+		if (name_collision_set.find(name) != name_collision_set.end()) {
+			throw BinderException(input.GetLocation(arg_idx), "Duplicate STRUCT type argument name \"%s\"",
+			                      arg.GetName());
+		}
+		name_collision_set.insert(name);
+
+		children.emplace_back(std::move(name), TypeValue::GetType(arg.GetValue()));
 	}
 
 	return LogicalType::STRUCT(std::move(children));
@@ -249,7 +268,7 @@ LogicalType BindStructType(BindLogicalTypeInput &input) {
 
 void RegisterStructConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddKwargs("kwargs", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindStructType));
 }
 
@@ -259,7 +278,12 @@ void RegisterStructConstructors(TypeConstructorSet &set) {
 LogicalType BindTupleType(BindLogicalTypeInput &input) {
 	vector<LogicalType> children;
 	children.reserve(input.modifiers.size());
-	for (auto &arg : input.modifiers) {
+	for (idx_t arg_idx = 0; arg_idx < input.modifiers.size(); arg_idx++) {
+		auto &arg = input.modifiers[arg_idx];
+		if (arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx),
+			                      "TUPLE type arguments cannot have names - use STRUCT for named fields");
+		}
 		children.push_back(TypeValue::GetType(arg.GetValue()));
 	}
 	return LogicalType::TUPLE(std::move(children));
@@ -267,7 +291,7 @@ LogicalType BindTupleType(BindLogicalTypeInput &input) {
 
 void RegisterTupleConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddArgs("args", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindTupleType));
 }
 
@@ -302,8 +326,21 @@ LogicalType BindUnionType(BindLogicalTypeInput &input) {
 	}
 
 	child_list_t<LogicalType> children;
-	for (auto &arg : arguments) {
-		children.emplace_back(arg.GetName(), TypeValue::GetType(arg.GetValue()));
+	identifier_set_t name_collision_set;
+
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (!arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx), "UNION type modifiers must have names");
+		}
+
+		auto &entry_name = arg.GetName();
+		if (name_collision_set.find(Identifier(entry_name)) != name_collision_set.end()) {
+			throw BinderException(input.GetLocation(arg_idx), "Duplicate UNION type member name \"%s\"", entry_name);
+		}
+		name_collision_set.insert(Identifier(entry_name));
+
+		children.emplace_back(entry_name, TypeValue::GetType(arg.GetValue()));
 	}
 
 	return LogicalType::UNION(std::move(children));
@@ -311,7 +348,7 @@ LogicalType BindUnionType(BindLogicalTypeInput &input) {
 
 void RegisterUnionConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddKwargs("kwargs", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindUnionType));
 }
 
@@ -319,7 +356,7 @@ void RegisterUnionConstructors(TypeConstructorSet &set) {
 // VARIANT Type
 //----------------------------------------------------------------------------------------------------------------------
 LogicalType BindVariantType(BindLogicalTypeInput &input) {
-	// We need this function to make sure we always create a VARIANT type with LogicalTypeInfo
+	// We need this function to make sure we always create a VARIANT type with ExtraTypeInfo
 	return LogicalType::VARIANT();
 }
 

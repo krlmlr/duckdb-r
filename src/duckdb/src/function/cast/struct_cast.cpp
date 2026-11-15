@@ -1,4 +1,3 @@
-#include "duckdb/function/cast/nested_to_varchar_cast.hpp"
 #include "duckdb/common/vector/constant_vector.hpp"
 #include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/common/vector/list_vector.hpp"
@@ -32,7 +31,7 @@ unique_ptr<BoundCastData> StructBoundCastData::BindStructToStructCast(BindCastIn
 		for (idx_t i = 0; i < target_children.size(); i++) {
 			auto &name = target_children[i].first;
 			if (target_children_map.find(name) != target_children_map.end()) {
-				throw NotImplementedException("Error while casting - duplicate name %s in struct", name);
+				throw NotImplementedException("Error while casting - duplicate name \"%s\" in struct", name);
 			}
 			target_children_map[name] = i;
 		}
@@ -349,13 +348,9 @@ BoundCastInfo DefaultCasts::StructCastSwitch(BindCastInput &input, const Logical
 			varchar_children.push_back(make_pair(child_entry.first, LogicalType::VARCHAR));
 		}
 		auto varchar_type = LogicalType::STRUCT(varchar_children);
-		auto cast_data = StructBoundCastData::BindStructToStructCast(input, source, varchar_type);
-		auto &struct_cast_data = cast_data->Cast<StructBoundCastData>();
-		for (idx_t i = 0; i < struct_cast_data.child_cast_info.size(); i++) {
-			NestedToVarcharCast::WrapChildCast(struct_cast_data.child_cast_info[i],
-			                                   struct_children[struct_cast_data.source_indexes[i]].second);
-		}
-		return BoundCastInfo(StructToVarcharCast, std::move(cast_data), StructBoundCastData::InitStructCastLocalState);
+		return BoundCastInfo(StructToVarcharCast,
+		                     StructBoundCastData::BindStructToStructCast(input, source, varchar_type),
+		                     StructBoundCastData::InitStructCastLocalState);
 	}
 	case LogicalTypeId::MAP: {
 		return BoundCastInfo(StructToMapCast, StructToMapBoundCastData::BindStructToMapCast(input, source, target),
