@@ -45,14 +45,6 @@ ScopedInterruptHandler::~ScopedInterruptHandler() {
 	}
 }
 
-bool ScopedInterruptHandler::IsActive() {
-	return instance != nullptr;
-}
-
-bool ScopedInterruptHandler::IsActiveFor(const ClientContext &context) {
-	return instance && instance->context.get() == &context;
-}
-
 void ScopedInterruptHandler::HandleInterrupt() const {
 	// Never interrupted without context
 	if (!interrupted) {

@@ -15,6 +15,7 @@
 namespace duckdb {
 
 class PreparedStatementData;
+class ColumnDataCollection;
 
 //! PhysicalResultCollector is an abstract class that is used to generate the final result of a query
 class PhysicalResultCollector : public PhysicalOperator {
@@ -26,6 +27,7 @@ public:
 
 	StatementType statement_type;
 	StatementProperties properties;
+	QueryResultMemoryType memory_type;
 	PhysicalOperator &plan;
 	vector<Identifier> names;
 
@@ -54,10 +56,15 @@ public:
 	virtual bool IsStreaming() const {
 		return false;
 	}
-	//! Whether this collector builds its own result object, rather than serving it through a result buffer
-	virtual bool BuildsOwnResult() const {
-		return true;
+	//! Whether a producer is parked on this sink and only the consumer can release it. A streaming
+	//! collector without a parked-producer notion reports true: it is never waited on forever, at
+	//! the price of returning to the consumer on every unrelated block
+	virtual bool HasBlockedResultProducer(GlobalSinkState &state) const {
+		return IsStreaming();
 	}
+
+protected:
+	unique_ptr<ColumnDataCollection> CreateCollection(ClientContext &context) const;
 };
 
 } // namespace duckdb

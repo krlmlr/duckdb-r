@@ -82,8 +82,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 
 | File | Purpose |
 |---|---|
-| [`each-follow-up-test.sh`](each-follow-up-test.sh) | Check scripts/each-follow-up.sh, offline, against a synthetic branch, a synthetic store and a stand-in for `gh api` built here, and the part of scripts/each-... |
-| [`each-follow-up.sh`](each-follow-up.sh) | Dispatch one more `each-rcc` run when this one left planned commits undecided. |
 | [`each-shard.sh`](each-shard.sh) | Build one shard of an `each-rcc` plan: many commits, one job, one workspace. |
 | [`rcc-one.sh`](rcc-one.sh) | Run the per-commit `rcc` gate against the working tree, once. |
 
@@ -107,29 +105,11 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 |---|---|
 | [`rcc-consolidate.sh`](rcc-consolidate.sh) | Consolidate the orphan `rcc2` branch: drop everything past the retention window, and squash the whole history to two commits. |
 | [`rcc-cutover.sh`](rcc-cutover.sh) | One-shot: build the `rcc2` verdict store from what the old `rcc` branch holds. |
-| [`rcc-drop.sh`](rcc-drop.sh) | Drop named commits' verdicts from the store on the orphan `rcc2` branch. |
 | [`rcc-lib.sh`](rcc-lib.sh) | Shared helpers for the verdict store on the orphan `rcc2` branch. |
 | [`rcc-logs.sh`](rcc-logs.sh) | Collect rcc results and failure logs for commits the verdict store has no record for, and stage them for publication to the orphan `rcc2` branch. |
 | [`rcc-publish.sh`](rcc-publish.sh) | Publish a staging directory to the verdict store on the orphan `rcc2` branch. |
 | [`rcc-run-fields.jq`](rcc-run-fields.jq) | The subset of a GitHub workflow-run object that a record on the `rcc2` branch carries, applied to `gh api repos/{owner}/{repo}/actions/runs/<id>`. |
 | [`rcc-store-test.sh`](rcc-store-test.sh) | Check the invariants the verdict store rests on, offline, against a local bare repository -- optionally seeded from the real `rcc` branch. |
-
-## [`operations/ci/per-commit/upstream/`](/handbook/operations/ci/per-commit/upstream/README.md)
-
-| File | Purpose |
-|---|---|
-| [`each-mirror-test.sh`](each-mirror-test.sh) | Check scripts/each-mirror.sh, offline, against a synthetic canonical repository, a synthetic store and a stand-in for `gh api` built here: no network, no fix... |
-| [`each-mirror.sh`](each-mirror.sh) | Copy the fork's per-commit verdicts onto the same commits in the canonical repository, as commit statuses with context `each-rcc (fork)`, for the open pull r... |
-
-## [`operations/releases/cran/`](/handbook/operations/releases/cran/README.md)
-
-| File | Purpose |
-|---|---|
-| [`cran-lib.sh`](cran-lib.sh) | Shared helpers for scripts/cran-submit.sh and scripts/cran-release.sh: the log, the annotations, the report. |
-| [`cran-release-test.sh`](cran-release-test.sh) | Check scripts/cran-release.sh offline, against a fake P3M on 127.0.0.1 and a `gh` stub: nothing reaches GitHub. |
-| [`cran-release.sh`](cran-release.sh) | Publish the draft GitHub releases of CRAN submissions once Posit's package manager serves their version. |
-| [`cran-submit-test.sh`](cran-submit-test.sh) | Check scripts/cran-submit.sh offline, against a fake CRAN submission form on 127.0.0.1: nothing reaches CRAN. |
-| [`cran-submit.sh`](cran-submit.sh) | Build the source package, recompress it with zopfli, and upload it to CRAN the way `devtools:::upload_cran()` does. |
 
 ## [`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)
 
@@ -145,8 +125,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`merge-version.sh`](merge-version.sh) | Git merge driver for DESCRIPTION. |
 | [`rconfigure.py`](rconfigure.py) | Regenerate the vendored build configuration from a DuckDB checkout: src/duckdb/, src/include/sources.mk, R/version.R, the Makevars files and the logos. |
 | [`setup-git.sh`](setup-git.sh) | Register repository-local git configuration that cannot live in versioned files. |
-| [`vendor-lib.sh`](vendor-lib.sh) | The glue gate: whether the glue compiles against the headers the tree vendors. |
-| [`vendor-one-test.sh`](vendor-one-test.sh) | Check scripts/vendor-one.sh --strand offline, against a synthetic upstream and package built here: no network, no fixtures on disk, the generator stubbed in ... |
 | [`vendor-one.sh`](vendor-one.sh) | Vendors DuckDB sources commit-by-commit from the upstream repository. |
 | [`vendor.sh`](vendor.sh) | Vendors DuckDB sources from the upstream repository (manual vendoring). |
 
@@ -160,33 +138,16 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`series-alpha-test.sh`](series-alpha-test.sh) | Check scripts/series-alpha.sh offline, against a synthetic remote and clone built here, with `curl` stubbed: no network, no fixtures on disk. |
 | [`series-alpha.sh`](series-alpha.sh) | Derive the alpha strand of a series: `<S>-alpha`, a green commit stamped with the version of upstream's alpha build of its engine, so that `INSTALL` finds th... |
 | [`series-args-test.sh`](series-args-test.sh) | Check the argument contract every scripts/series-*.sh shares, offline. |
-| [`series-check-test.sh`](series-check-test.sh) | Check how scripts/series-check.sh classifies a red commit, offline, against a synthetic fork and verdict store built here: no network, no fixtures on disk. |
 | [`series-check.sh`](series-check.sh) | Read-only diagnosis for the series loop: what should a firing do? |
-| [`series-config.sh`](series-config.sh) | What this repository tells the series tooling about the engine it vendors, and nothing else. |
 | [`series-converge.sh`](series-converge.sh) | Does a forward series still carry the same package as the series it replaces? |
 | [`series-cut.sh`](series-cut.sh) | Open a new series by cutting its parent's strands at the fork point: compute the fork point, find the commit on each strand that vendors it, and write the fo... |
-| [`series-cutover-test.sh`](series-cutover-test.sh) | Check a cutover, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk, and a `gh` that records what ... |
-| [`series-cutover.sh`](series-cutover.sh) | Replace a series with its forward counterpart, keeping the replaced history reachable: archive pull requests first, then one atomic swap. |
-| [`series-fold-test.sh`](series-fold-test.sh) | Check scripts/series-fold.sh offline, against a synthetic landing built here: no network, no fixtures on disk. |
-| [`series-fold.sh`](series-fold.sh) | Fold fixes into the commits that introduced their defects, and replay everything above them: the landing commits of an iteration (.claude/skills/series-land/... |
-| [`series-forward-build-test.sh`](series-forward-build-test.sh) | Check the forward replay, offline, against a synthetic base series and seed built here: no network, no fixtures on disk. |
-| [`series-forward-build.sh`](series-forward-build.sh) | Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-dev`, and then of the old `<S>-build` above it, onto HEAD, which must be the freshly fla... |
+| [`series-cutover.sh`](series-cutover.sh) | Atomically replace a series with its forward counterpart. |
+| [`series-forward-build.sh`](series-forward-build.sh) | Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-build` onto HEAD, which must be the freshly flavored seed on current `main` (.claude/ski... |
 | [`series-glue.sh`](series-glue.sh) | Every R-side glue adaptation a series carries, in one read. |
-| [`series-land-test.sh`](series-land-test.sh) | Check the landing of a series on `main`, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk. |
-| [`series-land.sh`](series-land.sh) | Land a series on `main`: build `<L>-land-dev`, every vendor commit of the series replayed without its flavor onto the `main` it will fast-forward (.claude/sk... |
-| [`series-learned.sh`](series-learned.sh) | What a series' `-dev` learned beyond its buffer: for every vendor commit, the fix the loop folded into it that its `-build` twin does not carry. |
-| [`series-lib-test.sh`](series-lib-test.sh) | Check scripts/series-lib.sh against scripts/series-config.sh, offline: the vendor predicate, the markers, the version ordering, the path filters, and the wal... |
-| [`series-lib.sh`](series-lib.sh) | The helpers every series script shares, reading scripts/series-config.sh: which commit vendors, what it vendors, where a walk starts. |
-| [`series-patch-sync-test.sh`](series-patch-sync-test.sh) | Check scripts/series-patch-sync.sh offline, against a synthetic series built here: no network, no fixtures on disk. |
-| [`series-patch-sync.sh`](series-patch-sync.sh) | Carry `patch/` entries from `<S>-dev` onto `<S>-vendor`, the strand the buffer is derived from, the way stage 5 carries tests and glue onto a forward series;... |
+| [`series-patch-sync.sh`](series-patch-sync.sh) | Carry `patch/` entries from `<S>-dev` onto `<S>-build`, the way stage 5 carries tests and glue onto a forward series. |
 | [`series-port-test.sh`](series-port-test.sh) | Check which commits stage 4 offers, offline, against a synthetic remote and clone built here -- no network, no fixtures on disk. |
 | [`series-port.sh`](series-port.sh) | Bring a series' -dev branch level with `main` — stage 4 of the series loop (.claude/skills/series-loop/SKILL.md). |
-| [`series-prune.sh`](series-prune.sh) | Read-only: what a cutover left behind, and the commands that remove it, for a human to run. |
 | [`series-rc.sh`](series-rc.sh) | Derive the release-candidate strand of a series: `<S>-rc-dev`, the package without its flavor, commit for commit (.claude/skills/series-rc/SKILL.md). |
-| [`series-tests-test.sh`](series-tests-test.sh) | Check how scripts/series-tests.sh reads a tree's tests against `main`'s, offline, against a synthetic repository built here: no network, no fixtures. |
-| [`series-tests.sh`](series-tests.sh) | Which of `main`'s tests does a tree stop running, and which does it change? |
-| [`series-vendor-test.sh`](series-vendor-test.sh) | Check scripts/series-vendor.sh offline, against a synthetic series built here: no network, no fixtures on disk. |
-| [`series-vendor.sh`](series-vendor.sh) | The vendor strand of a series, `<S>-vendor`: pure vendoring, one commit per upstream commit, vendored once and carried forward by a rebase (handbook/branches... |
 
 ## [`testing/snapshots/`](/handbook/testing/snapshots/README.md)
 

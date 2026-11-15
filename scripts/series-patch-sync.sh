@@ -1,11 +1,10 @@
 #!/bin/bash
-# Carry `patch/` entries from `<S>-dev` onto `<S>-vendor`, the strand the buffer
-# is derived from, the way stage 5 carries tests and glue onto a forward series;
-# a series with no strand yet takes them onto `<S>-build` as before.
+# Carry `patch/` entries from `<S>-dev` onto `<S>-build`, the way stage 5 carries
+# tests and glue onto a forward series.
 #
-# `vendor-one.sh` applies the `patch/*.patch` of the ref it vendors onto to every
-# tree it regenerates, so that ref, the strand, is where an entry has to live to
-# have any effect on what the series vendors next. Entries arrive on `-dev` two ways, and only one
+# `vendor-one.sh` applies the *buffer's* `patch/*.patch` to every tree it
+# regenerates, so the buffer is where an entry has to live to have any effect on
+# what the series vendors next. Entries arrive on `-dev` two ways, and only one
 # of them puts them there:
 #
 #   * a firing writes one during a repair -- stage 3 says to commit it onto
@@ -67,8 +66,6 @@
 # contract in handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
-# shellcheck source=series-lib.sh
-. "$(dirname "$0")/series-lib.sh"
 
 usage='usage: series-patch-sync.sh <series> [--apply] [--remote <name>]'
 argerr() { echo "$usage" >&2; exit 2; }
@@ -89,12 +86,7 @@ S=${args[0]}
 
 git fetch -q "$remote"
 
-# The strand carries the patch stack (handbook/branches/model/README.md), so a
-# carry lands there and reaches the buffer by the next pick (scripts/series-vendor.sh);
-# the buffer takes it only where the series has no strand yet.
-target=build
-git rev-parse -q --verify "refs/remotes/$remote/$S-vendor" >/dev/null && target=vendor
-build="refs/remotes/$remote/$S-$target"
+build="refs/remotes/$remote/$S-build"
 dev="refs/remotes/$remote/$S-dev"
 for r in "$build" "$dev"; do
   git rev-parse -q --verify "$r" >/dev/null || { echo "$S: no $r" >&2; exit 1; }
@@ -190,26 +182,19 @@ for n in "${carried[@]:-}"; do
   patch -d "$wt" -i "$wt/$n" -p1 --forward --no-backup-if-mismatch
 done
 
-# What is derived from the patched tree follows the carry on the strand, as it
-# follows a vendor run (scripts/series-config.sh).
-if [ "$target" = vendor ]; then
-  (cd "$wt" && series_generate_derived strand && series_stage_vendor_paths && git checkout -q -- . && git clean -fdq)
-else
-  git -C "$wt" add -A
-fi
+git -C "$wt" add -A
 git -C "$wt" commit -q -F - <<EOF
-fix(patch): Carry $((${#carried[@]} + ${#satisfied[@]})) entr$([ $((${#carried[@]} + ${#satisfied[@]})) -eq 1 ] && echo y || echo ies) from $S-dev onto $S-$target
+fix(patch): Carry $((${#carried[@]} + ${#satisfied[@]})) entr$([ $((${#carried[@]} + ${#satisfied[@]})) -eq 1 ] && echo y || echo ies) from $S-dev onto the buffer
 
-\`vendor-one.sh\` applies the \`patch/*.patch\` of the ref it vendors onto to every
-tree it regenerates, so an entry that only ever reached \`-dev\` is absent from
-the next vendor run and the commit that reaches \`-dev\` from it arrives broken
-again.
+\`vendor-one.sh\` applies the buffer's own \`patch/*.patch\` to every tree it
+regenerates, so an entry that only ever reached \`-dev\` is absent from the next
+vendor run and the commit that reaches \`-dev\` from it arrives broken again.
 
-Each was test-applied against this tree before being taken:
+Each was test-applied against this buffer's tree before being taken:
 ${carried[*]:+carried with its effect: ${carried[*]}}
 ${satisfied[*]:+already in the tree, entry taken to match the names: ${satisfied[*]}}
 EOF
 
 next=$(git -C "$wt" rev-parse HEAD)
-git push "$remote" "$next:refs/heads/$S-$target"
-echo "  $target -> $(git rev-parse --short "$next")"
+git push "$remote" "$next:refs/heads/$S-build"
+echo "  build -> $(git rev-parse --short "$next")"

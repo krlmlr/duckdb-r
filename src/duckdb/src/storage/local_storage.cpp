@@ -1,5 +1,4 @@
 #include "duckdb/transaction/local_storage.hpp"
-#include "duckdb/common/vector/vector_writer.hpp"
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/transaction/commit_state.hpp"
 
@@ -37,7 +36,7 @@ LocalTableStorage::LocalTableStorage(ClientContext &context, DataTable &new_data
                                      const vector<StorageIndex> &bound_columns, Expression &cast_expr,
                                      TransactionData transaction)
     : context(context), table_ref(new_data_table), allocator(Allocator::Get(new_data_table.db)),
-      deleted_rows(parent.deleted_rows.load()), optimistic_collections(std::move(parent.optimistic_collections)),
+      deleted_rows(parent.deleted_rows), optimistic_collections(std::move(parent.optimistic_collections)),
       optimistic_writer(new_data_table, parent.optimistic_writer) {
 	// Alter the column type.
 	auto &parent_collection = *parent.row_groups->collection;
@@ -46,7 +45,6 @@ LocalTableStorage::LocalTableStorage(ClientContext &context, DataTable &new_data
 	parent_collection.CommitDropColumn(alter_column_index);
 	row_groups = std::move(parent.row_groups);
 	row_groups->collection = std::move(new_collection);
-	row_groups->ResetCollectionAccounting();
 
 	append_indexes.Move(parent.append_indexes);
 	delete_indexes.Move(parent.delete_indexes);
@@ -54,7 +52,7 @@ LocalTableStorage::LocalTableStorage(ClientContext &context, DataTable &new_data
 
 LocalTableStorage::LocalTableStorage(DataTable &new_data_table, LocalTableStorage &parent,
                                      const idx_t drop_column_index)
-    : table_ref(new_data_table), allocator(Allocator::Get(new_data_table.db)), deleted_rows(parent.deleted_rows.load()),
+    : table_ref(new_data_table), allocator(Allocator::Get(new_data_table.db)), deleted_rows(parent.deleted_rows),
       optimistic_collections(std::move(parent.optimistic_collections)),
       optimistic_writer(new_data_table, parent.optimistic_writer) {
 	// Remove the column from the previous table storage.
@@ -63,7 +61,6 @@ LocalTableStorage::LocalTableStorage(DataTable &new_data_table, LocalTableStorag
 	parent_collection.CommitDropColumn(drop_column_index);
 	row_groups = std::move(parent.row_groups);
 	row_groups->collection = std::move(new_collection);
-	row_groups->ResetCollectionAccounting();
 
 	append_indexes.Move(parent.append_indexes);
 	delete_indexes.Move(parent.delete_indexes);
@@ -71,14 +68,13 @@ LocalTableStorage::LocalTableStorage(DataTable &new_data_table, LocalTableStorag
 
 LocalTableStorage::LocalTableStorage(ClientContext &context, DataTable &new_dt, LocalTableStorage &parent,
                                      ColumnDefinition &new_column, ExpressionExecutor &default_executor)
-    : table_ref(new_dt), allocator(Allocator::Get(new_dt.db)), deleted_rows(parent.deleted_rows.load()),
+    : table_ref(new_dt), allocator(Allocator::Get(new_dt.db)), deleted_rows(parent.deleted_rows),
       optimistic_collections(std::move(parent.optimistic_collections)),
       optimistic_writer(new_dt, parent.optimistic_writer) {
 	auto &parent_collection = *parent.row_groups->collection;
 	auto new_collection = parent_collection.AddColumn(context, new_column, default_executor);
 	row_groups = std::move(parent.row_groups);
 	row_groups->collection = std::move(new_collection);
-	row_groups->ResetCollectionAccounting();
 	append_indexes.Move(parent.append_indexes);
 	delete_indexes.Move(parent.delete_indexes);
 }
@@ -285,7 +281,7 @@ void LocalTableStorage::Rollback() {
 //===--------------------------------------------------------------------===//
 // LocalTableManager
 //===--------------------------------------------------------------------===//
-optional_ptr<LocalTableStorage> LocalTableManager::GetStorage(const DataTable &table) const {
+optional_ptr<LocalTableStorage> LocalTableManager::GetStorage(DataTable &table) const {
 	lock_guard<mutex> l(table_storage_lock);
 	auto entry = table_storage.find(table);
 	return entry == table_storage.end() ? nullptr : entry->second.get();
@@ -297,7 +293,7 @@ LocalTableStorage &LocalTableManager::GetOrCreateStorage(ClientContext &context,
 	if (entry == table_storage.end()) {
 		auto new_storage = make_shared_ptr<LocalTableStorage>(context, table);
 		auto storage = new_storage.get();
-		table_storage.insert(make_pair(reference<const DataTable>(table), std::move(new_storage)));
+		table_storage.insert(make_pair(reference<DataTable>(table), std::move(new_storage)));
 		return *storage;
 	} else {
 		return *entry->second.get();
@@ -320,7 +316,7 @@ shared_ptr<LocalTableStorage> LocalTableManager::MoveEntry(DataTable &table) {
 	return storage_entry;
 }
 
-reference_map_t<const DataTable, shared_ptr<LocalTableStorage>> LocalTableManager::MoveEntries() {
+reference_map_t<DataTable, shared_ptr<LocalTableStorage>> LocalTableManager::MoveEntries() {
 	lock_guard<mutex> l(table_storage_lock);
 	return std::move(table_storage);
 }
@@ -541,36 +537,15 @@ idx_t LocalStorage::Delete(DataTable &table, DuckTableEntry &table_entry, Vector
 	auto storage = table_manager.GetStorage(table);
 	D_ASSERT(storage);
 
-	auto ids = FlatVector::GetDataMutable<row_t>(row_ids);
-	if (storage->append_indexes.Empty()) {
-		idx_t delete_count = storage->GetCollection().Delete(TransactionData::Unversioned(), table_entry, ids, count);
-		storage->deleted_rows += delete_count;
-		return delete_count;
-	}
-	// a row can be matched multiple times (e.g. DELETE ... USING) - only remove the rows that were deleted now from
-	// the unique indices
-	DeletedRowIds deleted_ids(ids);
-	idx_t delete_count =
-	    storage->GetCollection().Delete(TransactionData::Unversioned(), table_entry, ids, count, deleted_ids);
-	storage->deleted_rows += delete_count;
-	if (!deleted_ids.has_skipped_rows) {
-		// all rows were deleted
+	// delete from unique indices (if any)
+	if (!storage->append_indexes.Empty()) {
 		storage->GetCollection().RemoveFromIndexes(context, storage->append_indexes, row_ids, count,
 		                                           IndexRemovalType::MAIN_INDEX_ONLY);
-		return delete_count;
 	}
-	auto &deleted_row_ids = deleted_ids.row_ids;
-	if (!deleted_row_ids.empty()) {
-		Vector deleted_row_id_vector(LogicalType::ROW_TYPE, deleted_row_ids.size());
-		{
-			auto writer = FlatVector::Writer<row_t>(deleted_row_id_vector, deleted_row_ids.size());
-			for (auto &row_id : deleted_row_ids) {
-				writer.WriteValue(row_id);
-			}
-		}
-		storage->GetCollection().RemoveFromIndexes(context, storage->append_indexes, deleted_row_id_vector,
-		                                           deleted_row_ids.size(), IndexRemovalType::MAIN_INDEX_ONLY);
-	}
+
+	auto ids = FlatVector::GetDataMutable<row_t>(row_ids);
+	idx_t delete_count = storage->GetCollection().Delete(TransactionData::Unversioned(), table_entry, ids, count);
+	storage->deleted_rows += delete_count;
 	return delete_count;
 }
 
@@ -586,7 +561,6 @@ void LocalStorage::Update(DataTable &table, DuckTableEntry &table_entry, Vector 
 
 void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_ptr<StorageCommitState> commit_state) {
 	if (storage.is_dropped) {
-		storage.Rollback();
 		return;
 	}
 	if (storage.GetCollection().GetTotalRows() <= storage.deleted_rows) {
@@ -617,8 +591,9 @@ void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_
 		// check if we have written data
 		// if we have, we cannot merge to disk after all
 		// so we need to revert the data we have already written
-		// this happens when rows were deleted after a bulk append, or when the optimistic writer
-		// flushed a partial row group that does not qualify as a bulk append
+		// this only happens for transactions that deleted rows after bulk-appending: a pure bulk
+		// append always takes the merge path above, using its pre-flushed blocks as written
+		D_ASSERT(!storage.HasFlushedRowGroups() || storage.deleted_rows > 0);
 		storage.Rollback();
 		// append to the indexes
 		storage.AppendToIndexes(transaction, append_state);
@@ -659,9 +634,9 @@ void LocalStorage::Commit(optional_ptr<StorageCommitState> commit_state) {
 	// after this, the local storage is no longer required and can be cleared
 	auto table_storage = table_manager.MoveEntries();
 	for (auto &entry : table_storage) {
+		auto table = entry.first;
 		auto storage = entry.second.get();
-		D_ASSERT(RefersToSameObject(entry.first, storage->table_ref));
-		Flush(storage->table_ref, *storage, commit_state);
+		Flush(table, *storage, commit_state);
 		entry.second.reset();
 	}
 }
@@ -770,7 +745,7 @@ TableIndexList &LocalStorage::GetIndexes(ClientContext &context, DataTable &tabl
 	return storage.append_indexes;
 }
 
-optional_ptr<LocalTableStorage> LocalStorage::GetStorage(const DataTable &table) {
+optional_ptr<LocalTableStorage> LocalStorage::GetStorage(DataTable &table) {
 	return table_manager.GetStorage(table);
 }
 

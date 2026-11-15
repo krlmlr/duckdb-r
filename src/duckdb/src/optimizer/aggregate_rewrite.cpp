@@ -2,7 +2,7 @@
 
 #include "duckdb/function/aggregate/distributive_functions.hpp"
 #include "duckdb/function/function_binder.hpp"
-#include "duckdb/function/builtin_function_lookup.hpp"
+#include "duckdb/optimizer/builtin_function_lookup.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -85,7 +85,13 @@ static unique_ptr<Expression> CreateAggregateSortKey(ClientContext &context, con
 		sort_children.push_back(make_uniq<BoundConstantExpression>(Value(order.GetOrderModifier())));
 	}
 	FunctionBinder function_binder(context);
-	return function_binder.BindScalarFunction(Identifier::DefaultSchema(), "create_sort_key", std::move(sort_children));
+	ErrorData error;
+	auto sort_key = function_binder.BindScalarFunction(Identifier::DefaultSchema(), "create_sort_key",
+	                                                   std::move(sort_children), error);
+	if (!sort_key) {
+		error.Throw();
+	}
+	return sort_key;
 }
 
 unique_ptr<AggregateRewritePlan> FrequencyAggregateRewrite::Create(AggregateRewriteInput &input, bool ignore_nulls,

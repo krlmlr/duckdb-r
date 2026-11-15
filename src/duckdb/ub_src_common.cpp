@@ -42,6 +42,8 @@
 
 #include "src/common/exception_format_value.cpp"
 
+#include "src/common/extra_type_info.cpp"
+
 #include "src/common/file_buffer.cpp"
 
 #include "src/common/file_system.cpp"
@@ -61,8 +63,6 @@
 #include "src/common/json_document.cpp"
 
 #include "src/common/local_file_system.cpp"
-
-#include "src/common/logical_type_info.cpp"
 
 #include "src/common/memory_mapped_file.cpp"
 

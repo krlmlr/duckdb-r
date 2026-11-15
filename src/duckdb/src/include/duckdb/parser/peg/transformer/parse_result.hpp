@@ -1,7 +1,6 @@
 #pragma once
 #include "utf8proc_wrapper.hpp"
 #include "duckdb/common/arena_linked_list.hpp"
-#include "duckdb/common/array_ptr.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/string.hpp"
@@ -63,7 +62,6 @@ inline string TokenTypeToString(TokenType type) {
 
 class PEGTransformer; // Forward declaration
 struct CompiledGrammarRule;
-class Matcher;
 
 enum class ParseResultType : uint8_t {
 	LIST,
@@ -79,7 +77,6 @@ enum class ParseResultType : uint8_t {
 	NUMBER,
 	STRING,
 	END_OF_INPUT,
-	TOKEN,
 	INVALID
 };
 
@@ -111,8 +108,6 @@ inline const char *ParseResultToString(ParseResultType type) {
 		return "STRING";
 	case ParseResultType::END_OF_INPUT:
 		return "END_OF_INPUT";
-	case ParseResultType::TOKEN:
-		return "TOKEN";
 	case ParseResultType::INVALID:
 		return "INVALID";
 	}
@@ -122,8 +117,7 @@ inline const char *ParseResultToString(ParseResultType type) {
 class ParseResult {
 public:
 	explicit ParseResult(ParseResultType type, optional_idx offset, optional_idx length = optional_idx())
-	    : type(type), has_offset(offset.IsValid()), has_length(length.IsValid()),
-	      offset(offset.IsValid() ? offset.GetIndex() : 0), length(length.IsValid() ? length.GetIndex() : 0) {
+	    : type(type), offset(offset), length(length) {
 	}
 	virtual ~ParseResult() = default;
 
@@ -134,70 +128,49 @@ public:
 	TARGET &Cast() {
 		if (TARGET::TYPE != ParseResultType::INVALID && type != TARGET::TYPE) {
 			throw InternalException("Failed to cast parse result of type %s to type %s for rule %s",
-			                        ParseResultToString(TARGET::TYPE), ParseResultToString(type), Name());
+			                        ParseResultToString(TARGET::TYPE), ParseResultToString(type), name);
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
 
-	optional_ptr<const CompiledGrammarRule> rule;
 	ParseResultType type;
-	//! Set when a collapsible rule handed this result out in place of its own, so the transformer runs this
-	//! result's rule rather than the one the parent asked for
-	bool collapsed = false;
+	string name;
+	optional_ptr<const CompiledGrammarRule> rule;
+	optional_idx offset;
+	//! Source length: for leaf tokens the token length; for composite results the enclosing extent of children
+	optional_idx length;
 
 	void SetRule(const CompiledGrammarRule &rule_p) {
 		rule = rule_p;
-	}
-	//! The name of the rule (or matcher) that produced this result. Rule names live in the compiled grammar and
-	//! outlive every parse, so a result points at one instead of owning a copy of it.
-	const string &Name() const {
-		static const string EMPTY;
-		return name ? *name : EMPTY;
-	}
-	//! Only a pointer to the name is kept, so these only take a grammar object that owns it, or a result that already
-	//! points at one.
-	inline void SetNameFrom(const CompiledGrammarRule &rule_p);
-	inline void SetNameFrom(const Matcher &matcher_p);
-	void SetNameFrom(const ParseResult &other) {
-		name = other.name;
 	}
 	optional_ptr<const CompiledGrammarRule> GetRule() const {
 		return rule;
 	}
 
-	optional_idx GetOffset() const {
-		return has_offset ? optional_idx(offset) : optional_idx();
-	}
-
-	optional_idx GetLength() const {
-		return has_length ? optional_idx(length) : optional_idx();
-	}
-
 	//! Returns the source location [offset, offset+length) of this parse result (length 0 when unknown)
 	QueryLocation GetLocation() const {
-		if (!has_offset) {
+		if (!offset.IsValid()) {
 			return QueryLocation();
 		}
-		return QueryLocation(offset, has_length ? length : 0);
+		return QueryLocation(offset.GetIndex(), length.IsValid() ? length.GetIndex() : 0);
 	}
 
 	//! Grow this result's location so it encloses the given child's location (used to build composite
 	//! locations bottom-up)
 	void EncloseChild(const ParseResult &child) {
 		auto child_location = child.GetLocation();
-		if (!has_offset || !child_location.IsValid()) {
+		if (!offset.IsValid() || !child_location.IsValid()) {
 			return;
 		}
 		auto enclosing = GetLocation().Merge(child_location);
 		length = enclosing.length;
-		has_length = true;
 	}
 
 	virtual void ToStringInternal(std::stringstream &ss, std::unordered_set<const ParseResult *> &visited,
 	                              const std::string &indent, bool is_last) const {
 		ss << indent << (is_last ? "└─" : "├─") << " " << ParseResultToString(type);
-		if (!Name().empty()) {
-			ss << " (" << Name() << ")";
+		if (!name.empty()) {
+			ss << " (" << name << ")";
 		}
 	}
 
@@ -209,15 +182,6 @@ public:
 		ToStringInternal(ss, visited, "", true);
 		return ss.str();
 	}
-
-private:
-	//! Keep validity flags with the small metadata fields, without narrowing source positions.
-	bool has_offset;
-	bool has_length;
-	idx_t offset;
-	//! For leaf tokens the token length; for composite results the enclosing extent of children.
-	idx_t length;
-	const string *name = nullptr;
 };
 
 struct IdentifierParseResult : ParseResult {
@@ -232,22 +196,6 @@ struct IdentifierParseResult : ParseResult {
 	                      const std::string &indent, bool is_last) const override {
 		ParseResult::ToStringInternal(ss, visited, indent, is_last);
 		ss << ": " << identifier.GetIdentifierName() << "\n";
-	}
-};
-
-//! A single token consumed without interpreting it; carries its text for debugging only
-struct TokenParseResult : ParseResult {
-	static constexpr ParseResultType TYPE = ParseResultType::TOKEN;
-	string text;
-
-	TokenParseResult(string text_p, optional_idx offset, optional_idx length)
-	    : ParseResult(TYPE, offset, length), text(std::move(text_p)) {
-	}
-
-	void ToStringInternal(std::stringstream &ss, std::unordered_set<const ParseResult *> &visited,
-	                      const std::string &indent, bool is_last) const override {
-		ParseResult::ToStringInternal(ss, visited, indent, is_last);
-		ss << ": " << text << "\n";
 	}
 };
 
@@ -283,18 +231,15 @@ struct ListParseResult : ParseResult {
 	static constexpr ParseResultType TYPE = ParseResultType::LIST;
 
 public:
-	explicit ListParseResult(unsafe_array_ptr<reference<ParseResult>> results_p,
-	                         optional_ptr<const Matcher> named_matcher, optional_idx offset)
-	    : ParseResult(TYPE, offset), children(results_p) {
-		if (named_matcher) {
-			SetNameFrom(*named_matcher);
-		}
+	explicit ListParseResult(vector<reference<ParseResult>> results_p, string name_p, optional_idx offset)
+	    : ParseResult(TYPE, offset), children(std::move(results_p)) {
+		name = std::move(name_p);
 		for (auto &child : children) {
 			EncloseChild(child.get());
 		}
 	}
 
-	unsafe_array_ptr<reference<ParseResult>> GetChildren() const {
+	vector<reference<ParseResult>> GetChildren() const {
 		return children;
 	}
 
@@ -315,14 +260,14 @@ public:
 		ss << indent << (is_last ? "└─" : "├─");
 
 		if (visited.count(this)) {
-			ss << " List (" << Name() << ") [... already printed ...]\n";
+			ss << " List (" << name << ") [... already printed ...]\n";
 			return;
 		}
 		visited.insert(this);
 
 		ss << " " << ParseResultToString(type);
-		if (!Name().empty()) {
-			ss << " (" << Name() << ")";
+		if (!name.empty()) {
+			ss << " (" << name << ")";
 		}
 		ss << " [" << children.size() << " children]\n";
 
@@ -333,20 +278,20 @@ public:
 	}
 
 private:
-	unsafe_array_ptr<reference<ParseResult>> children;
+	vector<reference<ParseResult>> children;
 };
 
 struct RepeatParseResult : ParseResult {
 	static constexpr ParseResultType TYPE = ParseResultType::REPEAT;
 
-	explicit RepeatParseResult(unsafe_array_ptr<reference<ParseResult>> results_p, optional_idx offset)
-	    : ParseResult(TYPE, offset), children(results_p) {
+	explicit RepeatParseResult(vector<reference<ParseResult>> results_p, optional_idx offset)
+	    : ParseResult(TYPE, offset), children(std::move(results_p)) {
 		for (auto &child : children) {
 			EncloseChild(child.get());
 		}
 	}
 
-	unsafe_array_ptr<reference<ParseResult>> GetChildren() const {
+	vector<reference<ParseResult>> GetChildren() const {
 		return children;
 	}
 
@@ -363,14 +308,14 @@ struct RepeatParseResult : ParseResult {
 		ss << indent << (is_last ? "└─" : "├─");
 
 		if (visited.count(this)) {
-			ss << " Repeat (" << Name() << ") [... already printed ...]\n";
+			ss << " Repeat (" << name << ") [... already printed ...]\n";
 			return;
 		}
 		visited.insert(this);
 
 		ss << " " << ParseResultToString(type);
-		if (!Name().empty()) {
-			ss << " (" << Name() << ")";
+		if (!name.empty()) {
+			ss << " (" << name << ")";
 		}
 		ss << " [" << children.size() << " children]\n";
 
@@ -381,7 +326,7 @@ struct RepeatParseResult : ParseResult {
 	}
 
 private:
-	unsafe_array_ptr<reference<ParseResult>> children;
+	vector<reference<ParseResult>> children;
 };
 
 struct OptionalParseResult : ParseResult {
@@ -391,7 +336,7 @@ struct OptionalParseResult : ParseResult {
 	}
 	explicit OptionalParseResult(optional_ptr<ParseResult> result_p, optional_idx offset)
 	    : ParseResult(TYPE, offset), optional_result(result_p) {
-		SetNameFrom(*result_p);
+		name = result_p->name;
 		EncloseChild(*result_p);
 	}
 
@@ -433,7 +378,7 @@ public:
 
 	explicit ChoiceParseResult(ParseResult &parse_result_p, idx_t selected_idx_p, optional_idx offset)
 	    : ParseResult(TYPE, offset), result(parse_result_p), selected_idx(selected_idx_p) {
-		SetNameFrom(parse_result_p);
+		name = parse_result_p.name;
 		EncloseChild(parse_result_p);
 	}
 
@@ -456,22 +401,6 @@ private:
 	ParseResult &result;
 	idx_t selected_idx;
 };
-
-//! Whether the parse result allocator has to keep a pointer to a node of exactly this type, to destroy it before the
-//! arena is dropped. Most node types only hold spans and pointers into the arena and can be left alone. This is a
-//! trait on the exact type rather than a member, so a subclass that adds an owning member does not inherit the opt-out.
-template <class RESULT>
-struct ParseResultNeedsDestructor : std::true_type {};
-template <>
-struct ParseResultNeedsDestructor<EndOfInputParseResult> : std::false_type {};
-template <>
-struct ParseResultNeedsDestructor<ListParseResult> : std::false_type {};
-template <>
-struct ParseResultNeedsDestructor<RepeatParseResult> : std::false_type {};
-template <>
-struct ParseResultNeedsDestructor<OptionalParseResult> : std::false_type {};
-template <>
-struct ParseResultNeedsDestructor<ChoiceParseResult> : std::false_type {};
 
 class NumberParseResult : public ParseResult {
 public:
@@ -502,7 +431,7 @@ public:
 		return result;
 	}
 
-	virtual unique_ptr<ParsedExpression> ToExpression() {
+	unique_ptr<ParsedExpression> ToExpression() {
 		switch (string_type) {
 		case SpecialStringCharacter::STANDARD:
 			return ConstantExpression::String(result);

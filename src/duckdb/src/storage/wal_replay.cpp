@@ -20,7 +20,6 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/connection.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/settings.hpp"
 #include "duckdb/parser/constraints/unique_constraint.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
@@ -65,13 +64,9 @@ public:
 	optional_idx checkpoint_end_position;
 	optional_idx expected_checkpoint_id;
 	WALReplayState replay_state;
-	//! Blocks referenced by ROW_GROUP_DATA entries, collected during the deserialize-only scan. They are marked as used
-	//! only once we have decided to replay the WAL, so if log replay is not needed, these blocks won't be
-	//! double-referenced.
-	vector<block_id_t> row_group_blocks;
 
 	struct ReplayIndexInfo {
-		ReplayIndexInfo(TableIndexList &index_list, unique_ptr<Index> index, idx_t table_oid, idx_t index_oid,
+		ReplayIndexInfo(TableIndexList &index_list, unique_ptr<Index> index, idx_t table_oid, optional_idx index_oid,
 		                ConstraintCheckMode check_mode)
 		    : index_list(index_list), index(std::move(index)), table_oid(table_oid), index_oid(index_oid),
 		      check_mode(check_mode) {
@@ -81,8 +76,10 @@ public:
 		unique_ptr<Index> index;
 		//! The oid of the table, used to uniquely identify the table (even after a rename).
 		idx_t table_oid;
-		//! The oid of the index, used to match a DROP INDEX in the same replayed transaction.
-		idx_t index_oid;
+		//! The oid of the index catalog entry, used to match a DROP INDEX in the same replayed transaction.
+		//! Invalid for constraint-backed indexes (i.e., UNIQUE): they have no separate catalog entry and cannot be
+		//! targeted by DROP INDEX.
+		optional_idx index_oid;
 		//! The check mode of the constraint enforced by the index.
 		ConstraintCheckMode check_mode;
 	};
@@ -92,22 +89,15 @@ public:
 class WriteAheadLogDeserializer {
 public:
 	WriteAheadLogDeserializer(ReplayState &state_p, BufferedFileReader &stream_p, bool deserialize_only = false)
-	    : state(state_p), db(state.db), context(state.context), catalog(state.catalog), stream(nullptr, 0),
-	      deserializer(stream_p), deserialize_only(deserialize_only) {
+	    : state(state_p), db(state.db), context(state.context), catalog(state.catalog), data(nullptr),
+	      stream(nullptr, 0), deserializer(stream_p), deserialize_only(deserialize_only) {
 		deserializer.Set<Catalog &>(catalog);
 	}
-	WriteAheadLogDeserializer(ReplayState &state_p, AllocatedData data_p, idx_t size, bool deserialize_only = false)
+	WriteAheadLogDeserializer(ReplayState &state_p, unique_ptr<data_t[]> data_p, idx_t size,
+	                          bool deserialize_only = false)
 	    : state(state_p), db(state.db), context(state.context), catalog(state.catalog), data(std::move(data_p)),
 	      stream(data.get(), size), deserializer(stream), deserialize_only(deserialize_only) {
 		deserializer.Set<Catalog &>(catalog);
-	}
-
-	//! WAL entries are read into memory in full, so the buffer is tracked by the buffer manager
-	static AllocatedData AllocateEntryBuffer(ReplayState &state_p, idx_t size) {
-		if (size == 0) {
-			throw SerializationException("Corrupt WAL file: found an empty entry");
-		}
-		return BufferAllocator::Get(state_p.db).Allocate(size);
 	}
 
 	static WriteAheadLogDeserializer GetEntryDeserializer(ReplayState &state_p, BufferedFileReader &stream,
@@ -132,7 +122,7 @@ public:
 			}
 
 			// allocate a buffer and read data into the buffer
-			auto buffer = AllocateEntryBuffer(state_p, size);
+			auto buffer = unique_ptr<data_t[]>(new data_t[size]);
 			stream.ReadData(buffer.get(), size);
 
 			// compute and verify the checksum
@@ -192,8 +182,8 @@ public:
 			}
 
 			//! Allocate a decryption buffer
-			auto buffer = AllocateEntryBuffer(state_p, ciphertext_size);
-			auto out_buffer = AllocateEntryBuffer(state_p, size);
+			auto buffer = unique_ptr<data_t[]>(new data_t[ciphertext_size]);
+			auto out_buffer = unique_ptr<data_t[]>(new data_t[size]);
 
 			stream.ReadData(buffer.get(), ciphertext_size);
 			encryption_state->Process(buffer.get(), ciphertext_size, buffer.get(), ciphertext_size);
@@ -257,7 +247,7 @@ protected:
 	void ReplayEntry(WALType wal_type);
 	bool CanSkipPayload(WALType wal_type) const {
 		// Unframed WAL v1 entries must still be deserialized; Replay* guards suppress their side effects.
-		if (!deserialize_only || !data.get()) {
+		if (!deserialize_only || !data) {
 			return false;
 		}
 		D_ASSERT(state.wal_version == 2 || state.wal_version == 3);
@@ -338,7 +328,7 @@ private:
 	AttachedDatabase &db;
 	ClientContext &context;
 	Catalog &catalog;
-	AllocatedData data;
+	unique_ptr<data_t[]> data;
 	MemoryStream stream;
 	BinaryDeserializer deserializer;
 	bool deserialize_only;
@@ -493,7 +483,6 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 	ReplayState checkpoint_state(database, *con.context, replay_state);
 	idx_t last_wal_flush_end = 0;
 	idx_t checkpoint_truncate_offset = 0;
-	idx_t last_wal_flush_row_group_blocks = 0;
 	try {
 		idx_t replay_entry_count = 0;
 		while (true) {
@@ -508,7 +497,6 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 			}
 			if (is_wal_flush) {
 				last_wal_flush_end = reader.CurrentOffset();
-				last_wal_flush_row_group_blocks = checkpoint_state.row_group_blocks.size();
 				// check if the file is exhausted
 				if (reader.Finished()) {
 					// we finished reading the file: break
@@ -524,16 +512,10 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 	} catch (std::exception &ex) { // LCOV_EXCL_START
 		ErrorData error(ex);
 		// ignore serialization exceptions - they signal a torn WAL
-		if (config.options.abort_on_wal_failure || error.Type() != ExceptionType::SERIALIZATION) {
-			con.Rollback();
+		if (error.Type() != ExceptionType::SERIALIZATION) {
 			error.Throw("Failure while replaying WAL file \"" + wal_path + "\": ");
 		}
 	} // LCOV_EXCL_STOP
-
-	// Discard row group blocks from uncommitted transactions.
-	// Notice, this must happen before apply any WAL entries to block manager.
-	checkpoint_state.row_group_blocks.resize(last_wal_flush_row_group_blocks);
-
 	unique_ptr<FileHandle> checkpoint_handle;
 	bool truncate_failed_checkpoint_marker = false;
 	// A serialization error can leave a partially deserialized checkpoint marker in the replay state. Only reconcile
@@ -628,22 +610,6 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 		auto main_handle = fs.OpenFile(wal_path, FileFlags::FILE_FLAGS_READ);
 		truncated_wal_reader = make_uniq<BufferedFileReader>(fs, std::move(main_handle));
 	}
-
-	// Now we have decided to replay this WAL, mark the blocks referenced by ROW_GROUP_DATA entries as used.
-	// Notice, this must happen before replay, because replaying earlier entries can allocate blocks; without the marks,
-	// those allocations could hand out blocks that later entries reference.
-	auto &block_manager = storage_manager.GetBlockManager();
-	for (auto &block_id : checkpoint_state.row_group_blocks) {
-		block_manager.MarkBlockAsUsed(block_id);
-	}
-
-	// If there are no committed transactions in the WAL, rollback and truncate.
-	if (last_wal_flush_end == 0) {
-		con.Rollback();
-		return make_uniq<WriteAheadLog>(storage_manager, wal_path, idx_t(0),
-		                                WALInitState::UNINITIALIZED_REQUIRES_TRUNCATE);
-	}
-
 	// we need to recover from the WAL: actually set up the replay state
 	ReplayState state(database, *con.context, replay_state);
 
@@ -657,7 +623,7 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 	idx_t successful_offset = 0;
 	bool all_succeeded = false;
 	try {
-		while (wal_reader.CurrentOffset() < last_wal_flush_end) {
+		while (true) {
 			// read the current entry
 			auto deserializer = WriteAheadLogDeserializer::GetEntryDeserializer(state, wal_reader);
 			if (deserializer.ReplayEntry()) {
@@ -665,15 +631,15 @@ unique_ptr<WriteAheadLog> WriteAheadLogReplayer::ReplayLog(unique_ptr<FileHandle
 
 				// Commit any outstanding indexes.
 				for (auto &info : state.replay_index_infos) {
-					info.index_list.get().AddIndex(std::move(info.index), info.index_oid, info.check_mode);
+					info.index_list.get().AddIndex(std::move(info.index), info.check_mode);
 				}
 				state.replay_index_infos.clear();
 
 				successful_offset = wal_reader.CurrentOffset();
-				// check if the file is exhausted or all committed entries were replayed
-				if (wal_reader.Finished() || wal_reader.CurrentOffset() >= last_wal_flush_end) {
+				// check if the file is exhausted
+				if (wal_reader.Finished()) {
 					// we finished reading the file: break
-					all_succeeded = wal_reader.Finished();
+					all_succeeded = true;
 					break;
 				}
 				con.BeginTransaction();
@@ -850,9 +816,16 @@ void WriteAheadLogDeserializer::ReplayVersion() {
 	}
 }
 
-//! WAL names carry schema paths without a catalog component.
+//! Qualify a name stored in the WAL as [schema_path..., name] (i.e. without a catalog component) with the catalog we
+//! are replaying into, so nested schemas can be navigated. Do not use WithCatalog() here: that treats the leading
+//! component of a 3-element path as a catalog, which would drop the outermost schema of a nested path.
 static QualifiedName ReplayEntryName(Catalog &catalog, const QualifiedName &entry_name) {
-	return QualifiedName::FromCatalogSchema(catalog.GetName(), entry_name.Parent().Path(), entry_name.Name());
+	vector<Identifier> path;
+	path.push_back(catalog.GetName());
+	for (idx_t i = 0; i + 1 < entry_name.Path().size(); i++) {
+		path.push_back(entry_name.Path()[i]);
+	}
+	return QualifiedName(std::move(path), entry_name.Name());
 }
 
 //! Re-qualify a serialized [catalog, schema_path..., name] entry name (as carried by a CreateInfo) for the catalog it
@@ -887,7 +860,16 @@ void WriteAheadLogDeserializer::ReplayDropTable() {
 	DropInfo info;
 
 	info.type = CatalogType::TABLE_ENTRY;
-	info.SetQualifiedName(ReplayEntryName(catalog, entry.qualified_name));
+	// build the DropInfo path [catalog, schema_path..., name]; the qualified name's path is [schema_path..., name]
+	// (older WALs that only stored the immediate schema + table name are folded into it during deserialization)
+	vector<Identifier> path;
+	path.push_back(catalog.GetName());
+	for (auto &component : entry.qualified_name.Path()) {
+		path.push_back(component);
+	}
+	Identifier table_name = std::move(path.back());
+	path.pop_back();
+	info.SetQualifiedName(QualifiedName(std::move(path), std::move(table_name)));
 	if (DeserializeOnly()) {
 		return;
 	}
@@ -1015,11 +997,10 @@ void WriteAheadLogDeserializer::ReplayAlter() {
 	auto index_instance = index_type->create_instance(input);
 
 	auto &table_index_list = storage.GetDataTableInfo()->GetIndexes();
-	auto index_oid = DatabaseManager::Get(context).NextOid();
-	unique_info.SetBackingIndexOid(index_oid);
+	state.replay_index_infos.emplace_back(table_index_list, std::move(index_instance), table.oid,
+	                                      /*index_oid=*/optional_idx(), unique_info.check_mode);
+
 	catalog.Alter(context, alter_info);
-	state.replay_index_infos.emplace_back(table_index_list, std::move(index_instance), table.oid, index_oid,
-	                                      unique_info.check_mode);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1051,12 +1032,19 @@ void WriteAheadLogDeserializer::ReplayDropView() {
 void WriteAheadLogDeserializer::ReplayCreateSchema() {
 	auto entry = WALCreateSchema::Deserialize(deserializer);
 	CreateSchemaInfo info;
-	auto schema_path = entry.qualified_name.Path();
-	if (schema_path.empty()) {
-		// Legacy WALs only store a top-level schema name.
-		schema_path.push_back(std::move(entry.schema));
+	// build the CreateSchemaInfo path [catalog, parent schemas..., new schema, <empty name>]
+	vector<Identifier> path;
+	path.push_back(catalog.GetName());
+	if (!entry.qualified_name.Path().empty()) {
+		// v2.0.0+: the qualified name's path is [parent schemas..., new schema]
+		for (auto &component : entry.qualified_name.Path()) {
+			path.push_back(component);
+		}
+	} else {
+		// legacy: only the (top-level) schema name was serialized
+		path.push_back(std::move(entry.schema));
 	}
-	info.SetQualifiedName(QualifiedName::FromCatalogSchema(catalog.GetName(), std::move(schema_path), Identifier()));
+	info.SetQualifiedName(QualifiedName(std::move(path), Identifier()));
 	if (DeserializeOnly()) {
 		return;
 	}
@@ -1068,11 +1056,22 @@ void WriteAheadLogDeserializer::ReplayDropSchema() {
 	auto entry = WALDropSchema::Deserialize(deserializer);
 	DropInfo info;
 	info.type = CatalogType::SCHEMA_ENTRY;
-	auto schema_name =
-	    entry.qualified_name.Path().empty() ? QualifiedName(std::move(entry.schema)) : std::move(entry.qualified_name);
-	auto path = schema_name.Path();
-	path.insert(path.begin(), catalog.GetName());
-	info.SetQualifiedName(QualifiedName::FromPath(std::move(path)));
+	// build the DropInfo path [catalog, parent schemas..., schema] with the schema name in the name slot
+	vector<Identifier> path;
+	path.push_back(catalog.GetName());
+	Identifier schema_name;
+	if (!entry.qualified_name.Path().empty()) {
+		// v2.0.0+: the qualified name's path is [parent schemas..., schema]
+		auto &qpath = entry.qualified_name.Path();
+		for (idx_t i = 0; i + 1 < qpath.size(); i++) {
+			path.push_back(qpath[i]);
+		}
+		schema_name = qpath.back();
+	} else {
+		// legacy: only the (top-level) schema name was serialized
+		schema_name = std::move(entry.schema);
+	}
+	info.SetQualifiedName(QualifiedName(std::move(path), std::move(schema_name)));
 	if (DeserializeOnly()) {
 		return;
 	}
@@ -1135,7 +1134,7 @@ void WriteAheadLogDeserializer::ReplayDropTrigger() {
 		return;
 	}
 	if (table_name.empty()) {
-		throw InternalException("WAL replay: DROP TRIGGER entry has an empty table name for trigger %s",
+		throw InternalException("WAL replay: DROP TRIGGER entry has an empty table name for trigger \"%s\"",
 		                        info.GetQualifiedName().Name());
 	}
 	// the trigger lives in the same (possibly nested) schema as its base table
@@ -1181,11 +1180,6 @@ void WriteAheadLogDeserializer::ReplaySequenceValue() {
 	// fetch the sequence from the catalog
 	auto &seq = catalog.GetEntry<SequenceCatalogEntry>(context, ReplayEntryName(catalog, entry.qualified_name));
 	seq.ReplayValue(entry.usage_count, entry.counter, entry.last_value);
-	auto &storage_manager = db.GetStorageManager();
-	if (storage_manager.HasStorageVersion() &&
-	    StorageManager::IsPriorToVersion(StorageVersion::V2_0_0, storage_manager.GetStorageVersion())) {
-		seq.DeriveLastValue();
-	}
 }
 
 //===--------------------------------------------------------------------===//
@@ -1301,7 +1295,13 @@ void WriteAheadLogDeserializer::ReplayUseTable() {
 	if (DeserializeOnly()) {
 		return;
 	}
-	state.current_table = &catalog.GetEntry<DuckTableEntry>(context, ReplayEntryName(catalog, entry.qualified_name));
+	// the qualified name holds the (possibly nested) schema path followed by the table name - prepend the catalog
+	auto path = entry.qualified_name.Path();
+	auto table_name = std::move(path.back());
+	path.pop_back();
+	path.insert(path.begin(), catalog.GetName());
+	state.current_table =
+	    &catalog.GetEntry<DuckTableEntry>(context, QualifiedName(std::move(path), std::move(table_name)));
 }
 
 void WriteAheadLogDeserializer::ReplayInsert() {
@@ -1311,7 +1311,7 @@ void WriteAheadLogDeserializer::ReplayInsert() {
 		return;
 	}
 	if (!state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: insert without table");
+		throw InternalException("Corrupt WAL: insert without table");
 	}
 
 	// Append to the current table without constraint verification.
@@ -1330,13 +1330,16 @@ void WriteAheadLogDeserializer::ReplayRowGroupData() {
 	deserializer.Unset<const CompressionInfo>();
 	deserializer.Unset<DatabaseInstance>();
 	if (DeserializeOnly()) {
+		// label blocks in data as used - they will be used after the WAL replay is finished
+		// we need to do this during the deserialization phase to ensure the blocks will not be overwritten
+		// by previous deserialization steps
 		for (auto &block_id : data.GetBlockIds()) {
-			state.row_group_blocks.push_back(block_id);
+			block_manager.MarkBlockAsUsed(block_id);
 		}
 		return;
 	}
 	if (!state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: insert without table");
+		throw InternalException("Corrupt WAL: insert without table");
 	}
 	auto &storage = state.current_table->GetStorage();
 	auto &table_info = storage.GetDataTableInfo();
@@ -1376,7 +1379,7 @@ void WriteAheadLogDeserializer::ReplayDelete() {
 		return;
 	}
 	if (!state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: delete without table");
+		throw SerializationException("delete without a table");
 	}
 
 	D_ASSERT(chunk.ColumnCount() == 1 && chunk.data[0].GetType() == LogicalType::ROW_TYPE);
@@ -1389,7 +1392,7 @@ void WriteAheadLogDeserializer::ReplayDelete() {
 	auto next_row_id = storage.GetNextRowId();
 	for (idx_t i = 0; i < chunk.size(); i++) {
 		if (source_ids[i] >= UnsafeNumericCast<row_t>(next_row_id)) {
-			throw DataCorruptionException("Corrupt WAL: row ID for delete out of bounds");
+			throw SerializationException("invalid row ID delete in WAL");
 		}
 	}
 	TableDeleteState delete_state;
@@ -1406,18 +1409,11 @@ void WriteAheadLogDeserializer::ReplayUpdate() {
 		return;
 	}
 	if (!state.current_table) {
-		throw DataCorruptionException("Corrupt WAL: update without table");
+		throw InternalException("Corrupt WAL: update without table");
 	}
 
-	if (column_path.empty() || column_path[0] >= state.current_table->GetColumns().PhysicalColumnCount()) {
-		throw DataCorruptionException("Corrupt WAL: column index for update out of bounds");
-	}
-	if (chunk.ColumnCount() != 2 || chunk.data[1].GetType() != LogicalType::ROW_TYPE) {
-		throw DataCorruptionException("Corrupt WAL: update must contain the updated values and the row ids");
-	}
-	auto &column_type = state.current_table->GetColumns().GetColumn(PhysicalIndex(column_path[0])).Type();
-	if (column_path.size() == 1 && chunk.data[0].GetType() != column_type) {
-		throw DataCorruptionException("Corrupt WAL: update type does not match the column type");
+	if (column_path[0] >= state.current_table->GetColumns().PhysicalColumnCount()) {
+		throw InternalException("Corrupt WAL: column index for update out of bounds");
 	}
 
 	// remove the row id vector from the chunk

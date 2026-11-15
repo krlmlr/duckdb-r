@@ -21,10 +21,7 @@ public:
 	}
 
 	string ToString() const override {
-		return matcher.GetPrintName() + "?";
-	}
-	Matcher &GetChildMatcher() {
-		return matcher;
+		return matcher.GetName() + "?";
 	}
 	const Matcher &GetChildMatcher() const {
 		return matcher;

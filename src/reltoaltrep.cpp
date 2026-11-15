@@ -7,6 +7,7 @@
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/client_config.hpp"
+#include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/relation/limit_relation.hpp"
 #include "duckdb/main/settings.hpp"
@@ -79,10 +80,6 @@ void RelToAltrep::Initialize(DllInfo *dll) {
 	R_set_altvec_Dataptr_method(string_class, VectorDataptr);
 
 	R_set_altvec_Dataptr_or_null_method(rownames_class, RownamesDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(logical_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(int_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(real_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(string_class, VectorDataptrOrNull);
 
 	R_set_altinteger_Elt_method(rownames_class, RownamesElt);
 	R_set_altinteger_Get_region_method(rownames_class, RownamesGetRegion);
@@ -166,7 +163,7 @@ void AltrepRelationWrapper::MarkColumnAsTransformed() {
 	}
 }
 
-QueryResult *AltrepRelationWrapper::GetQueryResult() {
+MaterializedQueryResult *AltrepRelationWrapper::GetQueryResult() {
 	if (!mat_error.empty()) {
 		rapi_error_with_context("GetQueryResult", mat_error);
 	}
@@ -202,23 +199,11 @@ QueryResult *AltrepRelationWrapper::GetQueryResult() {
 			Rprintf("duckplyr: materializing\n");
 		}
 
-		// A running query reaches here when its bind scans this data frame (src/scan.cpp), and it holds the handler.
-		// A query of the same connection would wait for the lock that query holds, so it fails instead, and before
-		// any open result of its connection is ended: ending one takes that lock too.
-		// One of another connection runs nested, and leaves the interrupt to the outer query's handler.
-		auto &context = *rel->context->GetContext();
-		if (ScopedInterruptHandler::IsActiveFor(context)) {
-			rapi_error_with_context("GetQueryResult",
-			                        "Cannot materialize a relation of the connection that is running the query.");
-		}
-		EndOpenResults(context);
-		duckdb::unique_ptr<ScopedInterruptHandler> signal_handler;
-		if (!ScopedInterruptHandler::IsActive()) {
-			signal_handler = make_uniq<ScopedInterruptHandler>(rel->context->GetContext());
-		}
+		ScopedInterruptHandler signal_handler(rel->context->GetContext());
 
 		// We need to temporarily allow a deeper execution stack
 		// https://github.com/duckdb/duckdb-r/issues/101
+		auto &context = *rel->context->GetContext();
 		auto old_depth = Settings::Get<MaxExpressionDepthSetting>(context);
 		auto &client_config = ClientConfig::GetConfig(*rel->context->GetContext());
 		client_config.GetConfig(context).user_settings.SetUserSetting(MaxExpressionDepthSetting::SettingIndex,
@@ -243,13 +228,12 @@ QueryResult *AltrepRelationWrapper::GetQueryResult() {
 		client_config.user_settings.SetUserSetting(MaxExpressionDepthSetting::SettingIndex, Value::UBIGINT(old_depth));
 		reset_max_expression_depth.release();
 
-		if (signal_handler) {
-			signal_handler->HandleInterrupt();
-			signal_handler->Disable();
-		}
+		signal_handler.HandleInterrupt();
+
+		signal_handler.Disable();
 	}
 	D_ASSERT(mat_result);
-	return mat_result.get();
+	return (MaterializedQueryResult *)mat_result.get();
 }
 
 void AltrepRelationWrapper::Materialize() {
@@ -278,9 +262,12 @@ void AltrepRelationWrapper::Materialize() {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", local_res->GetError().c_str());
 		return;
 	}
+	D_ASSERT(local_res->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
+
+	auto local_mat_res = (MaterializedQueryResult *)local_res.get();
 
 	if (max_rows < MAX_SIZE_T) {
-		if (local_res->RowCount() > max_rows) {
+		if (local_mat_res->RowCount() > max_rows) {
 			mat_error = duckdb_fmt::format(
 			    "Materialization would result in more than {} rows. Use `collect()` or `as_tibble()` to materialize.",
 			    max_rows);
@@ -290,7 +277,7 @@ void AltrepRelationWrapper::Materialize() {
 
 	// Cache the row count so that it remains available
 	// after the materialized result has been released
-	row_count = local_res->RowCount();
+	row_count = local_mat_res->RowCount();
 	materialized = true;
 	mat_result = std::move(local_res);
 }
@@ -448,19 +435,10 @@ struct AltrepVectorWrapper {
 				dest_offset += chunk.size();
 			}
 			drop_partial.release();
-			converted.store(true, std::memory_order_release);
 
 			rel->MarkColumnAsTransformed();
 		}
 		return const_cast<void *>(DATAPTR_RO(transformed_vector));
-	}
-
-	// What Dataptr() returns once the column is converted, without converting it
-	const void *DataptrOrNull() {
-		if (!converted.load(std::memory_order_acquire)) {
-			return nullptr;
-		}
-		return DATAPTR_RO(transformed_vector);
 	}
 
 	SEXP RVector() {
@@ -472,9 +450,6 @@ struct AltrepVectorWrapper {
 	idx_t column_index;
 	std::vector<idx_t> parent_column_index;
 	cpp11::sexp transformed_vector;
-	// Set once transformed_vector is filled, which Dataptr() sets before it fills it.
-	// Atomic: a bind on an engine thread reads it while R's thread may be converting (src/scan.cpp).
-	std::atomic<bool> converted {false};
 };
 
 Rboolean RelToAltrep::RownamesInspect(SEXP x, int pre, int deep, int pvec,
@@ -646,14 +621,6 @@ void *RelToAltrep::VectorDataptr(SEXP x, Rboolean writeable) {
 	BEGIN_CPP11
 	AltrepGuard guard;
 	return AltrepVectorWrapper::Get(x)->Dataptr();
-	END_CPP11
-}
-
-// Converts nothing, so the data frame scan's bind may ask from any thread (handbook/architecture/glue/threading/)
-const void *RelToAltrep::VectorDataptrOrNull(SEXP x) {
-	BEGIN_CPP11
-	AltrepGuard guard;
-	return AltrepVectorWrapper::Get(x)->DataptrOrNull();
 	END_CPP11
 }
 
@@ -892,7 +859,5 @@ shared_ptr<AltrepRelationWrapper> rapi_rel_wrapper_from_altrep_df(SEXP df, bool 
 // clang-format off
 [[cpp11::init]] void RelToAltrep_Initialize(DllInfo* dll) {
 	// clang-format on
-	// R calls the init hooks on its own thread when it loads the package
-	RecordRThread();
 	RelToAltrep::Initialize(dll);
 }

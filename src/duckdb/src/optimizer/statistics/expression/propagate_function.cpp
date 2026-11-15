@@ -40,12 +40,7 @@ bool CanInferConstantFromNumericBounds(const Value &value) {
 }
 
 bool TryInferConstantBounds(const BaseStatistics &stats, Value &constant) {
-	if (stats.CanHaveNull() && !stats.CanHaveNoNull()) {
-		constant = Value(stats.GetType());
-		return true;
-	}
-	// bounds of empty stats do not describe any actual value
-	if (stats.CanHaveNull() || !stats.CanHaveNoNull()) {
+	if (stats.CanHaveNull()) {
 		return false;
 	}
 	if (stats.GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(stats)) {
@@ -190,7 +185,7 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateMonotoneBounds(ClientC
 		return nullptr;
 	}
 	if (out_hi < out_lo) {
-		throw InternalException("Monotonic arg annotation violated for %s: output min exceeds output max",
+		throw InternalException("Monotonic arg annotation violated for '%s': output min exceeds output max",
 		                        func.Function().GetName());
 	}
 
