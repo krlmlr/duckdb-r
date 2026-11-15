@@ -95,7 +95,7 @@ driver_registry <- new.env(parent = emptyenv())
 #' This is deliberate.
 #' DuckDB allows only a single read-write handle to a database file at a time,
 #' so opening a second instance of the same file fails with a lock error in another process,
-#' and is not prevented at all within the same one.
+#' and, on Linux and macOS, is not prevented at all within the same one.
 #' Reusing one instance instead lets any number of `dbConnect(duckdb(dbdir = "my.db"))` calls share it.
 #' An in-memory database (`:memory:`, the default) has no file to lock and is never cached:
 #' every `duckdb()` call creates a fresh, isolated instance.
@@ -106,6 +106,9 @@ driver_registry <- new.env(parent = emptyenv())
 #' and two spellings of one database (a relative path, a symlink, a different separator)
 #' share an instance instead of each opening their own.
 #' A path that resolves no further is used as it stands rather than refused.
+#' Symbolic links are not supported on Windows,
+#' where creating one takes administrator rights or Developer Mode:
+#' there, a symlink to a database that does not exist yet fails to open.
 #'
 #' Because the instance is created once per database file,
 #' `config`, `read_only`, `home`, and `shared_home` take effect only at creation.
