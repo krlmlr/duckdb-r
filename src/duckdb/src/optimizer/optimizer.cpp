@@ -62,9 +62,11 @@
 #include "duckdb/planner/logical_plan_verifier.hpp"
 #include "duckdb/planner/planner.hpp"
 #include "duckdb/planner/operator/logical_prepare.hpp"
+#include "duckdb/planner/operator/logical_secure_view.hpp"
 #include "duckdb/optimizer/remote_pushdown_optimizer.hpp"
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/settings.hpp"
+#include "duckdb/optimizer/disjunctive_join_rewriter.hpp"
 
 namespace duckdb {
 
@@ -129,21 +131,26 @@ bool Optimizer::OptimizerDisabled(ClientContext &context_p, OptimizerType type) 
 		return true;
 	}
 	auto &config = DBConfig::GetConfig(context_p);
-	return config.options.disabled_optimizers.find(type) != config.options.disabled_optimizers.end();
+	return config.IsOptimizerDisabled(type);
+}
+
+MetricsTimer Optimizer::StartProfiler(OptimizerType type) {
+	auto &profiler = QueryProfiler::Get(context);
+	if (!profiler.IsEnabled()) {
+		return MetricsTimer();
+	}
+	return profiler.StartTimerInternal("optimizer." + StringUtil::Lower(EnumUtil::ToString(type)));
 }
 
 void Optimizer::RunOptimizer(OptimizerType type, const std::function<void()> &callback) {
-	if (context.IsInterrupted()) {
-		throw InterruptException();
-	}
+	context.InterruptCheck();
 
 	if (OptimizerDisabled(type)) {
 		// optimizer is marked as disabled: skip
 		return;
 	}
-	auto &profiler = QueryProfiler::Get(context);
 	{
-		auto optimizer_timer = profiler.StartTimerInternal("optimizer." + StringUtil::Lower(EnumUtil::ToString(type)));
+		auto optimizer_timer = StartProfiler(type);
 		callback();
 	}
 	if (plan) {
@@ -244,6 +251,10 @@ void Optimizer::RunBuiltInOptimizers() {
 	default:
 		break;
 	}
+	// determine which secure views may expose the statistics of their contents - this runs before any rewrites so
+	// that the filters the optimizer pushes into a view are not mistaken for the view restricting its own rows
+	LogicalSecureView::AnalyzeStatistics(*plan);
+
 	// first we perform expression rewrites using the ExpressionRewriter
 	// this does not change the logical plan structure, but only simplifies the expression trees
 	RunOptimizer(OptimizerType::EXPRESSION_REWRITER, [&]() {
@@ -288,6 +299,7 @@ void Optimizer::RunBuiltInOptimizers() {
 		CTEFilterPusher cte_filter_pusher(*this);
 		plan = cte_filter_pusher.Optimize(std::move(plan));
 	});
+	CTEFilterPusher::ClearDependencies(*plan);
 
 	RunOptimizer(OptimizerType::REGEX_RANGE, [&]() {
 		RegexRangeFilter regex_opt;
@@ -315,6 +327,11 @@ void Optimizer::RunBuiltInOptimizers() {
 	MultiStageAggregateRewriter aggregate_rewriter(*this, AggregateRewritePolicy::UNCONDITIONAL,
 	                                               !OptimizerDisabled(OptimizerType::DISTINCT_AGGREGATE_REWRITE));
 	aggregate_rewriter.VisitOperator(plan);
+
+	RunOptimizer(OptimizerType::DISJUNCTIVE_JOIN_REWRITER, [&]() {
+		DisjunctiveJoinRewriter disjunctive_join_rewriter(binder);
+		plan = disjunctive_join_rewriter.Optimize(std::move(plan));
+	});
 
 	// try to inline CTEs instead of materialization
 	RunOptimizer(OptimizerType::CTE_INLINING, [&]() {
@@ -380,7 +397,7 @@ void Optimizer::RunBuiltInOptimizers() {
 
 	// rewrites UNNESTs in DelimJoins by moving them to the projection
 	RunOptimizer(OptimizerType::UNNEST_REWRITER, [&]() {
-		UnnestRewriter unnest_rewriter;
+		UnnestRewriter unnest_rewriter(context);
 		plan = unnest_rewriter.Optimize(std::move(plan));
 	});
 
@@ -561,6 +578,7 @@ unique_ptr<LogicalOperator> Optimizer::LowerMandatoryAggregateRewrites(unique_pt
 unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan_p) {
 	plan_p = LowerMandatoryAggregateRewrites(std::move(plan_p));
 	if (!Settings::Get<EnableOptimizerSetting>(context)) {
+		CTEFilterPusher::ClearDependencies(*plan_p);
 		return plan_p;
 	}
 	Verify(*plan_p);
@@ -578,6 +596,7 @@ unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan
 		RunOptimizer(OptimizerType::EXTENSION, [&]() {
 			OptimizerExtensionInput input {GetContext(), *this, pre_optimizer_extension.optimizer_info.get()};
 			if (pre_optimizer_extension.pre_optimize_function) {
+				CTEFilterPusher::ClearDependencies(*plan);
 				pre_optimizer_extension.pre_optimize_function(input, plan);
 			}
 		});
