@@ -8,7 +8,7 @@ description: Cut and keep aligned the release-candidate strand of a series, `<S>
 *Handbook: [`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md) —
 what this routine is, and when it runs.*
 
-A series publishes a flavored package, `duckdb.2.0.dev` for `v2.0-cyanoptera`,
+A series publishes a flavored package, `duckdb.2.0` for `v2.0-cyanoptera`,
 so that it installs beside the released `duckdb`
 ([`branches/flavors/`](/handbook/branches/flavors/README.md)).
 A release is built as plain `duckdb`, and a flavored green says nothing about the name that ships.

@@ -141,7 +141,7 @@ duckdb/duckdb        krlmlr/duckdb-r         duckdb/duckdb-r       CRAN / r-univ
 main            ──►  main-dev           ──►  main               ──►  duckdb (r-universe)
                                                                      duckdb.dev (r-universe)
 v2.0-cyanoptera ──►  v2.0-cyanoptera-dev──►  v2.0-cyanoptera    ──►  duckdb (CRAN)
-                                                                     duckdb.2.0.dev (r-universe)
+                                                                     duckdb.2.0 (r-universe)
 v1.5-variegata  ──►  v1.5-variegata-dev ──►  v1.5-variegata     ──►  duckdb.1.5.dev (r-universe)
 v1.4-andium     ──►  v1.4-andium-dev    ──►  v1.4-andium        ──►  duckdb.1.4 (r-universe)
                                              v1.4-andium-lts         duckdb.1.4.dev (r-universe)
@@ -189,7 +189,7 @@ The table is the layout once the v2.0 series releases from `v2.0-cyanoptera` and
 | `main`                    | `duckdb/duckdb-r` | `duckdb`         | Source of truth for glue code, R code, tests, CI/CD, cpp11 |
 | `main-dev`                | `krlmlr/duckdb-r` | `duckdb.dev`     | Vendored dev on upstream `main`; the preview line          |
 | `v2.0-cyanoptera`         | `duckdb/duckdb-r` | `duckdb`         | Release branch of the current line; CRAN releases from it  |
-| `v2.0-cyanoptera-dev`     | `krlmlr/duckdb-r` | `duckdb.2.0.dev` | Bleeding edge on v2.0 upstream                             |
+| `v2.0-cyanoptera-dev`     | `krlmlr/duckdb-r` | `duckdb.2.0`     | Bleeding edge on v2.0 upstream                             |
 | `v1.5-variegata`          | `duckdb/duckdb-r` | `duckdb`         | Parked baseline of the previous line                       |
 | `v1.5-variegata-lts`      |                   |                  | Does not exist, v1.5 is not an LTS                         |
 | `v1.5-variegata-dev`      | `krlmlr/duckdb-r` | `duckdb.1.5.dev` | Bleeding edge on v1.5 upstream                             |
