@@ -59,16 +59,6 @@ at best to empty, at worst to a conflict —
 and could sever a coupled change
 (a script from the test that exercises it),
 minting a commit whose message describes more than it contains.
-The one file a pick leaves as the series has it is `NEWS.md`.
-The notes are the release strand's, like the version,
-kept for `main`'s versions by a process of their own,
-so a pick carrying `main`'s notes meets a copy they were not written against
-and conflicts on every series at once.
-So each pick is applied without committing, `NEWS.md` is restored from the series,
-and the rest is committed under the original message, author and trailer;
-a pick with nothing left, because it wrote only `NEWS.md` or its content is already there,
-is committed empty and named as empty,
-because its trailer is what retires it from the next run.
 VENDOR commits are listed and never auto-picked:
 `main`'s engine is not this series' engine,
 and the series' own vendoring owns that strand.
@@ -89,7 +79,7 @@ and what `main` is at today is read from `main`
 ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
 Here the **content** decides, not the subject:
 the commit carries nothing but release paperwork,
-so a bump is held back whatever its subject,
+so a bump under a subject other than `fledge:` is held back too,
 and a bump riding on real content is not —
 that one is a forward-port that happens to bump,
 ported whole like any other,
@@ -133,20 +123,15 @@ which belongs to another engine's R side,
 is not a backlog it is behind on.
 `scripts/series-port.sh` reads that off the lineage under the seed
 and skips the walk for such a series,
-and does the same for a line `main`'s `scripts/series.yaml` declares `stale: true`,
-no longer active and awaiting retirement, v1.4 and v1.5 today:
-the sync commit is their whole default port
+and does the same for a line `main`'s `scripts/series.yaml` declares parked on its own baseline,
+which is how a line parks when another lands on `main` ([`series-land/SKILL.md`](/.claude/skills/series-land/SKILL.md)):
+its seed sits on `main`'s own history, where the lineage cannot see the difference,
+so the sync commit is their whole default port
 and their tooling still follows `main`:
 a frozen R side is not a frozen CI,
 and the identity goal above holds for every series either way.
 Run the script for a frozen series like any other;
 the default needs no judgement.
-Every other series walks the first parents of the branch it releases from, its `releases_from`:
-`main` for `main`'s own series, and the line's release branch for the v2.0 series,
-whose fixes are written there first and merged forward into `main`
-([`branches/model/`](/handbook/branches/model/README.md)).
-A forward merge on that branch is offered as one port of its change outside the engine,
-and none of the commits behind it alone.
 
 **Frozen is not untouchable.**
 A change the r-universe build genuinely needs still lands —
@@ -172,22 +157,16 @@ is not a reason to move the series off its seed.
 
 What stays judgement:
 
-- a conflict stops the picks in place:
+- a conflict stops the sequence in place —
   resolve it in the kept worktree toward `main`'s intent,
   keeping the series' flavor where the two meet
   (`Package:`, `@useDynLib`, `DUCKDB_PACKAGE_NAME`
   keep the series' name),
-  commit it with the commands the script prints,
-  which forget what rerere recorded of the pick, as a clean pick does,
-  and keep the pick's message, trailer and author, push,
-  and run the rerun it prints for the rest, if it prints one
+  `cherry-pick --continue` through the rest, push,
+  and rerun the script to finish
   (reruns are exact:
-  clean picks of commits that left `NEWS.md` alone dedupe by patch-id,
-  every other pick, an empty one included, by its `cherry picked from` trailer).
-  After naming SHAs, a bare `--apply` fills the default set again.
-  On a series that is not frozen that is what the named SHAs left out, so never run one there:
-  the tooling sync waits for the next `--apply`.
-  On a frozen series the set is empty, so the bare `--apply` the script prints ports nothing and finishes the sync;
+  clean picks dedupe by patch-id,
+  resolved ones by their `cherry picked from` trailer);
 - an OTHER commit that cannot work against this series' engine —
   apply an explicit subset without it,
   fix it on `main` (a guard, a runtime seam),
