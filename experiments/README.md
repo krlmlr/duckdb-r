@@ -106,7 +106,7 @@ This file is what names the contents, so nothing here is an orphan.
   whose handle is gone, how each is reached from the C API, and what
   reporting a live instance without a grace period costs; supported
   `patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch`,
-  retired in fc23ac484f once duckdb/duckdb@973a9796b8 carried its effect upstream,
+  retired with the vendoring of duckdb/duckdb@fbd180f3a4 once duckdb/duckdb@973a9796b8 carried its effect upstream,
   and supports [`usage/connections/`](/handbook/usage/connections/README.md).
 * [`2026-09-26-connection-per-result/`](2026-09-26-connection-per-result/):
   what an engine context scopes and what a second one does not see,

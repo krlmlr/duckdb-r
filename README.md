@@ -1,11 +1,11 @@
 
-# duckdb.2.0.dev
+# duckdb.2.0
 
 [DuckDB](https://duckdb.org/) is an in-process SQL OLAP database management system.
 It is designed to support analytical query workloads and is optimized for fast query execution.
 This repository contains the R bindings for DuckDB.
 
-This package is the `duckdb.2.0.dev` flavor of those bindings,
+This package is the `duckdb.2.0` flavor of those bindings,
 and is only available from r-universe.
 The `Flavors` section below says which upstream series it tracks.
 
@@ -46,7 +46,7 @@ Binaries are available for recent versions of R and for some platforms.
 Review <https://docs.r-universe.dev/install/binaries.html> for configuring installation of binary packages on Linux.
 
 ``` r
-install.packages("duckdb.2.0.dev", repos = c("https://duckdb.r-universe.dev", "https://cloud.r-project.org"))
+install.packages("duckdb.2.0", repos = c("https://duckdb.r-universe.dev", "https://cloud.r-project.org"))
 ```
 
 Installing the package from source may take up to an hour.
