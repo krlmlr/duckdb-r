@@ -40,7 +40,7 @@ flavors:
     repo: duckdb/duckdb-r
     badges: [r-universe]
 
-  - flavor: duckdb.2.0.dev
+  - flavor: duckdb.2.0
     kind: dev
     upstream: v2.0-cyanoptera
     series: v2.0-cyanoptera

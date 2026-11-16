@@ -26,7 +26,7 @@ written at render time. Edit the declaration, not the rows.
 | `duckdb` | CRAN, also r-universe | `main` | `v2.0-cyanoptera` |
 | `duckdb.1.4` | LTS, r-universe | `v1.4-andium-lts` | `v1.4-andium` |
 | `duckdb.dev` | dev, r-universe | `main-green` | `main` |
-| `duckdb.2.0.dev` | dev, r-universe | `v2.0-cyanoptera-green` | `v2.0-cyanoptera` |
+| `duckdb.2.0` | dev, r-universe | `v2.0-cyanoptera-green` | `v2.0-cyanoptera` |
 | `duckdb.1.5.dev` | dev, r-universe | `v1.5-variegata-green` | `v1.5-variegata` |
 | `duckdb.1.4.dev` | dev, r-universe | `v1.4-andium-green` | `v1.4-andium` |
 
