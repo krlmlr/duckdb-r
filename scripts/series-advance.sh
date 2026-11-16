@@ -541,7 +541,7 @@ fi
 #     `-build`, which is what `main-fwd-dev` shows above `main-dev`'s frontier.
 #
 # So a base series consumes its buffer like any other, and the two lineages run
-# level until a cutover swaps them. It is more CI on a series about to be retired;
+# level until a human swaps them. It is more CI on a series about to be retired;
 # it is also the only thing that makes retiring it a check rather than a hope.
 # Pending work does not hold the buffer (.claude/skills/series-loop/SKILL.md stage 5):
 # each.yaml plans every commit in green..tip that has no record, so a longer tip
@@ -642,7 +642,7 @@ else
   # repair and the buffer touch the same paths — judgement, not mechanics.
   #
   # Every buffer commit bumps DESCRIPTION's vendor counter, so a -dev that has
-  # taken a version bump conflicts on the `Version:` line at the first replayed
+  # taken a fledge bump conflicts on the `Version:` line at the first replayed
   # commit and at every one after it. That line is what the ours-version merge
   # driver exists for, and the gate at the top of this script has registered it
   # already, so only genuine conflicts reach the judgement above.
@@ -820,12 +820,12 @@ else
     remaining=$(git rev-list --reverse "$anchor..$build" | first_n "$n")
   fi
 
-  # `--empty=drop`: a buffer commit whose content reached -dev by another route
-  # replays to nothing, and an empty pick stops the sequencer. Stage 3 sends
-  # patch/ entries down both paths on purpose -- the port carries one onto
-  # -dev, and the same fix is committed onto -build so the next regenerated
-  # tree still has it -- so the redundancy is designed, not a mistake, and it
-  # must not abort the extend.
+  # `--empty=drop`, as series-port.sh already does: a buffer commit whose content
+  # reached -dev by another route replays to nothing, and an empty pick stops the
+  # sequencer. Stage 3 sends patch/ entries down both paths on purpose -- the port
+  # carries one onto -dev, and the same fix is committed onto -build so the next
+  # regenerated tree still has it -- so the redundancy is designed, not a mistake,
+  # and it must not abort the extend.
   #
   # One commit at a time, because restamp runs between the picks and reads the
   # parent it is bumping from, and because a carry amends the commit just made.
