@@ -9,10 +9,10 @@ Little of this is codified; what is settled:
 * Write the pull request title as a
   [Conventional Commit](https://www.conventionalcommits.org),
   phrased to be read:
-  it is what squashes onto `main`.
-  The commit messages inside the branch are discarded.
-* Write no `NEWS.md` entry for the change
+  it is what squashes onto `main`,
+  and fledge turns that history into `NEWS.md`
   ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
+  The commit messages inside the branch are discarded.
 * Run the tests the change touches
   ([`testing/suite/`](/handbook/testing/suite/README.md));
   the full suite can also be left to CI.

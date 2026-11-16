@@ -106,7 +106,7 @@ The load-bearing facts:
   [`experiments/2026-09-19-instance-cache-in-use/`](/experiments/2026-09-19-instance-cache-in-use/README.md).
   Since duckdb/duckdb@973a9796b8 the cache hands out an instance that a connection or a result still holds,
   so it no longer reaches the spin;
-  the R-side patch that made it report instead was retired with the vendoring of duckdb/duckdb@fbd180f3a4.
+  the R-side patch that made it report instead was retired in fc23ac484f.
   No call from R reaches that cache today, because `duckdb()` builds its instance directly.
   Handing the driver cache to it is [#2857](https://github.com/duckdb/duckdb-r/issues/2857),
   which collects what the attempt in [#2644](https://github.com/duckdb/duckdb-r/pull/2644) found.
