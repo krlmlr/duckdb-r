@@ -12,13 +12,12 @@ it ([`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/R
 and `cynkratemplate`, installed from GitHub, to render the READMEs
 ([`branches/flavors/`](/handbook/branches/flavors/README.md)).
 A series seeded from a release branch rather than from `main`
-regenerates on **that** branch, the one `releases_from` in `scripts/series.yaml` names,
-as the series of the line CRAN ships does on its release branch,
+regenerates on **that** branch,
 whose `scripts/` may be older than `main`'s —
 replay the recorded seed commits instead when it is.
 
 **A preview line's seed takes its version prefix again here.**
-A regenerated seed carries its base's prefix, which on a released line's branch is that line's,
+A regenerated seed carries `main`'s prefix, which is the released line's,
 and the replay cannot put the preview prefix back:
 the `DESCRIPTION` gate keeps our side verbatim across differing prefixes,
 so every picked commit inherits whatever the seed was stamped with
@@ -26,10 +25,8 @@ so every picked commit inherits whatever the seed was stamped with
 Stamp it in the fifth-component commit, before the `-fwd` refs are created.
 The prefix is the previewed line's, not the seed's: previewing 2.1 is `2.0.99.9000`,
 previewing 2.0 is `1.99.99.9000`.
-`main` carries the prefix of the line upstream `main` previews itself, so a seed regenerated on it has it already,
-with `main`'s landing counter as its fourth component, and `scripts/preview-prefix.sh` reads that as stamped.
 
-**A seed on a released `main` takes the first development version as its fourth component.**
+**A seed on a released `main` takes fledge's first dev version as its fourth component.**
 On the day of a release `main` carries the bare `1.5.6`,
 and appending the counter's `.0` would leave four components where the replay reads five.
 The seed takes `1.5.6.9000.0`, the version `main`'s own next bump writes,
@@ -174,11 +171,8 @@ what establishes such a base is upstream's back-merge of a release branch,
 and until one lands the whole buffer replays
 ([`plan/PLAN-v2-series-open.md`](/plan/PLAN-v2-series-open.md)).
 
-**A preview line's buffer opens on a rewind where its base vendors a released engine, and the script rebuilds it.**
-`main`'s own series no longer meets one in the ordinary course:
-`main` takes upstream `main`'s engine by its landings ([`series-land`](/.claude/skills/series-land/SKILL.md)),
-so a seed on it vendors an engine the buffer has, and the replay starts above it, as for a release line.
-A series seeded on a released engine still does,
+**A preview line's buffer opens on a rewind, and the script rebuilds it.**
+A preview line seeds on `main`, which vendors a released engine,
 so its first vendor commit walks back to where the lines fork:
 `v2.0-cyanoptera` from 1.5.5 to `duckdb/duckdb@ee0b06f6f0`, January's fork point.
 That commit's diff is taken against the engine the *old* seed vendored,
@@ -351,4 +345,4 @@ is answered with a correction committed on the forward commit that carries it an
 so that `-fwd-build` is the better buffer before the loop starts verifying it.
 The strand is pushed beside the four `-fwd` refs, force-pushed like any WIP ref,
 extended by stage 1 like the series' own, rebased again when the forward moves (`series-rebase/SKILL.md`),
-and swapped with the four at the cutover, the replaced one pinned by its review stack like the rest (the playbook's cutover section).
+and swapped with the four at the cutover, the replaced one archived like the rest (the playbook's cutover section).

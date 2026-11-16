@@ -23,14 +23,10 @@ that carry it.
 
 Four refs matter here:
 
-* **the release branch** — the `vX-codename` branch of the line in `duckdb/duckdb-r`,
-  `v2.0-cyanoptera` for the current line and a parked one for a line that is no longer current.
-  It sits at the last landing, and CRAN releases are cut from it;
-  r-universe builds plain `duckdb` from `main` instead ([`branches/flavors/`](/handbook/branches/flavors/README.md)).
-  `main` is no release branch: it carries upstream `main`'s engine and releases nothing
-  ([`branches/model/`](/handbook/branches/model/README.md)).
-  That holds fully once the v2.0 series releases from `v2.0-cyanoptera` and `main` has moved on
-  ([`branches/model/`](/handbook/branches/model/README.md), "Until the switch").
+* **the release branch** — `main` for the current line,
+  the parked `vX-codename` branch for a line that is no longer current,
+  in `duckdb/duckdb-r`.
+  It sits at the last release and is what CRAN and r-universe publish.
 * **`<S>-lts`** — the release branch plus the flavor rename,
   where an LTS line has one.
 * **`<S>-dev`** — what CI judges commit by commit,
@@ -59,12 +55,7 @@ The single most important property of the whole design is the pair of
 middle columns: **vendored commits enter the mainline in exactly one
 cluster (CUT), and `main`'s glue changes only in TRACK and STABILIZE.**
 The two never overlap,
-which is what keeps the release branch CRAN-releasable at all times.
-Between releases the release branch may take its line's batches by landings too, each ending on a bump of the fourth component and its tag
-([`versioning/`](/handbook/operations/releases/versioning/README.md));
-CUT's is the landing that ends on the released version.
-`main` stands outside this machine: it lands batches of upstream `main` whenever one is ready, and waits for no release
-([`series-land`](/.claude/skills/series-land/SKILL.md)).
+which is what keeps `main` CRAN-releasable at all times.
 
 ## State diagram
 
@@ -117,13 +108,13 @@ stateDiagram-v2
 | **0 TRACKING** | the previous release published | grows: vendor + forward-port | advances with CI | frozen at `X.Y.(Z-1)` | maintainer opens window (≈ T−14) | — |
 | **0.1 CANDIDATE PINNED** | window opens | fixes only; pin likely release commit | advances with CI | frozen | candidate green | — |
 | **0.2 REVDEP-1** | candidate pinned | — | — | — | revdep run triaged | — |
-| **0.3 FOLD-BACK** | findings exist | fold-back forward-ports land | advances with CI | **fixes born on a canonical branch**, then ported | findings resolved/accepted | loop to 0.4 |
+| **0.3 FOLD-BACK** | findings exist | fold-back forward-ports land | advances with CI | **fixes born on `main`**, then ported | findings resolved/accepted | loop to 0.4 |
 | **0.4 REVDEP-2** | ≈ T−7 | — | — | — | **go / no-go** | fail → 0.3 |
 | **0.5 GLUE FREEZE** | go | frozen (barrier; all lines aligned) | catches up, then frozen | frozen | upstream tags `vX.Y.Z` | late glue → re-arm 0.5 |
 | **1 VENDORED** | tag lands on `<S>-dev` | tagged vendor commit present | advancing toward the tag | frozen | tagged commit **green** (`each.yaml`) | red → fix in-commit, force-push `<S>-dev` |
-| **2 REVIEW** | green | — | — | — | release branch `..tagged` clean | drift → fix on the branch the series releases from, forward-port |
+| **2 REVIEW** | green | — | — | — | release branch `..tagged` clean | drift → fix on `main`, forward-port |
 | **3 PROVEN** | review ok | — | **has advanced over the tagged commit** | — | green covers the tag | red → 1 |
-| **4 MERGED** | proven | frozen at tagged commit | — | tagged content merged; bump to `X.Y.Z`; `-lts` rebased | release branch green | version conflict (merge driver) / red CI |
+| **4 MERGED** | proven | frozen at tagged commit | — | tagged content merged; `fledge` bump to `X.Y.Z`; `-lts` rebased | release branch green | version conflict (merge driver) / red CI |
 | **5 PUBLISHED** | merged | — | — | tag `vX.Y.Z` pushed; r-universe builds; CRAN submitted (current line) | tag pushed | CRAN reject → new patch cycle |
 
 The **On failure** column is the whole of rollback:
@@ -185,12 +176,8 @@ How they are run and where the results land is `testing/revdep/`'s.
 
 ### 0.3 Fold back
 
-Every fold-back fix is **born on a canonical branch** and forward-ported down the
+Every fold-back fix is **born on `main`** and forward-ported down the
 chain — never authored directly on a `<S>-dev` branch.
-That branch is the one the series releases from:
-`main`, or for a line with a release branch of its own that branch,
-from which the fix reaches the newer lines by forward merges
-([`branches/model/`](/handbook/branches/model/README.md) owns that rule).
 C++ issues go into `patch/` and are simultaneously sent upstream as a
 pull request, so the patch can eventually retire
 ([`operations/vendoring/pipeline/`](/handbook/operations/vendoring/pipeline/README.md)).
@@ -200,11 +187,10 @@ Loop back to 0.4 until clean or explained.
 ### 0.5 Glue freeze (barrier)
 
 Freeze glue across **all** releasing series
-and confirm `git cherry <R> <S>-dev` is empty for each,
-`<R>` the branch the series releases from —
-every releasing line now carries its release branch's glue.
+and confirm `git cherry main <S>-dev` is empty for each —
+every releasing line now carries identical glue.
 A late glue change after this point is allowed
-but **re-arms the freeze**: land it on that branch,
+but **re-arms the freeze**: land it on `main`,
 forward-port it to every releasing `<S>-dev`, re-run a targeted revdep,
 and only then proceed.
 The clock resets to 0.5; it is not a scramble.
@@ -242,10 +228,6 @@ and the post-tag commits stay queued for the next cycle.
 Bring the tagged `<S>-dev` content onto the release branch
 **linearly, never as a merge commit** — the active history stays
 merge-free so it stays bisectable.
-For a line with a release branch of its own this is a landing onto it,
-`scripts/series-land.sh <S>` with the branch its `releases_from` names, ending on the bump to `X.Y.Z`,
-and the branch is then merged forward into the newer lines
-([`series-land`](/.claude/skills/series-land/SKILL.md)).
 Fast-forward or rebase the tagged range onto the release branch,
 dropping the flavor rename commit.
 The `DESCRIPTION` version conflict is resolved automatically by the merge
@@ -257,20 +239,18 @@ the only rewriting is dropping that rename.
 A late tag that no re-stamp reached (step 1) ends the range at the plain vendor commit for the tag,
 and the re-stamp is made on the release branch before the bump.
 
-The package version is **not** derived from the git tag:
-the bump sets it explicitly to `X.Y.Z`, so `DESCRIPTION` matches the upstream tag,
-in the one commit [`versioning/`](/handbook/operations/releases/versioning/README.md) describes.
+The package version is **not** derived from the git tag —
+set it explicitly so `DESCRIPTION` matches the upstream tag:
 
-Then rebase the LTS branch, one rename commit on top of the release branch.
-These blocks run on a maintainer's machine and push over SSH, so they name the canonical repository by its SSH URL:
+```r
+fledge::bump_version("X.Y.Z")
+```
+
+Then rebase the LTS branch, one rename commit on top of the release branch:
 
 ```bash
-C=git@github.com:duckdb/duckdb-r.git   # the canonical repository, where both branches live
-S=v1.4-andium                          # the LTS line just released
-git fetch "$C" "+refs/heads/$S:refs/remotes/canonical/$S" "+refs/heads/$S-lts:refs/remotes/canonical/$S-lts"
-git switch -C "$S-lts" "canonical/$S-lts"   # from the canonical tip, never a stale local branch
-git rebase "canonical/$S"
-git push --force-with-lease="refs/heads/$S-lts:$(git rev-parse "canonical/$S-lts")" "$C" "HEAD:refs/heads/$S-lts"
+# in the <S>-lts worktree
+git rebase origin/<S> && git push origin <S>-lts
 ```
 
 Build the source tarball and take it through WinBuilder and the CRAN
@@ -278,23 +258,12 @@ preflight before tagging (`cran/`).
 
 ### 5 PUBLISHED — tag and publish
 
-Tag the release `vX.Y.Z` in the shape `versioning/` describes, and push; r-universe rebuilds automatically:
+Tag the release and push; r-universe rebuilds automatically:
 
 ```bash
-C=git@github.com:duckdb/duckdb-r.git   # the canonical repository
-S=v1.4-andium                          # the line just released
-R=$S-lts                               # the branch the release is tagged on: "$S" where the line has no -lts branch
-git fetch "$C" "+refs/heads/$R:refs/remotes/canonical/$R" &&   # the tip as it is now, after the rebase
-  v=$(git show "canonical/$R:DESCRIPTION" | sed -n 's/^Version: //p') &&
-  { printf 'duckdb %s\n\n' "$v"; git show "canonical/$R:NEWS.md" | awk -v h="# duckdb $v" '$0 == h {f = 1; next} /^# duckdb / {f = 0} f'; } |
-  git tag -a "v$v" --cleanup=whitespace -F - "canonical/$R" &&
-  git push "$C" "refs/tags/v$v"
+git tag vX.Y.Z origin/<S>-lts   # or origin/<S> per series convention
+git push origin vX.Y.Z
 ```
-
-From the fetch on, the block is one chain that stops at the first failure:
-a local `v<version>` left from an earlier attempt fails the tag and is never pushed,
-and what it tags is the branch's tip as just fetched, so the branch has it.
-The landing that brought the release tagged its bump under a name of its own (`versioning/`), so `vX.Y.Z` is the release's alone.
 
 For the **current** line only, submit to CRAN (`cran/`);
 the submission workflow sets the tag itself and drafts the GitHub release,
@@ -313,8 +282,8 @@ that had not been reseeded into the loop, from the released tip plus the
 flavor rename; every series runs the loop now
 ([`branches/model/`](/handbook/branches/model/README.md)).
 
-Separately, the branch released from moves on to its development version,
-`X.Y.Z.9000`, in a bump written by hand (`versioning/`).
+Separately, the glue source of truth (`main`) moves to its ongoing
+development version via `fledge` (`versioning/`).
 The vendor counter is not a release-time concern: it rises on `<S>-dev` as
 the buffer is consumed, and the one thing that re-derives it is a forward
 rebuild, which has nothing to do with a release having happened.
@@ -332,22 +301,22 @@ coordinate at the **cluster** level:
 * **CUT runs per line, pipelined, CRAN line first.**
   Submit the CRAN line early because its acceptance is asynchronous;
   the r-universe-only LTS line finishes alongside with no CRAN tail.
-* **A new line takes CRAN over** — the line upstream `main` previewed,
-  once upstream cuts its release branch and the series opened for it
-  ([`plan/PLAN-v2-series-open.md`](/plan/PLAN-v2-series-open.md))
+* **A line on its way onto `main`** — the release-branch series whose line `main` releases next,
+  having previewed it while it tracked upstream `main` —
   lives in a long-running TRACK/STABILIZE:
   its STABILIZE *is* the upstream release-candidate window.
-  The line's release branch is cut in `duckdb/duckdb-r` from `main`, whose R side the line keeps,
-  and its CUT is a **landing** onto that branch: the series' vendor commits,
-  replayed without the flavor onto the frozen branch, ending on the bump to the release, and judged by CI one by one.
-  CRAN releases are then cut from the new branch, and the line CRAN shipped before keeps its own as a parked baseline
+  Its CUT is a **landing**: `main` fast-forwards onto the series' vendor commits,
+  replayed without the flavor onto the frozen `main`, ending on a hand-written version bump, and judged by CI one by one,
+  and the line `main` released before parks on its own baseline
   ([`series-land`](/.claude/skills/series-land/SKILL.md)).
-  The series never descends from the branch it lands on, whose later work it took as ports,
+  Every line has a series of its own, opened when upstream cuts its branch
+  ([`plan/PLAN-v2-series-open.md`](/plan/PLAN-v2-series-open.md)),
+  and the series never descends from today's `main`, whose later work it took as ports,
   so a fast-forward onto the series itself is not available.
   The durations differ from an ordinary line's and the machine does
   not, and the one other addition is that vendor-coupled glue may be *born* on
   the line's `<S>-dev`, the documented exception to R-side work being born on
-  a canonical branch.
+  `main`.
 
 ## What each cluster must leave standing
 

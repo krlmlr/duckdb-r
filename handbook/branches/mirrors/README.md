@@ -13,8 +13,7 @@ and shields.io compares two refs of one repository,
 so the branch compared against has to be in the fork
 and not only in the canonical repo.
 `main` is carried for a second reason as well:
-it is what every series seeds from, except a line releasing from a branch of its own, which seeds from that branch,
-and that branch is mirrored for both reasons.
+it is what every series seeds from.
 Forward-porting reads the canonical `main` instead
 ([`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md)),
 because a mirror is behind for most of the cycle below
@@ -79,7 +78,7 @@ The buffer and `-dev` are working branches nothing installs,
 and duplicating either is the thing this avoids.
 A `-fwd-green` is a rebuild published from the fork's own universe
 to verify a cutover before it happens, and nothing publishes its copy here;
-it travels with the rest,
+it travels so that the cutover can archive the replaced copy of `<S>-green` against it in this repository,
 and it is deleted here with the fork's `-fwd` refs once the swap has made its tip `<S>-green`
 ([`series-forward`](/.claude/skills/series-forward/SKILL.md)).
 
@@ -96,8 +95,8 @@ the old green is no ancestor of.
 That is the one legitimate non-fast-forward,
 so [`scripts/series-cutover.sh`](/scripts/series-cutover.sh) forces the copy itself,
 under a lease and after the swap, rather than leaving the next firing to trip on it,
-and only where the copy it replaces is the fork's green or under a pin in the fork
-([`model/`](/handbook/branches/model/README.md)), so the move loses no history.
+and only after the copy it replaces has become the head of a closed pull request here,
+so the move loses no history.
 
 Unlike the mirrors above, this one is ours to push:
 Pull carries branches from the canonical repository into the fork and never back.
