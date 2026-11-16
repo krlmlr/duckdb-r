@@ -37,8 +37,7 @@ and `vendored_sha()` looks past non-vendor commits 20 deep and says so on stderr
 **A series is discovered, not configured**:
 every `<X>-build` with a sibling `<X>-dev` is a series the firing serves, base and forward alike.
 Not a series, and given no stage:
-a forward whose tips its base's refs reach
-(cutover litter pending deletion, as `series_fwd_swapped` in [`scripts/series-lib.sh`](/scripts/series-lib.sh) reads it),
+a forward whose green is an ancestor of its base's green (cutover litter pending deletion),
 `<S>-rc-dev`, `<S>-alpha` and `<S>-rc-alpha` (derived strands),
 `<L>-land-*` (a landing),
 and `<S>-vendor` (the vendor strand the buffer is derived from, which stage 1 serves).
@@ -272,12 +271,11 @@ scripts/series-port.sh <S> --list           # walk a frozen series anyway
 ```
 
 * Commits are classified TOOLING / MIXED / OTHER / VENDOR / VERSION;
-  all but VENDOR and VERSION are picked by default, whole and never split, except that every pick keeps the series' `NEWS.md`.
-* Each series is ported from the branch it releases from, `main` or its line's release branch; tooling always from `main`.
-* A frozen series (seeded from another release line's lineage, or declared `stale: true`) takes the tooling sync alone by default;
+  all but VENDOR and VERSION are picked by default, whole, never split.
+* A frozen series (seeded from a release branch, or parked) takes the tooling sync alone by default;
   what its build needs is ported by SHA.
 * A conflict stops the sequence in the kept worktree: resolve toward `main`'s intent, keeping the series' flavor where the two meet,
-  commit with the command the script prints, push, rerun.
+  `cherry-pick --continue`, push, rerun.
   An OTHER commit that cannot work against this engine is fixed on `main` and ported fixed.
 * A live forward counterpart is ported the same way, every firing.
 * Read the diff of any sync commit that appears: what it reverts that the series needs is a finding for `main`.
@@ -333,23 +331,23 @@ scripts/series-converge.sh <S>
   scripts/series-check.sh <S> <S>-fwd --upstream ../../../duckdb
   scripts/series-converge.sh <S>
 
-  # The refs to swap, coverage, convergence, package and versions, and the
-  # tip of <S>-fwd-green to decide on, with nothing moved. The canonical
-  # repository is the remote named with --canonical where it is not `upstream`.
-  scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare
+  # The gates, the convergence report, the review diff and the plan, with
+  # nothing moved: read it, then decide.
+  scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare --out <dir>
 
-  # The rest is a session's, on the maintainer's request: the cutover pull
-  # request, a review stack per strand, his sign-off on the SHA above, the swap.
-  # See .claude/skills/series-cutover/SKILL.md.
+  # The swap. It asks for the series name, archives each replaced lineage as
+  # the head of a closed pull request, swaps the four refs, and moves the copy
+  # of green that r-universe publishes from -- name that remote with
+  # --canonical where it is not `upstream`, or the copy keeps serving the
+  # pre-cutover lineage -- then deletes the forward's refs in both repositories.
+  scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb
 
   # A retired lineage moves the badge table, and the mirror rules with it.
   scripts/pull-config.sh --check
   ```
 
-* The routine does not run the swap, never passes `--confirm`, builds no review stack, opens no cutover pull request,
-  and does not swap the refs by another route.
-  A cutover the maintainer has asked for is run by a session he sends, never by a firing
-  ([`series-cutover`](../series-cutover/SKILL.md)).
+* The routine does not run the script and does not swap the refs by another route;
+  the script refuses to swap without a terminal, and that refusal is the answer.
 
 Reference: [`references/6-forwarding.md`](references/6-forwarding.md).
 
@@ -427,13 +425,11 @@ a `.dd` file naming a header the flavor renamed stops the build before the first
   `<S>-build-base` does not: it is a marker with no consumer,
   recomputed from the vendored-SHA match every stage 3,
   and set — force-pushed where it has to be — rather than advanced.
-- Cutover is a human's decision.
+- Cutover is manual.
   The loop reports that a forward series has caught up
-  and prints the report's command; it never builds a review stack, never runs the swap, never passes `--confirm`,
+  and prints the command; it never runs it,
   and never swaps the refs by another route.
-  A session runs one only on the maintainer's request, and swaps only on his sign-off,
-  the tick on the cutover pull request's question that names the SHA ([`series-cutover`](../series-cutover/SKILL.md)).
-  The swap refuses a ref no review stack's pull request pins, and deletes the forward's refs afterwards;
+  The script archives what it replaces before it swaps, and deletes the forward's refs afterwards;
   what a refused deletion leaves is cutover litter, which `scripts/series-prune.sh` lists for a human.
   Every other ref move in this skill is the routine's to make.
 - Opening a series is manual too, and its trigger is upstream's branch cut.
