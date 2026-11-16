@@ -32,7 +32,7 @@
 #define R_HAS_ALTLIST
 #endif
 
-#define DUCKDB_PACKAGE_NAME "duckdb.2.0.dev"
+#define DUCKDB_PACKAGE_NAME "duckdb.2.0"
 
 // CRAN guard / engine poisoning
 //
