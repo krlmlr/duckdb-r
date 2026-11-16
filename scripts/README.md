@@ -53,13 +53,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 |---|---|
 | [`pull-config.sh`](pull-config.sh) | Read-only: does `.github/pull.yml` rule every mirror a badge measures against? |
 
-## [`branches/model/`](/handbook/branches/model/README.md)
-
-| File | Purpose |
-|---|---|
-| [`delete-branch-test.sh`](delete-branch-test.sh) | Check scripts/delete-branch.sh, offline, against a bare repository built here as the remote and a stand-in for `gh api` that answers a pull request's state: ... |
-| [`delete-branch.sh`](delete-branch.sh) | Delete a branch only where something that stays proves the deletion loses nothing: a closed pull request's head in the same repository at the branch's tip, w... |
-
 ## [`build/fast-paths/`](/handbook/build/fast-paths/README.md)
 
 | File | Purpose |
@@ -142,9 +135,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 
 | File | Purpose |
 |---|---|
-| [`landing-version-test.sh`](landing-version-test.sh) | Check scripts/landing-version.sh, offline. |
-| [`landing-version.sh`](landing-version.sh) | Print the version a landing's hand-written bump sets, short of an upstream release. |
-| [`preview-prefix-test.sh`](preview-prefix-test.sh) | Check scripts/preview-prefix.sh, offline, in a repository built here. |
 | [`preview-prefix.sh`](preview-prefix.sh) | Stamp a preview line's version prefix onto the strand checked out here: the prefix of the line it *previews*, not the one it was seeded from (handbook/operat... |
 
 ## [`operations/vendoring/pipeline/`](/handbook/operations/vendoring/pipeline/README.md)
@@ -152,9 +142,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | File | Purpose |
 |---|---|
 | [`VENDORING.md`](VENDORING.md) | DuckDB R Package Vendoring |
-| [`merge-news-test.sh`](merge-news-test.sh) | Check scripts/merge-news.sh, the NEWS.md merge driver, offline, on files and in a repository built here. |
-| [`merge-news.sh`](merge-news.sh) | Git merge driver for NEWS.md: merge it section by section, and leave the sections in version order, newest first. |
-| [`merge-version-test.sh`](merge-version-test.sh) | Check scripts/merge-version.sh, the DESCRIPTION merge driver, offline, on files and in a repository built here. |
 | [`merge-version.sh`](merge-version.sh) | Git merge driver for DESCRIPTION. |
 | [`rconfigure.py`](rconfigure.py) | Regenerate the vendored build configuration from a DuckDB checkout: src/duckdb/, src/include/sources.mk, R/version.R, the Makevars files and the logos. |
 | [`setup-git.sh`](setup-git.sh) | Register repository-local git configuration that cannot live in versioned files. |
@@ -178,10 +165,8 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`series-config.sh`](series-config.sh) | What this repository tells the series tooling about the engine it vendors, and nothing else. |
 | [`series-converge.sh`](series-converge.sh) | Does a forward series still carry the same package as the series it replaces? |
 | [`series-cut.sh`](series-cut.sh) | Open a new series by cutting its parent's strands at the fork point: compute the fork point, find the commit on each strand that vendors it, and write the fo... |
-| [`series-cutover-stack-test.sh`](series-cutover-stack-test.sh) | Check scripts/series-cutover-stack.sh offline, against a synthetic fork and upstream clone built here: no network, no fixtures on disk, a `gh` first on PATH ... |
-| [`series-cutover-stack.sh`](series-cutover-stack.sh) | Build the review stack of one strand of a cutover and push it to the fork: the old tip with `main`'s changes replayed onto it, the forward's engine, the forw... |
-| [`series-cutover-test.sh`](series-cutover-test.sh) | Check a cutover, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk, the stacks built by hand and ... |
-| [`series-cutover.sh`](series-cutover.sh) | Replace a series with its forward counterpart in one atomic swap, once every tip the swap moves a ref off is pinned by a pull request's head in the fork. |
+| [`series-cutover-test.sh`](series-cutover-test.sh) | Check a cutover, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk, and a `gh` that records what ... |
+| [`series-cutover.sh`](series-cutover.sh) | Replace a series with its forward counterpart, keeping the replaced history reachable: archive pull requests first, then one atomic swap. |
 | [`series-fold-test.sh`](series-fold-test.sh) | Check scripts/series-fold.sh offline, against a synthetic landing built here: no network, no fixtures on disk. |
 | [`series-fold.sh`](series-fold.sh) | Fold fixes into the commits that introduced their defects, and replay everything above them: the landing commits of an iteration (.claude/skills/series-land/... |
 | [`series-forward-build-test.sh`](series-forward-build-test.sh) | Check the forward replay, offline, against a synthetic base series and seed built here: no network, no fixtures on disk. |
