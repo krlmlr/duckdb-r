@@ -2,6 +2,8 @@
 
 #include "src/storage/statistics/base_statistics.cpp"
 
+#include "src/storage/statistics/bignum_stats.cpp"
+
 #include "src/storage/statistics/column_statistics.cpp"
 
 #include "src/storage/statistics/distinct_statistics.cpp"
@@ -13,6 +15,8 @@
 #include "src/storage/statistics/numeric_stats.cpp"
 
 #include "src/storage/statistics/segment_statistics.cpp"
+
+#include "src/storage/statistics/stats_struct_fields.cpp"
 
 #include "src/storage/statistics/string_stats.cpp"
 

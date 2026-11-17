@@ -1,14 +1,10 @@
 #include "src/execution/operator/helper/launch_external_resource.cpp"
 
-#include "src/execution/operator/helper/physical_batch_collector.cpp"
-
 #include "src/execution/operator/helper/physical_connect.cpp"
 
 #include "src/execution/operator/helper/physical_create_secret.cpp"
 
 #include "src/execution/operator/helper/physical_disconnect.cpp"
-
-#include "src/execution/operator/helper/physical_execute.cpp"
 
 #include "src/execution/operator/helper/physical_explain_analyze.cpp"
 

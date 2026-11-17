@@ -305,10 +305,11 @@ public:
 		if (count == 0) {
 			return;
 		}
-		auto last_entry_index = ValidityBuffer::EntryCount(count) - 1;
-		for (idx_t i = 0; i < last_entry_index; i++) {
+		const auto entry_count = ValidityBuffer::EntryCount(count);
+		for (idx_t i = 0; i + 1 < entry_count; i++) {
 			validity_mask[i] = ValidityBuffer::MAX_ENTRY;
 		}
+		const auto last_entry_index = entry_count - 1;
 		auto last_entry_bits = count % BITS_PER_VALUE;
 		validity_mask[last_entry_index] |= (last_entry_bits == 0)
 		                                       ? ValidityBuffer::MAX_ENTRY
@@ -418,6 +419,13 @@ struct ValidityArray {
 		validity_data = make_unsafe_uniq_array<bool>(count);
 		validity_mask = validity_data.get();
 		memset(validity_mask, initial, sizeof(bool) * count);
+	}
+	//! Points the array at storage of `count` entries owned by the caller (e.g. a buffer-allocated block, so that an
+	//! O(rows) array counts against the memory limit); the storage must outlive the array
+	inline void Initialize(bool *validity, idx_t count) {
+		validity_data.reset();
+		validity_mask = validity;
+		capacity = count;
 	}
 	inline void InitializeEmpty(idx_t count) {
 		capacity = count;

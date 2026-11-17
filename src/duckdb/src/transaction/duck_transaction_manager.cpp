@@ -38,6 +38,7 @@ void DuckCleanupInfo::Cleanup() {
 	for (auto &transaction : transactions) {
 		if (transaction->awaiting_cleanup) {
 			transaction->Cleanup(lowest_visibility_bound);
+			transaction->awaiting_cleanup = false;
 		}
 	}
 }
@@ -50,6 +51,7 @@ DuckTransactionManager::DuckTransactionManager(AttachedDatabase &db) : Transacti
 	// the first timestamp a real transaction can draw: one past the bootstrap stamp, which is also
 	// the bound the system transaction reads at
 	current_start_timestamp = SYSTEM_TRANSACTION_TIMESTAMP + 1;
+	last_commit = SYSTEM_TRANSACTION_TIMESTAMP;
 	// transaction ID starts very high:
 	// it should be much higher than the current start timestamp
 	// if transaction_id < start_timestamp for any set of active transactions
@@ -258,7 +260,7 @@ void DuckTransactionManager::Checkpoint(ClientContext &context, bool force) {
 		options.type = CheckpointType::CONCURRENT_CHECKPOINT;
 	}
 
-	storage_manager.CreateCheckpoint(context, options);
+	storage_manager.CreateCheckpoint(context, options, &context);
 }
 
 unique_ptr<StorageLockKey> DuckTransactionManager::SharedCheckpointLock() {
@@ -323,18 +325,25 @@ void DuckTransactionManager::WaitForDurability() {
 void DuckTransactionManager::CleanupTransactions() {
 	lock_guard<mutex> c_lock(cleanup_lock);
 	while (true) {
-		unique_ptr<DuckCleanupInfo> top_cleanup_info;
+		DuckCleanupInfo *top_cleanup_info = nullptr;
 		{
 			lock_guard<mutex> q_lock(cleanup_queue_lock);
 			if (cleanup_queue.empty()) {
 				// all transactions have been cleaned up - done
 				return;
 			}
-			top_cleanup_info = std::move(cleanup_queue.front());
-			cleanup_queue.pop();
+			top_cleanup_info = cleanup_queue.front().get();
 		}
-		if (top_cleanup_info) {
+		try {
 			top_cleanup_info->Cleanup();
+		} catch (FatalException &) {
+			throw;
+		} catch (std::exception &) {
+			return;
+		}
+		{
+			lock_guard<mutex> q_lock(cleanup_queue_lock);
+			cleanup_queue.pop();
 		}
 	}
 }
@@ -372,7 +381,9 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		// any failure during checkpoint will cause this transactions' changes to be lost,
 		// while later concurrent commits will not be
 		// this can cause undefined state, as those commits were made assuming this one was already committed
-		if (undo_properties.estimated_size >= Settings::Get<AutoCheckpointSkipWalThresholdSetting>(context)) {
+		// we must write the WAL if an unbound index has buffered replays: the checkpoint may be skipped
+		if (undo_properties.estimated_size >= Settings::Get<AutoCheckpointSkipWalThresholdSetting>(context) &&
+		    !db.GetStorageManager().HasBufferedIndexReplays()) {
 			skip_wal_write_due_to_checkpoint = true;
 		}
 	}
@@ -385,8 +396,10 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		t_lock.unlock();
 		// grab the commit lock and hold it until the entire commit is finished
 		held_commit_lock = db.GetStorageManager().GetCommitLock();
+		// a commit that failed while we waited for the commit lock may have invalidated the database
+		error = db.InvalidationError("commit");
 
-		if (!skip_wal_write_due_to_checkpoint) {
+		if (!error.HasError() && !skip_wal_write_due_to_checkpoint) {
 			error = transaction.AppendLocalStorage(context, db, commit_state);
 			if (!error.HasError() && should_write_to_wal) {
 				// Commit the changes to the WAL.
@@ -510,7 +523,7 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 			// published and no longer revertable, but not durable: invalidate. The WAL keeps the
 			// bytes; whether a restart replays them is in doubt
 			error = ErrorData(ex);
-			ValidChecker::Invalidate(db, "Failed to sync the WAL after committing: " + error.Message());
+			db.Invalidate("syncing the WAL after a commit failed", error.RawMessage());
 			// no checkpoint after a failed commit, as on the rollback path above
 			checkpoint_decision = CheckpointDecision(error.Message());
 			lock.reset();
@@ -546,6 +559,10 @@ ErrorData DuckTransactionManager::CommitTransaction(ClientContext &context, Tran
 		checkpoint_decision = CheckpointDecision("snapshots bounded below this commit need its pre-commit state");
 		lock.reset();
 	}
+
+	// A failed commit rolls back inline, queueing teardowns as RollbackTransaction does. Drain here too,
+	// so the call that fills the queue is the one that empties it.
+	DatabaseManager::Get(db.GetDatabase()).DrainPendingTeardowns();
 
 	// now perform a checkpoint if (1) we are able to checkpoint, and (2) the WAL has reached sufficient size to
 	// checkpoint
@@ -590,6 +607,10 @@ void DuckTransactionManager::RollbackTransaction(Transaction &transaction_p) {
 	}
 
 	CleanupTransactions();
+
+	// Run external-resource teardowns the rollback queued (see RollbackState): they execute SQL, so
+	// they can only run here, after the transaction lock is released.
+	DatabaseManager::Get(db.GetDatabase()).DrainPendingTeardowns();
 
 	if (error.HasError()) {
 		throw FatalException("Failed to rollback transaction. Cannot continue operation.\nError: %s", error.Message());

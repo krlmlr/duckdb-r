@@ -2,7 +2,11 @@
 
 #include "src/parser/parsed_data/alter_info.cpp"
 
+#include "src/parser/parsed_data/alter_macro_info.cpp"
+
 #include "src/parser/parsed_data/alter_scalar_function_info.cpp"
+
+#include "src/parser/parsed_data/alter_schema_info.cpp"
 
 #include "src/parser/parsed_data/alter_table_function_info.cpp"
 
@@ -61,6 +65,8 @@
 #include "src/parser/parsed_data/drop_info.cpp"
 
 #include "src/parser/parsed_data/exported_table_data.cpp"
+
+#include "src/parser/parsed_data/external_resource_options.cpp"
 
 #include "src/parser/parsed_data/extra_drop_info.cpp"
 
