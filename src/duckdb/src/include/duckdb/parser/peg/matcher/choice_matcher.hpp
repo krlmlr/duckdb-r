@@ -16,18 +16,6 @@ public:
 	}
 
 	DUCKDB_API arena_ptr<MatchProcess> StartMatch(MatchState &state) const override;
-	//! Restrict matching to one child; matchers.size() means none, invalid means ordered choice.
-	virtual optional_idx SelectChild(MatchState &) const {
-		return optional_idx();
-	}
-
-	//! SelectChild preserves the cursor, rule and private suggestion set.
-	void SetSelectionStatePreserving() {
-		selection_state_preserving = true;
-	}
-	bool PreservesSelectionState() const {
-		return selection_state_preserving;
-	}
 
 	SuggestionType AddSuggestionInternal(MatchState &state) const override {
 		for (auto &child_matcher : matchers) {
@@ -42,16 +30,13 @@ public:
 			if (!result.empty()) {
 				result += " / ";
 			}
-			result += matcher.get().GetPrintName();
+			result += matcher.get().GetName();
 		}
 		return result;
 	}
 
 public:
 	vector<reference<Matcher>> matchers;
-
-private:
-	bool selection_state_preserving = false;
 };
 
 } // namespace duckdb

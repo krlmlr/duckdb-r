@@ -12,7 +12,6 @@
 #include "duckdb/common/local_file_system.hpp"
 #include "duckdb/common/opener_file_system.hpp"
 #include "duckdb/main/config.hpp"
-#include "duckdb/main/context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/main/http/http_util.hpp"
@@ -22,7 +21,7 @@ class DatabaseInstance;
 
 class DatabaseFileOpener : public FileOpener {
 public:
-	explicit DatabaseFileOpener(DatabaseInstance &db_p) : db(db_p), context(db_p.GetContext()) {
+	explicit DatabaseFileOpener(DatabaseInstance &db_p) : db(db_p) {
 	}
 
 	Logger &GetLogger() const override {
@@ -37,8 +36,8 @@ public:
 		return db.TryGetCurrentSetting(key, result);
 	}
 
-	Context &TryGetContext() override {
-		return context;
+	optional_ptr<ClientContext> TryGetClientContext() override {
+		return nullptr;
 	}
 
 	optional_ptr<DatabaseInstance> TryGetDatabase() override {
@@ -50,7 +49,6 @@ public:
 
 private:
 	DatabaseInstance &db;
-	Context &context;
 };
 
 class DatabaseFileSystem : public OpenerFileSystem {

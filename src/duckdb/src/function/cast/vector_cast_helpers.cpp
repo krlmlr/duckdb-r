@@ -288,7 +288,7 @@ static bool SplitStringListInternal(const string_t &input, OP &state) {
 	bool seen_value = false;
 	while (pos < len) {
 		optional_idx start_pos;
-		idx_t end_pos = 0;
+		idx_t end_pos;
 
 		while (pos < len && (buf[pos] != ',' && buf[pos] != ']')) {
 			if (!ValueStateTransition(input_state, start_pos, end_pos)) {
@@ -478,7 +478,6 @@ bool VectorStringToStruct::SplitStruct(const string_t &input, vector<Vector> &va
 
 	if (end_char == '}') {
 		//! Regular struct, in the form of `{name: value, name_2: value_2, ...}`
-		vector<bool> seen_children(varchar_vectors.size(), false);
 		while (pos < len) {
 			optional_idx start_pos;
 			idx_t end_pos;
@@ -532,10 +531,6 @@ bool VectorStringToStruct::SplitStruct(const string_t &input, vector<Vector> &va
 				return false; // false key
 			}
 			child_idx = it->second;
-			if (seen_children[child_idx]) {
-				return false; // duplicate key
-			}
-			seen_children[child_idx] = true;
 
 			start_pos = optional_idx();
 			pos++;

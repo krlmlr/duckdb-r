@@ -107,10 +107,6 @@ public:
 		return ComputeBitWidthFromMaxValue(value_count - 1);
 	}
 
-	void Rebase(data_ptr_t new_ptr) {
-		buffer_.Rebase(new_ptr);
-	}
-
 private:
 	ByteBuffer buffer_;
 
@@ -132,9 +128,9 @@ private:
 		// The int is encoded as a vlq-encoded value.
 		if (bitpack_pos != 0) {
 			if (CHECKED) {
-				buffer_.Inc(1);
+				buffer_.inc(1);
 			} else {
-				buffer_.UnsafeInc(1);
+				buffer_.unsafe_inc(1);
 			}
 			bitpack_pos = 0;
 		}
@@ -149,13 +145,13 @@ private:
 			// (ARROW-4018) this is not big-endian compatible, lol
 			current_value_ = 0;
 			if (CHECKED) {
-				buffer_.Available(byte_encoded_len);
+				buffer_.available(byte_encoded_len);
 			}
 			for (auto i = 0; i < byte_encoded_len; i++) {
-				auto next_byte = Load<uint8_t>(buffer_.GetCurrentLoc() + i);
-				current_value_ |= (static_cast<uint64_t>(next_byte) << (i * 8));
+				auto next_byte = Load<uint8_t>(buffer_.ptr + i);
+				current_value_ |= (next_byte << (i * 8));
 			}
-			buffer_.UnsafeInc(byte_encoded_len);
+			buffer_.unsafe_inc(byte_encoded_len);
 			// sanity check
 			if (repeat_count_ > 0 && current_value_ > max_val) {
 				throw std::runtime_error("Payload value bigger than allowed. Corrupted file?");
@@ -164,7 +160,7 @@ private:
 	}
 
 	void NextCounts() {
-		if (buffer_.CheckAvailable(byte_encoded_len + sizeof(uint32_t) + 2)) {
+		if (buffer_.check_available(byte_encoded_len + sizeof(uint32_t) + 2)) {
 			NextCountsTemplated<false>();
 		} else {
 			NextCountsTemplated<true>();

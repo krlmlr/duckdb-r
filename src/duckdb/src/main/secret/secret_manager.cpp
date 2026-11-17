@@ -17,7 +17,6 @@
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/secret/secret_storage.hpp"
 #include "duckdb/main/secret/default_secrets.hpp"
-#include "duckdb/main/settings.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
 #include "duckdb/planner/operator/logical_create_secret.hpp"
@@ -114,17 +113,8 @@ unique_ptr<BaseSecret> SecretManager::DeserializeSecret(Deserializer &deserializ
 
 	switch (serialization_type) {
 	// This allows us to skip looking up the secret type for deserialization altogether
-	case SecretSerializationType::KEY_VALUE_SECRET: {
-		auto result =
-		    KeyValueSecret::Deserialize<KeyValueSecret>(deserializer, BaseSecret(scope, type, provider, name));
-		if (type == "http") {
-			// Preserve stored keys and apply current HTTP redaction rules to older secrets.
-			const auto keys = CreateHTTPSecretFunctions::GetRedactedKeys();
-			auto &secret = result->Cast<KeyValueSecret>();
-			secret.redact_keys.insert(keys.begin(), keys.end());
-		}
-		return result;
-	}
+	case SecretSerializationType::KEY_VALUE_SECRET:
+		return KeyValueSecret::Deserialize<KeyValueSecret>(deserializer, BaseSecret(scope, type, provider, name));
 	// Continues below: we need to do a type lookup to find the secret deserialize method
 	case SecretSerializationType::CUSTOM:
 		break;
@@ -194,7 +184,8 @@ unique_ptr<SecretEntry> SecretManager::RegisterSecretInternal(CatalogTransaction
 	//! Resolve storage
 	string resolved_storage;
 	if (storage.empty()) {
-		resolved_storage = persist_type == SecretPersistType::PERSISTENT ? DefaultStorage() : TEMPORARY_STORAGE_NAME;
+		resolved_storage =
+		    persist_type == SecretPersistType::PERSISTENT ? config.default_persistent_storage : TEMPORARY_STORAGE_NAME;
 	} else {
 		resolved_storage = storage.GetIdentifierName();
 	}
@@ -256,24 +247,9 @@ optional_ptr<CreateSecretFunction> SecretManager::LookupFunctionInternal(const I
 	return nullptr;
 }
 
-//! Secret providers read environment variables, files and credential endpoints: none of that without external access
-void SecretManager::ThrowIfSecretCreationDisabled(DatabaseInstance &db, const Identifier &type,
-                                                  const Identifier &provider) {
-	if (Settings::Get<EnableExternalAccessSetting>(db)) {
-		return;
-	}
-	string what = "Creating secrets is disabled when enable_external_access is false";
-	if (type.empty()) {
-		throw PermissionException(what);
-	}
-	string provider_string = provider.empty() ? "" : StringUtil::Format(", provider %s", provider);
-	throw PermissionException("%s (secret type %s%s)", what, type, provider_string);
-}
-
 unique_ptr<SecretEntry> SecretManager::CreateSecret(ClientContext &context, const CreateSecretInput &input) {
 	// Note that a context is required for CreateSecret, as the CreateSecretFunction expects one
 	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
-	ThrowIfSecretCreationDisabled(transaction.db, input.type, input.provider);
 	InitializeSecrets(transaction);
 
 	// Make a copy to set the provider to default if necessary
@@ -302,9 +278,7 @@ unique_ptr<SecretEntry> SecretManager::CreateSecret(ClientContext &context, cons
 	                              input.storage_type);
 }
 
-BoundStatement SecretManager::BindCreateSecret(Context &context, CatalogTransaction transaction,
-                                               CreateSecretInput &info) {
-	ThrowIfSecretCreationDisabled(transaction.db, info.type, info.provider);
+BoundStatement SecretManager::BindCreateSecret(CatalogTransaction transaction, CreateSecretInput &info) {
 	if (info.persist_type == SecretPersistType::TRANSACTION || info.storage_type == TRANSACTION_STORAGE_NAME) {
 		throw BinderException("Transaction-scoped secrets cannot be created through SQL");
 	}
@@ -341,7 +315,7 @@ BoundStatement SecretManager::BindCreateSecret(Context &context, CatalogTransact
 
 		// Cast the provided value to the expected type
 		string error_msg;
-		auto cast_value = param.second.TryCastAs(context, matched_param->second, &error_msg);
+		auto cast_value = param.second.DefaultTryCastAs(matched_param->second, &error_msg);
 		if (!cast_value) {
 			throw BinderException("Failed to cast option %s to type '%s': '%s'", matched_param->first,
 			                      matched_param->second.ToString(), error_msg);
@@ -568,8 +542,8 @@ vector<SecretEntry> SecretManager::AllSecrets(CatalogTransaction transaction) {
 	}
 
 	// Add results from all backends to the result set
-	for (const auto &backend : GetSecretStorages()) {
-		auto backend_result = backend.get().AllSecrets(&transaction);
+	for (const auto &backend : secret_storages) {
+		auto backend_result = backend.second->AllSecrets(&transaction);
 		for (const auto &it : backend_result) {
 			result.push_back(it);
 		}
@@ -625,17 +599,14 @@ bool SecretManager::PersistentSecretsEnabled() {
 }
 
 void SecretManager::SetDefaultStorage(const string &storage) {
-	lock_guard<mutex> lck(manager_lock);
 	config.default_persistent_storage = storage;
 }
 
 void SecretManager::ResetDefaultStorage() {
-	lock_guard<mutex> lck(manager_lock);
 	config.default_persistent_storage = SecretManager::LOCAL_FILE_STORAGE_NAME;
 }
 
 string SecretManager::DefaultStorage() {
-	lock_guard<mutex> lck(manager_lock);
 	return config.default_persistent_storage;
 }
 
@@ -661,19 +632,18 @@ void SecretManager::InitializeSecrets(CatalogTransaction transaction) {
 			return;
 		}
 
-		// load the persistent storage first if enabled: it can throw (e.g. a permission error), in which case no
-		// storage is registered yet and the next secret statement retries and throws the same error
-		if (config.allow_persistent_secrets) {
-			LoadSecretStorageInternal(
-			    make_uniq<LocalFileSecretStorage>(*this, transaction.db, LOCAL_FILE_STORAGE_NAME, config.secret_path));
-		}
-
 		// load the tmp storage
-		LoadSecretStorageInternal(make_uniq<TemporarySecretStorage>(TEMPORARY_STORAGE_NAME, transaction.db));
+		LoadSecretStorageInternal(make_uniq<TemporarySecretStorage>(TEMPORARY_STORAGE_NAME, *transaction.db));
 
 		// load the connection-scoped storage: secrets created `IN connection_storage` are visible only to the
 		// connection that created them, and are dropped automatically when that connection closes.
 		LoadSecretStorageInternal(make_uniq<ConnectionSecretStorage>(CONNECTION_STORAGE_NAME));
+
+		if (config.allow_persistent_secrets) {
+			// load the persistent storage if enabled
+			LoadSecretStorageInternal(
+			    make_uniq<LocalFileSecretStorage>(*this, *transaction.db, LOCAL_FILE_STORAGE_NAME, config.secret_path));
+		}
 
 		initialized = true;
 	}
@@ -776,10 +746,8 @@ vector<reference<SecretStorage>> SecretManager::GetSecretStorages() {
 }
 
 DefaultSecretGenerator::DefaultSecretGenerator(Catalog &catalog, SecretManager &secret_manager,
-                                               identifier_set_t &persistent_secrets,
-                                               shared_ptr<PersistentSecretFiles> files_p)
-    : DefaultGenerator(catalog), secret_manager(secret_manager), persistent_secrets(persistent_secrets),
-      files(std::move(files_p)) {
+                                               identifier_set_t &persistent_secrets)
+    : DefaultGenerator(catalog), secret_manager(secret_manager), persistent_secrets(persistent_secrets) {
 }
 
 unique_ptr<CatalogEntry> DefaultSecretGenerator::CreateDefaultEntryInternal(const Identifier &entry_name) {
@@ -791,11 +759,8 @@ unique_ptr<CatalogEntry> DefaultSecretGenerator::CreateDefaultEntryInternal(cons
 
 	auto &fs = FileSystem::GetLocal(catalog.GetDatabase());
 
-	// the file that was found for this secret, as the file name does not always identify the secret
-	string secret_path = files->Get(entry_name);
-	if (secret_path.empty()) {
-		return nullptr;
-	}
+	string base_secret_path = secret_manager.PersistentSecretPath();
+	string secret_path = fs.JoinPath(base_secret_path, entry_name + ".duckdb_secret");
 
 	// Note each file should contain 1 secret
 	try {
@@ -821,7 +786,6 @@ unique_ptr<CatalogEntry> DefaultSecretGenerator::CreateDefaultEntryInternal(cons
 			// Finally: we remove the default entry from the persistent_secrets, otherwise we aren't able to drop it
 			// later
 			persistent_secrets.erase(secret_lu);
-			files->Set(entry->secret->secret->GetName(), secret_path);
 
 			return std::move(entry);
 		}
@@ -843,7 +807,7 @@ unique_ptr<CatalogEntry> DefaultSecretGenerator::CreateDefaultEntryInternal(cons
 		}
 	}
 
-	throw SerializationException("Failed to deserialize secret %s from '%s': file appears empty! Please remove the "
+	throw SerializationException("Failed to deserialize secret '%s' from '%s': file appears empty! Please remove the "
 	                             "file, restart and try again",
 	                             entry_name, secret_path);
 }

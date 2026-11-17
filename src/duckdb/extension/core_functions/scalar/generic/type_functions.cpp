@@ -3,7 +3,6 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/binder.hpp"
-#include "duckdb/common/types/decimal.hpp"
 #include "duckdb/parser/expression/type_expression.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
@@ -112,19 +111,13 @@ static unique_ptr<Expression> BindMakeTypeFunctionExpression(FunctionBindExpress
 	}
 
 	auto type_name = args.front().second.GetValue<string>();
-	QualifiedName qualified_name;
-	string error;
-	if (!QualifiedName::TryParse(type_name, qualified_name, error)) {
-		throw ParserException(error);
-	}
+	auto qualified_name = QualifiedName::Parse(type_name);
 
 	auto unbound_type =
 	    LogicalType::UNBOUND(make_uniq<TypeExpression>(std::move(qualified_name), std::move(type_args)));
 
-	// Bind the unbound type within the decimal width of the expression
+	// Bind the unbound type
 	auto binder = Binder::CreateBinder(input.context);
-	const auto decimal_width_limit = input.GetDecimalWidthLimit();
-	binder->SetDecimalWidthLimit(&decimal_width_limit);
 	binder->BindLogicalType(unbound_type);
 	return make_uniq<BoundConstantExpression>(Value::TYPE(unbound_type));
 }
@@ -135,7 +128,7 @@ ScalarFunction MakeTypeFun::GetFunction() {
 	fun.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 	fun.SetBindExpressionCallback(BindMakeTypeFunctionExpression);
 	fun.GetProperties().SetRequiresExpressionNames(true);
-	fun.GetSignature().AddArgs("args", LogicalType::ANY).AddKwargs("kwargs", LogicalType::ANY);
+	fun.SetVarArgs(LogicalType::ANY);
 	return fun;
 }
 

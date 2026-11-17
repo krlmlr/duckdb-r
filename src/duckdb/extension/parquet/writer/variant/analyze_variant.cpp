@@ -1,4 +1,3 @@
-#include "duckdb/common/types/decimal.hpp"
 #include <stdint.h>
 #include <string>
 #include <unordered_map>
@@ -23,12 +22,6 @@
 
 namespace duckdb {
 
-//! Auto-shredding stops at this depth of nesting: an OBJECT or ARRAY nested this deep is kept whole in 'value', with
-//! no 'typed_value' of its own. Every shredded level of nesting adds several levels to the Parquet schema (and to the
-//! recursion of the writer and of every reader), so an unbounded depth would produce a file no reader accepts, or
-//! overflow the stack writing it.
-static constexpr idx_t MAX_SHREDDING_DEPTH = 32;
-
 unique_ptr<ParquetAnalyzeSchemaState> VariantColumnWriter::AnalyzeSchemaInit() {
 	if (child_writers.size() == 2 && !is_analyzed) {
 		return make_uniq<VariantAnalyzeSchemaState>();
@@ -38,7 +31,7 @@ unique_ptr<ParquetAnalyzeSchemaState> VariantColumnWriter::AnalyzeSchemaInit() {
 }
 
 static void AnalyzeSchemaInternal(VariantAnalyzeData &state, UnifiedVariantVectorData &variant, idx_t row,
-                                  uint32_t values_index, idx_t depth) {
+                                  uint32_t values_index) {
 	state.total_count++;
 	if (!variant.RowIsValid(row)) {
 		state.type_map[static_cast<uint8_t>(VariantLogicalType::VARIANT_NULL)]++;
@@ -48,12 +41,6 @@ static void AnalyzeSchemaInternal(VariantAnalyzeData &state, UnifiedVariantVecto
 	auto type_id = variant.GetTypeId(row, values_index);
 	state.type_map[static_cast<uint8_t>(type_id)]++;
 
-	if (type_id == VariantLogicalType::OBJECT || type_id == VariantLogicalType::ARRAY) {
-		if (depth >= MAX_SHREDDING_DEPTH) {
-			//! Nested too deep to shred: the value is kept whole in 'value', so its children are not analyzed
-			return;
-		}
-	}
 	if (type_id == VariantLogicalType::OBJECT) {
 		if (!state.object_data) {
 			state.object_data = make_uniq<ObjectAnalyzeData>();
@@ -66,8 +53,8 @@ static void AnalyzeSchemaInternal(VariantAnalyzeData &state, UnifiedVariantVecto
 			auto child_key_index = variant.GetKeysIndex(row, i + nested_data.children_idx);
 
 			auto &key = variant.GetKey(row, child_key_index);
-			auto &child_state = object_data.GetOrCreateField(key);
-			AnalyzeSchemaInternal(child_state, variant, row, child_values_index, depth + 1);
+			auto &child_state = object_data.fields[key.GetString()];
+			AnalyzeSchemaInternal(child_state, variant, row, child_values_index);
 		}
 	} else if (type_id == VariantLogicalType::ARRAY) {
 		if (!state.array_data) {
@@ -78,7 +65,7 @@ static void AnalyzeSchemaInternal(VariantAnalyzeData &state, UnifiedVariantVecto
 		for (idx_t i = 0; i < nested_data.child_count; i++) {
 			auto child_values_index = variant.GetValuesIndex(row, i + nested_data.children_idx);
 			auto &child_state = array_data.child;
-			AnalyzeSchemaInternal(child_state, variant, row, child_values_index, depth + 1);
+			AnalyzeSchemaInternal(child_state, variant, row, child_values_index);
 		}
 	} else if (type_id == VariantLogicalType::DECIMAL) {
 		auto decimal_data = VariantUtils::DecodeDecimalData(variant, row, values_index);
@@ -111,7 +98,7 @@ void VariantColumnWriter::AnalyzeSchema(ParquetAnalyzeSchemaState &state_p, Vect
 	UnifiedVariantVectorData variant(recursive_format);
 
 	for (idx_t i = 0; i < count; i++) {
-		AnalyzeSchemaInternal(state.analyze_data, variant, i, 0, 0);
+		AnalyzeSchemaInternal(state.analyze_data, variant, i, 0);
 	}
 }
 
@@ -132,8 +119,7 @@ static void CheckPrimitive(const VariantAnalyzeData &state, ShredAnalysisState &
 	}
 	if (VARIANT_TYPE == VariantLogicalType::DECIMAL) {
 		D_ASSERT(count);
-		if (!state.decimal_consistent || state.decimal_width > Decimal::MAX_WIDTH_INT128) {
-			// the Parquet VARIANT specification holds decimals of at most 38 digits: wider ones stay in the value
+		if (!state.decimal_consistent) {
 			return;
 		}
 		result.highest_count = count;
@@ -144,7 +130,7 @@ static void CheckPrimitive(const VariantAnalyzeData &state, ShredAnalysisState &
 	}
 }
 
-static bool ConstructShreddedType(const VariantAnalyzeData &state, LogicalType &out, idx_t depth) {
+static bool ConstructShreddedType(const VariantAnalyzeData &state, LogicalType &out) {
 	ShredAnalysisState result;
 
 	if (state.type_map[0] == state.total_count) {
@@ -183,14 +169,9 @@ static bool ConstructShreddedType(const VariantAnalyzeData &state, LogicalType &
 	auto object_count = state.type_map[static_cast<uint8_t>(VariantLogicalType::OBJECT)];
 	if (array_count > object_count) {
 		if (array_count > result.highest_count) {
-			if (depth >= MAX_SHREDDING_DEPTH) {
-				//! Nested too deep to shred: the array is kept whole in 'value' (its children were not analyzed)
-				out = LogicalType::VARIANT();
-				return true;
-			}
 			auto &array_data = *state.array_data;
 			LogicalType child_type;
-			if (!ConstructShreddedType(array_data.child, child_type, depth + 1)) {
+			if (!ConstructShreddedType(array_data.child, child_type)) {
 				return false;
 			}
 			out = LogicalType::LIST(child_type);
@@ -198,27 +179,18 @@ static bool ConstructShreddedType(const VariantAnalyzeData &state, LogicalType &
 		}
 	} else {
 		if (object_count > result.highest_count) {
-			if (depth >= MAX_SHREDDING_DEPTH) {
-				//! Nested too deep to shred: the object is kept whole in 'value' (its fields were not analyzed)
-				out = LogicalType::VARIANT();
-				return true;
-			}
 			auto &object_data = *state.object_data;
 
 			//! TODO: implement some logic to determine which fields are worth shredding, considering the overhead when
 			//! only 10% of rows make use of the field
 			child_list_t<LogicalType> field_types;
 			for (auto &field : object_data.fields) {
-				if (field.first.Empty()) {
-					//! A STRUCT field cannot have an empty name, so the empty key stays in the 'value'
-					continue;
-				}
 				LogicalType child_type;
-				if (!ConstructShreddedType(field.second, child_type, depth + 1)) {
+				if (!ConstructShreddedType(field.second, child_type)) {
 					// cannot shred on this field - skip
 					continue;
 				}
-				field_types.emplace_back(field.first.GetString(), child_type);
+				field_types.emplace_back(field.first, child_type);
 			}
 			if (field_types.empty()) {
 				// no field types to shred on - avoid shredding
@@ -238,7 +210,7 @@ static bool ConstructShreddedType(const VariantAnalyzeData &state, LogicalType &
 void VariantColumnWriter::AnalyzeSchemaFinalize(const ParquetAnalyzeSchemaState &state_p) {
 	auto &state = state_p.Cast<VariantAnalyzeSchemaState>();
 	LogicalType shredded_type;
-	if (!ConstructShreddedType(state.analyze_data, shredded_type, 0)) {
+	if (!ConstructShreddedType(state.analyze_data, shredded_type)) {
 		//! Can't shred, keep the original children
 		//! Mark as analyzed to prevent re-analysis from modifying child_writers
 		//! after InitializeSchemaElements has already locked in the schema

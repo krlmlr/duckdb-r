@@ -83,7 +83,6 @@ static bool IsEqual(const VariantNode &haystack, const VariantNode &needle) {
 	case VariantComparisonType::BLOB:
 	case VariantComparisonType::BITSTRING:
 	case VariantComparisonType::GEOMETRY:
-	case VariantComparisonType::GEOGRAPHY:
 	case VariantComparisonType::VARCHAR:
 		return haystack.GetString() == needle.GetString();
 	}

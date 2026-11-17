@@ -68,7 +68,7 @@ private:
 	double prev_mean = 0;
 	bool observe = false;
 	bool warmup = false;
-	unique_ptr<RandomEngine> generator;
+	RandomEngine generator;
 	shared_ptr<Logger> logger;
 	string log_file_path;
 };

@@ -13,15 +13,14 @@ using Filter = FilterPushdown::Filter;
 
 static void ReplaceSetOpBindings(vector<ColumnBinding> &bindings, Filter &filter, unique_ptr<Expression> &root_expr,
                                  LogicalSetOperation &setop) {
-	root_expr = ExpressionIterator::PreorderReplace<BoundColumnRefExpression>(
-	    std::move(root_expr), [&](const BoundColumnRefExpression &colref) {
+	ExpressionIterator::VisitExpressionMutable<BoundColumnRefExpression>(
+	    root_expr, [&](BoundColumnRefExpression &colref, unique_ptr<Expression> &expr) {
 		    D_ASSERT(colref.Binding().table_index == setop.table_index);
 		    D_ASSERT(colref.Depth() == 0);
 
 		    // rewrite the binding by looking into the bound_tables list of the subquery
-		    auto &new_binding = bindings[colref.Binding().column_index];
-		    filter.bindings.insert(new_binding.table_index);
-		    return colref.WithBinding(new_binding);
+		    colref.BindingMutable() = bindings[colref.Binding().column_index];
+		    filter.bindings.insert(colref.Binding().table_index);
 	    });
 }
 
@@ -30,16 +29,10 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownSetOperation(unique_ptr<Logi
 	         op->type == LogicalOperatorType::LOGICAL_INTERSECT);
 	auto &setop = op->Cast<LogicalSetOperation>();
 
-	for (idx_t child_idx = 0; child_idx < op->children.size(); child_idx++) {
-		auto &child = op->children[child_idx];
+	for (auto &child : op->children) {
 		auto child_bindings = child->GetColumnBindings();
 
 		FilterPushdown child_pushdown(optimizer, convert_mark_joins, projection_mode);
-		// a filter on the result of EXCEPT and INTERSECT only applies to their left child
-		if (child_idx > 0 && op->type != LogicalOperatorType::LOGICAL_UNION) {
-			child = child_pushdown.Rewrite(std::move(child));
-			continue;
-		}
 		for (auto &original_filter : filters) {
 			// first create a copy of the filter
 			auto filter = make_uniq<Filter>();

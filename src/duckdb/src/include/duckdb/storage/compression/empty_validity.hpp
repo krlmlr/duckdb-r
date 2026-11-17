@@ -30,11 +30,10 @@ public:
 public:
 	static CompressionFunction CreateFunction() {
 		CompressionFunction result(CompressionType::COMPRESSION_EMPTY, PhysicalType::BIT, nullptr, nullptr, nullptr,
-		                           InitCompression, Compress, FinalizeCompress, InitScan, Scan, ScanPartial, Skip,
-		                           InitSegment);
+		                           InitCompression, Compress, FinalizeCompress, InitScan, Scan, ScanPartial, FetchRow,
+		                           Skip, InitSegment);
 		result.filter = Filter;
 		result.select = Select;
-		result.supports_null_block = true;
 		return result;
 	}
 
@@ -83,6 +82,10 @@ public:
 	static void Scan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result) {
 		return;
 	}
+	static void FetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
+	                     idx_t result_idx) {
+		return;
+	}
 	static void Skip(ColumnSegment &segment, ColumnScanState &state, idx_t skip_count) {
 		return;
 	}
@@ -95,7 +98,7 @@ public:
 	                   TableFilterState &filter_state) {
 	}
 	static void Select(ColumnSegment &segment, ColumnScanState &state, idx_t vector_count, Vector &result,
-	                   const SelectionVector &sel, idx_t sel_count, idx_t result_offset, ScanVectorType scan_type) {
+	                   const SelectionVector &sel, idx_t sel_count) {
 	}
 };
 

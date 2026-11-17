@@ -118,9 +118,7 @@ BoundStatement Binder::BindSummarize(ShowRef &ref) {
 		max_children.push_back(SummarizeCreateAggregate("max", plan.names[i]));
 		unique_children.push_back(make_uniq<CastExpression>(
 		    LogicalType::BIGINT, SummarizeCreateAggregate("approx_count_distinct", plan.names[i])));
-		const auto &column_type = plan.types[i];
-		const auto supports_average = column_type.IsNumeric() || column_type.IsTemporal();
-		if (supports_average) {
+		if (plan.types[i].IsNumeric() || plan.types[i].IsTemporal()) {
 			avg_children.push_back(SummarizeCreateAggregate("avg", plan.names[i]));
 		} else {
 			avg_children.push_back(ConstantExpression::Null());
@@ -130,7 +128,7 @@ BoundStatement Binder::BindSummarize(ShowRef &ref) {
 		} else {
 			std_children.push_back(ConstantExpression::Null());
 		}
-		if (supports_average) {
+		if (plan.types[i].IsNumeric() || plan.types[i].IsTemporal()) {
 			q25_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.25)));
 			q50_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.50)));
 			q75_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.75)));

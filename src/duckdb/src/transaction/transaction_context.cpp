@@ -23,9 +23,8 @@ TransactionContext::~TransactionContext() {
 		try {
 			Rollback(nullptr);
 		} catch (std::exception &ex) {
-			// a destructor cannot throw, and building the error message allocates
+			ErrorData data(ex);
 			try {
-				ErrorData data(ex);
 				DUCKDB_LOG_ERROR(context, "TransactionContext::~TransactionContext()\t\t" + data.Message());
 			} catch (...) { // NOLINT
 			}
@@ -43,7 +42,7 @@ void TransactionContext::BeginTransaction() {
 	current_transaction = make_uniq<MetaTransaction>(context, start_timestamp, global_transaction_id);
 
 	// Notify any registered state of transaction begin
-	for (auto &state : context.GetContext().GetRegisteredState().States()) {
+	for (auto &state : context.registered_state->States()) {
 		state->TransactionBegin(*current_transaction, context);
 	}
 }
@@ -70,7 +69,7 @@ void TransactionContext::Commit() {
 	auto error = transaction->Commit();
 	// Notify any registered state of transaction commit
 	if (error.HasError()) {
-		for (auto const &s : context.GetContext().GetRegisteredState().States()) {
+		for (auto const &s : context.registered_state->States()) {
 			s->TransactionRollback(*transaction, context, error);
 		}
 		if (Exception::InvalidatesDatabase(error.Type()) || error.Type() == ExceptionType::INTERNAL) {
@@ -79,7 +78,7 @@ void TransactionContext::Commit() {
 		}
 		throw TransactionException("Failed to commit: %s", error.RawMessage());
 	}
-	for (auto &state : context.GetContext().GetRegisteredState().States()) {
+	for (auto &state : context.registered_state->States()) {
 		state->TransactionCommit(*transaction, context);
 	}
 	transaction->Finalize();
@@ -107,6 +106,7 @@ void TransactionContext::Rollback(optional_ptr<ErrorData> error) {
 	}
 	auto transaction = std::move(current_transaction);
 	ClearTransaction();
+	context.client_data->profiler->Reset();
 
 	ErrorData rollback_error;
 	try {
@@ -114,15 +114,9 @@ void TransactionContext::Rollback(optional_ptr<ErrorData> error) {
 	} catch (std::exception &ex) {
 		rollback_error = ErrorData(ex);
 	}
-	// Notify any registered state of transaction rollback - all of them, also when one of them fails
-	for (auto const &s : context.GetContext().GetRegisteredState().States()) {
-		try {
-			s->TransactionRollback(*transaction, context, error);
-		} catch (std::exception &ex) {
-			if (!rollback_error.HasError()) {
-				rollback_error = ErrorData(ex);
-			}
-		}
+	// Notify any registered state of transaction rollback
+	for (auto const &s : context.registered_state->States()) {
+		s->TransactionRollback(*transaction, context, error);
 	}
 	if (rollback_error.HasError()) {
 		rollback_error.Throw();

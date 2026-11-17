@@ -8,8 +8,6 @@
 #pragma once
 
 #include "duckdb/optimizer/join_order/join_relation_set.hpp"
-#include "duckdb/optimizer/join_order/cardinality_value.hpp"
-#include "duckdb/optimizer/recursive_join_planning.hpp"
 
 namespace duckdb {
 
@@ -45,11 +43,8 @@ public:
 	//! in the cost model is error prone. If the plan enumerator join node is updated and not the cost model
 	//! the whole Join Order Optimizer can start exhibiting undesired behavior.
 	double cost;
-	//! Candidate output used when composing parent estimates and costs.
-	CardinalityValue cardinality {0};
-	RecursiveJoinProperties recursive_properties;
-	double retained_build_size = 0;
-	double peak_build_size = 0;
+	//! used only to populate logical operators with estimated cardinalities after the best join plan has been found.
+	idx_t cardinality = DConstants::INVALID_INDEX;
 };
 
 } // namespace duckdb

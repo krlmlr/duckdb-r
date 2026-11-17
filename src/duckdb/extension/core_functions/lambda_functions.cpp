@@ -1,7 +1,6 @@
 #include "duckdb/function/lambda_functions.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/context.hpp"
 
 #include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/serializer/deserializer.hpp"
@@ -21,8 +20,8 @@ namespace duckdb {
 //! LambdaExecuteInfo holds information for executing the lambda expression on an input chunk and
 //! a resulting lambda chunk.
 struct LambdaExecuteInfo {
-	LambdaExecuteInfo(Context &context, const Expression &lambda_expr, const DataChunk &args, const bool has_index,
-	                  const Vector &child_vector)
+	LambdaExecuteInfo(ClientContext &context, const Expression &lambda_expr, const DataChunk &args,
+	                  const bool has_index, const Vector &child_vector)
 	    : has_index(has_index) {
 		expr_executor = make_uniq<ExpressionExecutor>(context, lambda_expr);
 
@@ -234,16 +233,12 @@ void ListLambdaBindData::Serialize(Serializer &serializer, const optional_ptr<Fu
 	serializer.WritePropertyWithDefault<bool>(103, "has_initial", bind_data.has_initial, false);
 }
 
-unique_ptr<FunctionData> ListLambdaBindData::Deserialize(Deserializer &deserializer,
-                                                         BoundScalarFunction &bound_function) {
+unique_ptr<FunctionData> ListLambdaBindData::Deserialize(Deserializer &deserializer, BoundScalarFunction &) {
 	auto return_type = deserializer.ReadProperty<LogicalType>(100, "return_type");
 	auto lambda_expr = deserializer.ReadPropertyWithExplicitDefault<unique_ptr<Expression>>(101, "lambda_expr",
 	                                                                                        unique_ptr<Expression>());
 	auto has_index = deserializer.ReadProperty<bool>(102, "has_index");
 	auto has_initial = deserializer.ReadPropertyWithExplicitDefault<bool>(103, "has_initial", false);
-	if (lambda_expr && lambda_expr->IsVolatile()) {
-		bound_function.SetVolatile();
-	}
 	return make_uniq<ListLambdaBindData>(return_type, std::move(lambda_expr), has_index, has_initial);
 }
 

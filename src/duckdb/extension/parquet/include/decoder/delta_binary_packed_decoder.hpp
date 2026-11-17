@@ -27,7 +27,6 @@ public:
 
 public:
 	void InitializePage();
-	void Rebase();
 	void Read(uint8_t *defines, idx_t read_count, Vector &result, idx_t result_offset);
 	void Skip(uint8_t *defines, idx_t skip_count);
 
@@ -35,7 +34,6 @@ private:
 	ColumnReader &reader;
 	ResizeableBuffer &decoded_data_buffer;
 	unique_ptr<DbpDecoder> dbp_decoder;
-	idx_t block_offset = 0;
 };
 
 } // namespace duckdb

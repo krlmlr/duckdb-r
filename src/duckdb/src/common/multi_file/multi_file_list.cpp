@@ -11,9 +11,16 @@
 
 #include <algorithm>
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/context.hpp"
 
 namespace duckdb {
+
+MultiFilePushdownInfo::MultiFilePushdownInfo(LogicalGet &get)
+    : table_index(get.table_index), column_names(get.names), column_indexes(get.GetColumnIds()),
+      extra_info(get.extra_info) {
+	for (auto &col_id : column_indexes) {
+		column_ids.push_back(col_id.GetPrimaryIndex());
+	}
+}
 
 MultiFilePushdownInfo::MultiFilePushdownInfo(TableIndex table_index, const vector<Identifier> &column_names,
                                              const vector<ColumnIndex> &column_indexes, ExtraOperatorInfo &extra_info)
@@ -31,11 +38,10 @@ bool PushdownInternal(ClientContext &context, const MultiFileOptions &options, M
 		if (IsVirtualColumn(info.column_ids[i])) {
 			continue;
 		}
-		filter_info.column_map.insert({info.column_names[info.column_ids[i]], i});
+		filter_info.column_map.insert({info.column_names[info.column_ids[i]].GetIdentifierName(), i});
 	}
 	filter_info.hive_enabled = options.hive_partitioning;
 	filter_info.filename_enabled = options.filename;
-	filter_info.filename_column = Identifier(options.filename_column);
 
 	auto start_files = expanded_files.size();
 	HivePartitioning::ApplyFiltersToFileList(context, expanded_files, filters, filter_info, info);
@@ -162,10 +168,6 @@ vector<OpenFileInfo> MultiFileList::GetDisplayFileList(optional_idx max_files) c
 	return files;
 }
 
-vector<OpenFileInfo> MultiFileList::GetAllFiles() const {
-	return MultiFileList::GetDisplayFileList();
-}
-
 MultiFileCount MultiFileList::GetFileCount(idx_t min_exact_count) const {
 	return MultiFileCount(GetTotalFileCount());
 }
@@ -239,28 +241,6 @@ bool MultiFileList::IsEmpty() const {
 	return GetExpandResult() == FileExpandResult::NO_FILES;
 }
 
-optional_idx MultiFileList::EstimateRowsPerFile(idx_t bytes_per_row) const {
-	D_ASSERT(bytes_per_row > 0);
-	MultiFileListScanData scan_data;
-	scan_data.scan_type = MultiFileListScanType::FETCH_IF_AVAILABLE;
-	InitializeScan(scan_data);
-	OpenFileInfo file;
-	idx_t file_count = 0;
-	idx_t row_count = 0;
-	while (Scan(scan_data, file)) {
-		idx_t file_size;
-		if (!file.extended_info || !file.extended_info->TryGetOption("file_size", file_size)) {
-			return optional_idx();
-		}
-		row_count += MaxValue<idx_t>(file_size / bytes_per_row, 1);
-		file_count++;
-	}
-	if (file_count == 0) {
-		return optional_idx();
-	}
-	return row_count / file_count;
-}
-
 unique_ptr<MultiFileList> MultiFileList::Copy() const {
 	return make_uniq<SimpleMultiFileList>(GetAllFiles());
 }
@@ -304,7 +284,7 @@ idx_t SimpleMultiFileList::GetTotalFileCount() const {
 //===--------------------------------------------------------------------===//
 // LazyFileList
 //===--------------------------------------------------------------------===//
-LazyMultiFileList::LazyMultiFileList(optional_ptr<Context> services_p) : services(services_p) {
+LazyMultiFileList::LazyMultiFileList(optional_ptr<ClientContext> context_p) : context(context_p) {
 }
 
 vector<OpenFileInfo> LazyMultiFileList::GetAllFiles() const {
@@ -363,7 +343,7 @@ bool LazyMultiFileList::ExpandNextPathInternal() const {
 	if (all_files_expanded) {
 		return false;
 	}
-	if (services && services->IsInterrupted()) {
+	if (context && context->IsInterrupted()) {
 		throw InterruptException();
 	}
 	if (!ExpandNextPath()) {
@@ -390,8 +370,8 @@ GlobMultiFileList::GlobMultiFileList(ClientContext &context_p, vector<string> gl
 }
 
 GlobMultiFileList::GlobMultiFileList(ClientContext &context_p, vector<OpenFileInfo> globs_p, FileGlobInput glob_input_p)
-    : LazyMultiFileList(&context_p.GetContext()), context(context_p), globs(std::move(globs_p)),
-      glob_input(std::move(glob_input_p)), current_glob(0) {
+    : LazyMultiFileList(&context_p), context(context_p), globs(std::move(globs_p)), glob_input(std::move(glob_input_p)),
+      current_glob(0) {
 }
 
 vector<OpenFileInfo> GlobMultiFileList::GetDisplayFileList(optional_idx max_files) const {

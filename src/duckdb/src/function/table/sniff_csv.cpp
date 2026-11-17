@@ -1,5 +1,4 @@
 #include "duckdb/function/built_in_functions.hpp"
-#include "duckdb/common/sql_identifier.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_reader_options.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/execution/operator/csv_scanner/sniffer/csv_sniffer.hpp"
@@ -8,7 +7,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/function/table/range.hpp"
 #include "duckdb/execution/operator/csv_scanner/csv_file_handle.hpp"
-#include "duckdb/execution/operator/csv_scanner/csv_schema_discovery.hpp"
+#include "duckdb/execution/operator/csv_scanner/csv_multi_file_info.hpp"
 #include "duckdb/function/table/read_csv.hpp"
 
 namespace duckdb {
@@ -43,23 +42,20 @@ static unique_ptr<FunctionData> CSVSniffBind(ClientContext &context, TableFuncti
 	auto it = input.named_parameters.find("auto_detect");
 	if (it != input.named_parameters.end()) {
 		if (it->second.IsNull()) {
-			throw BinderException("%s expects a non-null boolean value (e.g. TRUE or 1)", it->first);
+			throw BinderException("\"%s\" expects a non-null boolean value (e.g. TRUE or 1)", it->first);
 		}
 		if (!it->second.GetValue<bool>()) {
 			throw InvalidInputException("sniff_csv function does not accept auto_detect variable set to false");
 		}
 		// otherwise remove it
-		input.named_parameters.erase(it);
+		input.named_parameters.erase("auto_detect");
 	}
 
 	// If we want to force the match of the sniffer
 	it = input.named_parameters.find("force_match");
 	if (it != input.named_parameters.end()) {
-		if (it->second.IsNull()) {
-			throw BinderException("%s expects a non-null boolean value (e.g. TRUE or 1)", it->first);
-		}
 		result->force_match = it->second.GetValue<bool>();
-		input.named_parameters.erase(it);
+		input.named_parameters.erase("force_match");
 	}
 	MultiFileOptions file_options;
 	result->options.FromNamedParameters(input.named_parameters, context, file_options);
@@ -82,7 +78,7 @@ static unique_ptr<FunctionData> CSVSniffBind(ClientContext &context, TableFuncti
 	return_types.emplace_back(LogicalType::VARCHAR);
 	names.emplace_back("Comment");
 	// 6. Skip Rows
-	return_types.emplace_back(LogicalType::UBIGINT);
+	return_types.emplace_back(LogicalType::UINTEGER);
 	names.emplace_back("SkipRows");
 	// 7. Has Header
 	return_types.emplace_back(LogicalType::BOOLEAN);
@@ -187,8 +183,7 @@ static void CSVSniffFunction(ClientContext &context, TableFunctionInput &data_p,
 	str_opt = sniffer_options.dialect_options.state_machine_options.comment.FormatValue();
 	output.data[4].Append(Value(str_opt));
 	// 6. Skip Rows
-	auto skip_rows = sniffer_options.dialect_options.skip_rows.GetValue();
-	output.data[5].Append(Value::UBIGINT(skip_rows));
+	output.data[5].Append(Value::UINTEGER(NumericCast<uint32_t>(sniffer_options.dialect_options.skip_rows.GetValue())));
 	// 7. Has Header
 	auto has_header = Value::BOOLEAN(sniffer_options.dialect_options.header.GetValue());
 	output.data[6].Append(has_header);
@@ -200,8 +195,8 @@ static void CSVSniffFunction(ClientContext &context, TableFunctionInput &data_p,
 		child_list_t<Value> struct_children {{"name", sniffer_result.names[i]},
 		                                     {"type", {sniffer_result.return_types[i].ToString()}}};
 		values.emplace_back(Value::STRUCT(struct_children));
-		columns << SQLString::ToString(sniffer_result.names[i].GetIdentifierName()) << ": "
-		        << SQLString::ToString(sniffer_result.return_types[i].ToString());
+		columns << "'" << sniffer_result.names[i].GetIdentifierName() << "': '"
+		        << sniffer_result.return_types[i].ToString() << "'";
 		if (i != sniffer_result.return_types.size() - 1) {
 			columns << separator;
 		}
@@ -243,7 +238,7 @@ static void CSVSniffFunction(ClientContext &context, TableFunctionInput &data_p,
 	std::ostringstream csv_read;
 
 	// Base, Path and auto_detect=false
-	csv_read << "FROM read_csv(" << SQLString::ToString(files[0].path) << separator << "auto_detect=false" << separator;
+	csv_read << "FROM read_csv('" << files[0].path << "'" << separator << "auto_detect=false" << separator;
 	// 10.1. Delimiter
 	if (!sniffer_options.dialect_options.state_machine_options.delimiter.IsSetByUser()) {
 		csv_read << "delim="
@@ -324,13 +319,10 @@ static void CSVSniffFunction(ClientContext &context, TableFunctionInput &data_p,
 }
 
 void CSVSnifferFunction::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction csv_sniffer("sniff_csv", FunctionSignature().AddPositionalOnly("path", LogicalType::VARCHAR),
-	                          CSVSniffFunction, CSVSniffBind, CSVSniffInitGlobal);
+	TableFunction csv_sniffer("sniff_csv", {LogicalType::VARCHAR}, CSVSniffFunction, CSVSniffBind, CSVSniffInitGlobal);
 	// Accept same options as the actual csv reader
 	ReadCSVTableFunction::ReadCSVAddNamedParameters(csv_sniffer);
-	MultiFileReader::AddParameters(csv_sniffer);
-	csv_sniffer.GetSignature().ExtendTypedKwargs(
-	    [](TypedKwargs &options) { options.Add("force_match", LogicalType::BOOLEAN); });
+	csv_sniffer.named_parameters["force_match"] = LogicalType::BOOLEAN;
 	set.AddFunction(csv_sniffer);
 }
 } // namespace duckdb

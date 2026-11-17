@@ -30,13 +30,10 @@ public:
 		// Similar approach to AttachedDatabase::Close(), just swallow the exception
 		try {
 			TaskExecutor executor(scheduler);
-			vector<unique_ptr<BaseExecutorTask>> tasks;
-			tasks.reserve(elements.size());
 			for (auto &segment : elements) {
 				auto destroy_task = make_uniq<ParallelDestroyTask>(executor, std::move(segment));
-				tasks.push_back(std::move(destroy_task));
+				executor.ScheduleTask(std::move(destroy_task));
 			}
-			executor.ScheduleTasks(std::move(tasks));
 			executor.WorkOnTasks();
 		} catch (...) { // NOLINT
 		}

@@ -1,4 +1,3 @@
-#include "duckdb/main/context.hpp"
 #include "core_functions/scalar/debug_functions.hpp"
 
 #include "duckdb/common/vector_operations/generic_executor.hpp"

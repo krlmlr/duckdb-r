@@ -98,6 +98,7 @@ enum class LogicalOperatorType : uint8_t {
 	// Helpers
 	// -----------------------------
 	LOGICAL_PREPARE = 175,
+	LOGICAL_EXECUTE = 176,
 	LOGICAL_EXPORT = 177,
 	LOGICAL_VACUUM = 178,
 	LOGICAL_SET = 179,

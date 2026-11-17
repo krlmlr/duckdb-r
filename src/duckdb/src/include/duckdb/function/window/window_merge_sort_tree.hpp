@@ -15,7 +15,7 @@
 
 namespace duckdb {
 
-enum class WindowMergeSortStage : uint8_t { INIT, COMBINE, FINALIZE, SORTED, FINISH, FINISHED };
+enum class WindowMergeSortStage : uint8_t { INIT, COMBINE, FINALIZE, SORTED, FINISHED };
 
 class WindowMergeSortTree;
 
@@ -60,16 +60,13 @@ public:
 	//! Make a local sort for a thread
 	optional_ptr<LocalSinkState> InitializeLocalSort(ExecutionContext &context) const;
 
-	//! Find the starts of all the blocks (run as part of the single FINALIZE task)
-	//! Returns the total number of rows
-	virtual idx_t MeasurePayloadBlocks();
-	//! Post-sort cleanup (run as the single FINISH task)
+	//! Thread-safe post-sort cleanup
 	virtual void Finished();
 
 	//! Sort state machine
 	bool TryPrepareSortStage(WindowMergeSortTreeLocalState &lstate);
 	//! Build the MST in parallel from the sorted data
-	void Build(ClientContext &context);
+	void Build();
 
 	//! The column indices for sorting
 	const vector<column_t> order_idx;
@@ -94,7 +91,7 @@ public:
 	idx_t total_tasks = 0;
 	//! Tasks launched
 	idx_t tasks_assigned = 0;
-	//! Tasks completed successfully
+	//! Tasks landed
 	atomic<idx_t> tasks_completed;
 
 	// Merge sort trees for various sizes
@@ -103,6 +100,11 @@ public:
 	using MergeSortTree64 = MergeSortTree<uint64_t, uint64_t>;
 	unique_ptr<MergeSortTree32> mst32;
 	unique_ptr<MergeSortTree64> mst64;
+
+protected:
+	//! Find the starts of all the blocks
+	//! Returns the total number of rows
+	virtual idx_t MeasurePayloadBlocks();
 };
 
 } // namespace duckdb

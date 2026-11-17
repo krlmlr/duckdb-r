@@ -1070,39 +1070,25 @@ struct TypeAt<0, First, More...>
 // {
 // };
 
-// LNK note that we use the full comparison (not just extracted key) here
-template<typename It>
-struct FullComparison
+template<typename It, typename ExtractKey>
+inline void StdSortFallback(It begin, It end, ExtractKey & extract_key)
 {
-    typedef typename std::remove_reference<decltype(*std::declval<It>())>::type value_type;
-    bool operator()(const value_type & l, const value_type & r) const
-    {
-        return l < r;
-    }
-};
-
-// Comparison sort of a radix bucket whose extracted keys are all equal: vergesort over the full comparison, with
-// the sorted runs it finds merged by the caller's merge policy (see duckdb_vergesort::inplace_merge_policy), so
-// that the merge scratch memory of the nested sort is the one the caller controls
-template<typename It, typename ExtractKey, typename Merge>
-inline void StdSortFallback(It begin, It end, ExtractKey &, const Merge & merge)
-{
-    FullComparison<It> comp;
-    const auto fallback = [&](const It &fb_begin, const It &fb_end) {
-        duckdb_pdqsort::pdqsort_branchless(fb_begin, fb_end, comp);
-    };
-    duckdb_vergesort::vergesort(begin, end, comp, fallback, merge);
+	// LNK note that we use the full comparison (not just extracted key) here
+    static const auto comp = [&](const typename std::remove_reference<decltype(*begin)>::type & l, const typename std::remove_reference<decltype(*begin)>::type & r){ return l < r; };
+	static const auto fallback = [&](const It &fb_begin, const It &fb_end) {
+		duckdb_pdqsort::pdqsort_branchless(fb_begin, fb_end, comp);
+	};
+	duckdb_vergesort::vergesort(begin, end, comp, fallback);
 }
 
 template<size_t StdSortThreshold, typename It, typename ExtractKey>
-inline bool StdSortIfLessThanThreshold(It begin, It end, size_t num_elements, ExtractKey &)
+inline bool StdSortIfLessThanThreshold(It begin, It end, size_t num_elements, ExtractKey & extract_key)
 {
     if (num_elements <= 1)
         return true;
     if (num_elements >= StdSortThreshold)
         return false;
-    // below vergesort's minimum size (128), where it would hand the whole range to pdqsort without merging anything
-    duckdb_pdqsort::pdqsort_branchless(begin, end, FullComparison<It>());
+    StdSortFallback(begin, end, extract_key);
     return true;
 }
 
@@ -1436,8 +1422,8 @@ struct SortStarter<StdSortThreshold, AmericanFlagSortThreshold, SubKey<void>>
 template<size_t StdSortThreshold, size_t AmericanFlagSortThreshold, typename CurrentSubKey>
 struct SortStarter
 {
-    template<typename It, typename ExtractKey, typename Merge, typename SortNext>
-    static void sort(It begin, It end, size_t num_elements, ExtractKey & extract_key, const Merge & merge, const SortNext & sort_next)
+    template<typename It, typename ExtractKey>
+    static void sort(It begin, It end, size_t num_elements, ExtractKey & extract_key, void * next_sort_data = nullptr)
     {
         if (StdSortIfLessThanThreshold<StdSortThreshold>(begin, end, num_elements, extract_key))
             return;
@@ -1446,31 +1432,23 @@ struct SortStarter
         // if (next_sort == static_cast<void (*)(It, It, size_t, ExtractKey &, void *)>(&SortStarter<StdSortThreshold, AmericanFlagSortThreshold, SubKey<void>>::sort))
         //     next_sort = nullptr;
 
-        // LNK: different templating for DuckDB
-        // The continuation and merge policy outlive all synchronous radix passes.
-        struct NextSortData {
-            const Merge & merge;
-            const SortNext & sort;
-        } continuation {merge, sort_next};
-        void (*next_sort)(It, It, size_t, ExtractKey &, void *) = nullptr;
-        void * next_sort_data = nullptr;
-        if (extract_key.requires_next_sort) {
-            next_sort = [](It b, It e, size_t, ExtractKey& ek, void* data) {
-                const auto & continuation = *static_cast<const NextSortData *>(data);
-                continuation.sort(b, e, ek, continuation.merge);
-            };
-            next_sort_data = &continuation;
-        }
+    	// LNK: different templating for DuckDB
+    	void (*next_sort)(It, It, size_t, ExtractKey &, void *) = nullptr;
+    	if (extract_key.requires_next_sort) {
+    		next_sort = [](It b, It e, size_t, ExtractKey& ek, void*) {
+    			StdSortFallback(b, e, ek);
+    		};
+    	}
 
         InplaceSorter<StdSortThreshold, AmericanFlagSortThreshold, CurrentSubKey>::sort(begin, end, num_elements, extract_key, next_sort, next_sort_data);
     }
 };
 
-template<size_t StdSortThreshold, size_t AmericanFlagSortThreshold, typename It, typename ExtractKey, typename Merge, typename SortNext>
-void inplace_radix_sort(It begin, It end, ExtractKey & extract_key, const Merge & merge, const SortNext & sort_next)
+template<size_t StdSortThreshold, size_t AmericanFlagSortThreshold, typename It, typename ExtractKey>
+void inplace_radix_sort(It begin, It end, ExtractKey & extract_key)
 {
     typedef SubKey<decltype(extract_key(*begin))> SubKeyType;
-    SortStarter<StdSortThreshold, AmericanFlagSortThreshold, SubKeyType>::sort(begin, end, end - begin, extract_key, merge, sort_next);
+    SortStarter<StdSortThreshold, AmericanFlagSortThreshold, SubKeyType>::sort(begin, end, end - begin, extract_key);
 }
 
 struct IdentityFunctor
@@ -1483,27 +1461,10 @@ struct IdentityFunctor
 };
 }
 
-// Sorts by the extracted radix, then calls sort_next on equal-key buckets that still require sorting.
-template<typename It, typename ExtractKey, typename Merge, typename SortNext>
-static void ska_sort(It begin, It end, ExtractKey && extract_key, const Merge & merge, const SortNext & sort_next)
-{
-    detail::inplace_radix_sort<128, 1024>(begin, end, extract_key, merge, sort_next);
-}
-
-// By default, equal-key buckets use full comparison and the caller's merge policy.
-template<typename It, typename ExtractKey, typename Merge>
-static void ska_sort(It begin, It end, ExtractKey && extract_key, const Merge & merge)
-{
-    const auto sort_next = [](It b, It e, typename std::remove_reference<ExtractKey>::type & ek, const Merge & policy) {
-        detail::StdSortFallback(b, e, ek, policy);
-    };
-    ska_sort(begin, end, extract_key, merge, sort_next);
-}
-
 template<typename It, typename ExtractKey>
 static void ska_sort(It begin, It end, ExtractKey && extract_key)
 {
-    ska_sort(begin, end, extract_key, duckdb_vergesort::inplace_merge_policy());
+    detail::inplace_radix_sort<128, 1024>(begin, end, extract_key);
 }
 
 template<typename It>

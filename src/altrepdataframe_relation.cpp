@@ -5,8 +5,8 @@
 namespace duckdb {
 
 AltrepDataFrameRelation::AltrepDataFrameRelation(duckdb::shared_ptr<Relation> p, cpp11::list df,
-                                                 duckdb::shared_ptr<AltrepRelationWrapper> altrep_)
-    : Relation(p->context, RelationType::EXTENSION_RELATION), dataframe(df), altrep(std::move(altrep_)),
+                                                 duckdb::shared_ptr<AltrepRelationWrapper> altrep)
+    : Relation(p->context, RelationType::EXTENSION_RELATION), dataframe(df), altrep(std::move(altrep)),
       parent(std::move(p)) {
 	TryBindRelation(columns);
 }
@@ -30,7 +30,7 @@ unique_ptr<QueryNode> AltrepDataFrameRelation::GetQueryNode() {
 }
 
 Relation &AltrepDataFrameRelation::GetParent() {
-	if (altrep->Materialized()) {
+	if (altrep->HasQueryResult()) {
 		// here context mutex locked
 		return GetTableRelation();
 	} else {

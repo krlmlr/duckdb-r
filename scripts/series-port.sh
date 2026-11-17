@@ -47,15 +47,12 @@
 # read from `main` (#2496). Porting fledge's bumps made the fourth component
 # free-run behind `main` instead of staying at the seed, which is the opposite
 # of the model handbook/operations/releases/versioning/ describes. The class is
-# read from the content -- the commit carries nothing but release paperwork --
-# not from the `fledge:` subject, so a bump under another name is caught and a
-# bump riding on real content is not. The class covers the notes as well as the
-# bump: a commit that writes NEWS.md for `main`'s next release and touches
-# nothing else is the same strand, and the series has neither the section it
-# goes in nor the version that names it. Dropping one leaves NEWS.md at the
-# state the series was seeded with; that file is the release strand's and
-# already outside the sync commit's path set. Naming a VERSION commit
-# explicitly still ports it, like any other SHA.
+# read from the content -- the commit moves `Version:` and carries nothing but
+# release paperwork -- not from the `fledge:` subject, so a bump under another
+# name is caught and a bump riding on real content is not. Dropping one leaves
+# NEWS.md at the state the series was seeded with; that file is the release
+# strand's and already outside the sync commit's path set. Naming a VERSION
+# commit explicitly still ports it, like any other SHA.
 #
 # **The subject is what decides a VENDOR commit, never the path.** The patch
 # stack is applied to the vendored tree in place, so CRAN and
@@ -63,7 +60,7 @@
 # excluding them by path made exactly those fixes wait for a forward — the
 # one thing this script exists to end. The readers of the vendor strand look
 # past such commits by subject and say so when their bound is exhausted
-# (series_vendored_sha() in scripts/series-lib.sh,
+# (vendored_sha() in scripts/series-advance.sh and scripts/series-check.sh,
 # the base scans in scripts/vendor-one.sh and scripts/vendor.sh), so a ported
 # commit under src/duckdb/ is invisible to them whether or not this class
 # names it. After the picks, whatever tooling
@@ -86,7 +83,7 @@
 # frozen R side is not a frozen CI. The freeze is not a refusal, though: a fix
 # the build genuinely needs is picked by name, and --list shows the walk when
 # you are looking for one. Frozen is detected from the lineage under the seed,
-# or declared when a line parks on its own baseline; see the seed check below.
+# not configured; see the seed check below.
 #
 # A conflict stops the sequence in place and keeps the worktree: resolving it
 # is the routine's judgement. Continue the sequence there, push, and rerun
@@ -113,8 +110,6 @@
 # contract in handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
-# shellcheck source=series-lib.sh
-. "$(dirname "$0")/series-lib.sh"
 
 usage='usage: series-port.sh <series> [--list] [--apply] [--remote <name>] [--canonical <name>] [--dev-note <file>] [sha...]'
 argerr() { echo "$usage" >&2; exit 2; }
@@ -168,14 +163,14 @@ fi
 # flavored `README.Rmd`, and taking main's copy would put the mainline name at
 # the top of every flavored series' front page — the defect #2517 and #2518
 # were about, in the file most likely to be read.
-tooling=("${series_tooling[@]}" ':(exclude).github/README.md')
-paths_re=$(series_tooling_re)
+tooling=(.github scripts .claude ':(exclude).github/README.md')
+paths_re='^(\.github/|scripts/|\.claude/)'
 flavored_docs_re='^\.github/README\.md$'
 # A vendor commit is one whose subject says it vendored: the `vendor:` prefix
 # vendor-one.sh writes, or the `<owner>/<repo>@<sha>` reference that carries the
 # upstream commit as machine-readable state. Same rule as every other reader of
 # the strand — see the header on why the path is not the rule.
-vendor_subject_re="^vendor:|$series_marker_ere"
+vendor_subject_re='^vendor:|duckdb/duckdb@[0-9a-f]+'
 
 # scripts/flavor.sh's first commit, and so the foot of every seed
 # (series-open step 2, series-forward step 1).
@@ -282,80 +277,38 @@ under=0
 frozen=
 [ "$under" != 0 ] && frozen=1
 
-# A line that parks when another one lands on `main` is the case the lineage
-# cannot see. Its seed sits on `main`'s own history, and `main` keeps that
-# history when it fast-forwards onto the new line
-# (.claude/skills/series-land/SKILL.md), so nothing under the seed is foreign
-# and the walk would offer the new line's R side as a backlog. The parking is
-# recorded where the badge table and the mirror rules already read it:
-# `releases_from` in `main`'s scripts/series.yaml, which names the line's own
-# baseline once it stops releasing from `main` (handbook/branches/mirrors/).
-# Read from `main` for the reason series-check.sh reads it there: a series'
-# tree lags `main` by whatever this stage has not ported yet.
-releases_from() { # <series> -> its `releases_from`, empty when undeclared
-  { git show "$main:scripts/series.yaml" 2>/dev/null || true; } |
-    awk -v s="$1" '
-      /^  - / { if (ser == s) print rf; ser = ""; rf = "" }
-      /^    series:/ { ser = $2 }
-      /^    releases_from:/ { rf = $2 }
-      END { if (ser == s) print rf }'
-}
-parked=$(releases_from "${S%-fwd}" | head -n 1)
-[ "$parked" != main ] || parked=''
-[ -z "$parked" ] || frozen=1
-
 # Files a version bump is allowed to carry and still be nothing but a bump:
 # DESCRIPTION itself, plus the release paperwork fledge writes beside it. Both
 # belong to the release strand, and neither is in the tooling set the sync
 # commit rewrites, so dropping the commit drops nothing the series executes.
-# cran-comments.md is gone since 2.0.0, whose submission sends a one-line
-# comment instead (handbook/operations/releases/cran/); it stays in the list
-# for the paperwork commits in `main`'s history that a walk may still meet.
 bump_paths_re='^(DESCRIPTION|NEWS\.md|cran-comments\.md)$'
 
-# Is this commit release paperwork and nothing else? Two questions, both of
-# which have to answer yes:
+# Is this commit a version bump and nothing else? Two questions, both of which
+# have to answer yes:
 #
-#   * it carries nothing outside the release strand, and something inside it. A
-#     commit that bumps the version *and* changes the package is a forward-port
-#     that happens to bump, and it is ported like any other, because a pick is a
-#     whole commit and never half of one. `Sync with main` (4e41675f9) is the
-#     shape this guards: a bump riding on 130 files of tooling, R code, tests
-#     and patches, which classifying by the version line alone would have
-#     dropped whole.
-#   * where it touches DESCRIPTION, `Version:` moved, read against the first
-#     parent. A merge commit never gets this far: `git diff-tree` without `-m`
-#     lists no paths for it, so the first question already answers no. The
-#     content is the fact, not the subject: a bump is one whatever it is
-#     called, and `fledge:` is only today's name for it.
-#     DESCRIPTION also carries the dependency list, so a commit that edits it
-#     without moving the version is package content and ported like any other.
-#
-# **A commit that leaves DESCRIPTION alone is paperwork without a bump.** Notes
-# written into NEWS.md for `main`'s next release are the release strand's just
-# as fledge's bumps are, and the series has neither the section they go in nor
-# the version that names it: the pick conflicts on every series at once and its
-# only honest resolution is the empty commit that retires it. Requiring a moved
-# `Version:` let exactly those through -- 8f48159063 and dcfb3d2c2a, one firing,
-# four series, four hand resolutions (2026-09-28).
+#   * `Version:` moved -- read against the first parent rather than from the
+#     diff, so a merge commit answers as truthfully as an ordinary one. The
+#     content is the fact, not the subject: a bump is one whatever it is called,
+#     and `fledge:` is only today's name for it.
+#   * it carries nothing else. A commit that bumps the version *and* changes the
+#     package is a forward-port that happens to bump, and it is ported like any
+#     other, because a pick is a whole commit and never half of one. `Sync with
+#     main` (4e41675f9) is the shape this guards: a bump riding on 130 files of
+#     tooling, R code, tests and patches, which classifying by the version line
+#     alone would have dropped whole.
 version_bump() { # <sha>
-  local before after f touched= desc=
+  local before after f
+  before=$(git show "$1^:DESCRIPTION" 2>/dev/null | sed -n 's/^Version: //p' || true)
+  after=$(git show "$1:DESCRIPTION" 2>/dev/null | sed -n 's/^Version: //p' || true)
+  [ -n "$after" ] && [ "$before" != "$after" ] || return 1
   while IFS= read -r f; do
     [[ "$f" =~ $bump_paths_re ]] || return 1
-    case "$f" in DESCRIPTION) desc=1 ;; esac
-    touched=1
   done < <(git diff-tree --no-commit-id --name-only -r "$1")
-  [ -n "$touched" ] || return 1
-  if [ -n "$desc" ]; then
-    before=$(git show "$1^:DESCRIPTION" 2>/dev/null | sed -n 's/^Version: //p' || true)
-    after=$(git show "$1:DESCRIPTION" 2>/dev/null | sed -n 's/^Version: //p' || true)
-    [ -n "$after" ] && [ "$before" != "$after" ] || return 1
-  fi
   return 0
 }
 
 classify() { # <sha> -> TOOLING | MIXED | OTHER | VENDOR | VERSION
-  local f t='' o=''
+  local f t= o=
   if [[ "$(git log -1 --format=%s "$1")" =~ $vendor_subject_re ]]; then echo VENDOR; return; fi
   if version_bump "$1"; then echo VERSION; return; fi
   while IFS= read -r f; do
@@ -420,7 +373,7 @@ declare -A klass=()
 # is the cost the freeze exists to remove. --list asks for it anyway, which is
 # what to do when the series needs a fix `main` already has.
 if [ -n "$frozen" ] && [ -z "$list" ]; then
-  echo "$S: frozen${parked:+ (parked on $parked)}; nothing is ported by default, and tooling follows main." \
+  echo "$S: frozen — nothing is ported by default; tooling follows main." \
     "Name a fix the build needs with --apply <sha>, or --list to see candidates"
 else
   declare -A ported=()

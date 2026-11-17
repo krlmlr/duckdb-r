@@ -87,7 +87,7 @@ void WindowPeerLocalState::Finalizer(ExecutionContext &context, CollectionPtr co
 	if (local_tree) {
 		auto &local_tokens = local_tree->Cast<WindowMergeSortTreeLocalState>();
 		local_tokens.Finalize(context, sink.interrupt_state);
-		local_tokens.window_tree.Build(context.client);
+		local_tokens.window_tree.Build();
 	}
 }
 
@@ -196,7 +196,6 @@ WindowFunction RankFun::GetFunction() {
 	                   WindowRankExecutor::GetBounds, WindowRankExecutor::GetSharing, WindowRankExecutor::GetGlobal,
 	                   WindowRankExecutor::GetLocal, WindowRankLocalState::Sinker, WindowRankLocalState::Finalizer,
 	                   WindowRankExecutor::GetData);
-	fun.SetIsRanking(true);
 	fun.SetCanStreamCallback(WindowRankExecutor::CanStream);
 	fun.SetStreamingStateCallback(WindowRankExecutor::GetStreamingState);
 	fun.SetStreamingDataCallback(WindowRankExecutor::StreamData);
@@ -281,7 +280,6 @@ WindowFunction DenseRankFun::GetFunction() {
 	                   WindowDenseRankExecutor::GetBounds, nullptr, WindowDenseRankExecutor::GetGlobal,
 	                   WindowDenseRankExecutor::GetLocal, nullptr, nullptr, WindowDenseRankExecutor::GetData);
 	fun.SetCanOrderBy(false);
-	fun.SetIsRanking(true);
 	fun.SetCanStreamCallback(WindowDenseRankExecutor::CanStream);
 	fun.SetStreamingStateCallback(WindowDenseRankExecutor::GetStreamingState);
 	fun.SetStreamingDataCallback(WindowDenseRankExecutor::StreamData);
@@ -401,7 +399,6 @@ WindowFunction PercentRankFun::GetFunction() {
 	                   WindowPercentRankExecutor::GetGlobal, WindowPercentRankExecutor::GetLocal,
 	                   WindowPercentRankLocalState::Sinker, WindowPercentRankLocalState::Finalizer,
 	                   WindowPercentRankExecutor::GetData);
-	fun.SetIsRanking(true);
 	fun.SetCanStreamCallback(WindowPercentRankExecutor::CanStream);
 	fun.SetStreamingStateCallback(WindowPercentRankExecutor::GetStreamingState);
 	fun.SetStreamingDataCallback(WindowPercentRankExecutor::StreamData);
@@ -501,7 +498,6 @@ WindowFunction CumeDistFun::GetFunction() {
 	    Name, {}, LogicalType::DOUBLE, ExpressionType::WINDOW_CUME_DIST, nullptr, WindowCumeDistExecutor::GetBounds,
 	    WindowCumeDistExecutor::GetSharing, WindowCumeDistExecutor::GetGlobal, WindowCumeDistExecutor::GetLocal,
 	    WindowCumeDistLocalState::Sinker, WindowCumeDistLocalState::Finalizer, WindowCumeDistExecutor::GetData);
-	fun.SetIsRanking(true);
 	//	Not streamable?
 	return fun;
 }

@@ -48,7 +48,6 @@ public:
 	const unordered_map<string, string> &ExtraInfo() const {
 		return extra_info;
 	}
-	DUCKDB_API void SetExtraInfo(const string &key, const string &value);
 
 	DUCKDB_API void FinalizeError();
 	DUCKDB_API void AddErrorLocation(const string &query);

@@ -1,5 +1,4 @@
 #include "core_functions/aggregate/holistic_functions.hpp"
-#include "duckdb/common/types/decimal.hpp"
 #include "core_functions/aggregate/quantile_state.hpp"
 #include "duckdb/common/enums/quantile_enum.hpp"
 #include "duckdb/common/operator/abs.hpp"
@@ -48,10 +47,6 @@ inline Value QuantileAbs(const Value &v) {
 	const auto &type = v.type();
 	switch (type.id()) {
 	case LogicalTypeId::DECIMAL: {
-		if (type.InternalType() == PhysicalType::VARCHAR) {
-			// a wide decimal quantile has no HUGEINT representation, it is handled as DOUBLE
-			return Value::DOUBLE(QuantileAbs<double>(v.GetValue<double>()));
-		}
 		const auto integral = IntegralValue::Get(v);
 		const auto width = DecimalType::GetWidth(type);
 		const auto scale = DecimalType::GetScale(type);
@@ -215,8 +210,8 @@ struct QuantileScalarOperation : public QuantileOperation {
 					continue;
 				}
 
-				rdata[ridx] = gstate->GetWindowState().template WindowScalar<RESULT_TYPE, DISCRETE>(
-				    partition.context.client, data, frames, n, result, quantile);
+				rdata[ridx] = gstate->GetWindowState().template WindowScalar<RESULT_TYPE, DISCRETE>(data, frames, n,
+				                                                                                    result, quantile);
 			}
 		} else {
 			auto &window_state = state.GetOrCreateWindowState();
@@ -233,8 +228,8 @@ struct QuantileScalarOperation : public QuantileOperation {
 				window_state.UpdateSkip(data, frames, included);
 
 				// Find the position(s) needed
-				rdata[ridx] = window_state.template WindowScalar<RESULT_TYPE, DISCRETE>(partition.context.client, data,
-				                                                                        frames, n, result, quantile);
+				rdata[ridx] =
+				    window_state.template WindowScalar<RESULT_TYPE, DISCRETE>(data, frames, n, result, quantile);
 
 				//	Save the previous state for next time
 				window_state.prevs = frames;
@@ -344,8 +339,8 @@ struct QuantileListOperation : QuantileOperation {
 					continue;
 				}
 
-				gstate->GetWindowState().template WindowList<CHILD_TYPE, DISCRETE>(partition.context.client, data,
-				                                                                   frames, n, list, lidx, bind_data);
+				gstate->GetWindowState().template WindowList<CHILD_TYPE, DISCRETE>(data, frames, n, list, lidx,
+				                                                                   bind_data);
 			}
 		} else {
 			auto &window_state = state.GetOrCreateWindowState();
@@ -358,8 +353,7 @@ struct QuantileListOperation : QuantileOperation {
 				}
 
 				window_state.UpdateSkip(data, frames, included);
-				window_state.template WindowList<CHILD_TYPE, DISCRETE>(partition.context.client, data, frames, n, list,
-				                                                       lidx, bind_data);
+				window_state.template WindowList<CHILD_TYPE, DISCRETE>(data, frames, n, list, lidx, bind_data);
 				window_state.prevs = frames;
 			}
 		}
@@ -411,10 +405,6 @@ struct QuantileListFallback : QuantileOperation {
 //===--------------------------------------------------------------------===//
 template <class OP>
 AggregateFunction GetDiscreteQuantileTemplated(const LogicalType &type) {
-	if (type.id() == LogicalTypeId::TIME_TZ) {
-		// TIMETZ is ordered by its normalized time, not by its raw bits
-		return OP::template GetFunction<dtime_tz_t>(type);
-	}
 	switch (type.InternalType()) {
 #if !DUCKDB_SMALLER_BINARY(quantile_types)
 	case PhysicalType::INT8:
@@ -478,7 +468,6 @@ struct ListDiscreteQuantile {
 		auto fun = QuantileBufferingAggregate<STATE, list_entry_t, OP>(type, LogicalType::LIST(type));
 		fun.SetStructStateExport(QuantileStateLayout<STATE>);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 #if !DUCKDB_SMALLER_BINARY(quantile_window)
 		fun.SetWindowBatchCallback(OP::template Window<STATE, INPUT_TYPE, list_entry_t>);
 		fun.SetWindowInitCallback(OP::template WindowInit<STATE, INPUT_TYPE>);
@@ -550,31 +539,20 @@ AggregateFunction GetContinuousQuantileTemplated(const LogicalType &type) {
 		default:
 			throw NotImplementedException("Unimplemented continuous quantile DECIMAL aggregate");
 		}
-	case LogicalTypeId::DATE: {
-		auto fun = OP::template GetFunction<date_t, timestamp_t>(type, LogicalType::TIMESTAMP);
-		fun.SetFallible(); // the TIMESTAMP cast throws for out-of-range dates, interpolation for the infinities
-		return fun;
-	}
+	case LogicalTypeId::DATE:
+		return OP::template GetFunction<date_t, timestamp_t>(type, LogicalType::TIMESTAMP);
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::TIMESTAMP_MS:
-	case LogicalTypeId::TIMESTAMP_NS: {
-		auto fun = OP::template GetFunction<timestamp_t, timestamp_t>(type, type);
-		fun.SetFallible(); // interpolation throws for the infinities
-		return fun;
-	}
+	case LogicalTypeId::TIMESTAMP_NS:
+		return OP::template GetFunction<timestamp_t, timestamp_t>(type, type);
 	case LogicalTypeId::TIME:
-		return OP::template GetFunction<dtime_t, dtime_t>(type, type);
 	case LogicalTypeId::TIME_TZ:
-		// TIMETZ is ordered and interpolated by its normalized time, not by its raw bits
-		return OP::template GetFunction<dtime_tz_t, dtime_tz_t>(type, type);
-	case LogicalTypeId::INTERVAL: {
-		auto fun = OP::template GetFunction<interval_t, interval_t>(type, type);
-		fun.SetFallible(); // interpolation converts to microseconds, which throws for extreme intervals
-		return fun;
-	}
+		return OP::template GetFunction<dtime_t, dtime_t>(type, type);
+	case LogicalTypeId::INTERVAL:
+		return OP::template GetFunction<interval_t, interval_t>(type, type);
 	default:
 		throw NotImplementedException("Unimplemented continuous quantile aggregate");
 	}
@@ -588,7 +566,6 @@ struct ScalarContinuousQuantile {
 		auto fun = QuantileBufferingAggregate<STATE, TARGET_TYPE, OP>(input_type, target_type);
 		fun.SetStructStateExport(QuantileStateLayout<STATE>);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 #if !DUCKDB_SMALLER_BINARY(quantile_window)
 		fun.SetWindowBatchCallback(OP::template Window<STATE, INPUT_TYPE, TARGET_TYPE>);
 		fun.SetWindowInitCallback(OP::template WindowInit<STATE, INPUT_TYPE>);
@@ -605,7 +582,6 @@ struct ListContinuousQuantile {
 		auto fun = QuantileBufferingAggregate<STATE, list_entry_t, OP>(input_type, LogicalType::LIST(target_type));
 		fun.SetStructStateExport(QuantileStateLayout<STATE>);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 #if !DUCKDB_SMALLER_BINARY(quantile_window)
 		fun.SetWindowBatchCallback(OP::template Window<STATE, INPUT_TYPE, list_entry_t>);
 		fun.SetWindowInitCallback(OP::template WindowInit<STATE, INPUT_TYPE>);
@@ -640,19 +616,6 @@ static Value CheckQuantile(const Value &quantile_val) {
 	}
 
 	return quantile_val;
-}
-
-//! The exact DECIMAL rank arithmetic of discrete quantiles multiplies the row count by 10^scale with overflow
-//! checks - overflowing needs at least 10^(38 - scale) rows, which is reachable for scales above 18. Continuous
-//! quantiles compute their rank in DOUBLE and are unaffected.
-static bool HasExtremeDecimalQuantile(const QuantileBindData &bind_data) {
-	for (auto &quantile : bind_data.quantiles) {
-		const auto &quantile_type = quantile.val.type();
-		if (quantile_type.id() == LogicalTypeId::DECIMAL && DecimalType::GetScale(quantile_type) > 18) {
-			return true;
-		}
-	}
-	return false;
 }
 
 //! Binds the quantile parameter into the bind data. It stays part of the expression tree, and the aggregate is
@@ -721,14 +684,6 @@ static bool CanInterpolate(const LogicalType &type) {
 	}
 }
 
-//! Wide decimals have no exact interpolation, they are interpolated as DOUBLE
-static LogicalType InterpolationType(const LogicalType &type) {
-	if (type.id() == LogicalTypeId::DECIMAL && Decimal::IsWide(DecimalType::GetWidth(type))) {
-		return LogicalType::DOUBLE;
-	}
-	return type;
-}
-
 struct MedianFunction {
 	static AggregateFunction GetAggregate(const LogicalType &type) {
 		auto fun = CanInterpolate(type) ? GetContinuousQuantile(type) : GetDiscreteQuantile(type);
@@ -749,7 +704,7 @@ struct MedianFunction {
 	static unique_ptr<FunctionData> Bind(BindAggregateFunctionInput &input) {
 		auto &function = input.GetBoundFunction();
 		auto &arguments = input.GetArguments();
-		function.ReplaceImplementation(GetAggregate(InterpolationType(arguments[0]->GetReturnType())));
+		function.ReplaceImplementation(GetAggregate(arguments[0]->GetReturnType()));
 		return make_uniq<QuantileBindData>(Value::DECIMAL(int16_t(5), 2, 1));
 	}
 };
@@ -764,7 +719,6 @@ struct DiscreteQuantileListFunction {
 		// temporarily push an argument so we can bind the actual quantile
 		fun.GetSignature().AddParameter("quantile", LogicalType::LIST(LogicalType::DOUBLE));
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 		return fun;
 	}
 
@@ -773,9 +727,6 @@ struct DiscreteQuantileListFunction {
 
 		auto &input_type = function.GetArguments()[0];
 		function.ReplaceImplementation(GetAggregate(input_type));
-		if (HasExtremeDecimalQuantile(bind_data->Cast<QuantileBindData>())) {
-			function.SetFallible();
-		}
 		return bind_data;
 	}
 
@@ -783,11 +734,7 @@ struct DiscreteQuantileListFunction {
 		auto &function = input.GetBoundFunction();
 		auto &arguments = input.GetArguments();
 		function.ReplaceImplementation(GetAggregate(arguments[0]->GetReturnType()));
-		auto bind_data = BindQuantile(input);
-		if (HasExtremeDecimalQuantile(bind_data->Cast<QuantileBindData>())) {
-			function.SetFallible();
-		}
-		return bind_data;
+		return BindQuantile(input);
 	}
 };
 
@@ -801,7 +748,6 @@ struct DiscreteQuantileFunction {
 		// temporarily push an argument so we can bind the actual quantile
 		fun.GetSignature().AddParameter("quantile", LogicalType::DOUBLE);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 		return fun;
 	}
 
@@ -815,9 +761,6 @@ struct DiscreteQuantileFunction {
 		} else {
 			function.ReplaceImplementation(DiscreteQuantileListFunction::GetAggregate(input_type));
 		}
-		if (HasExtremeDecimalQuantile(quantile_data)) {
-			function.SetFallible();
-		}
 		return bind_data;
 	}
 
@@ -825,11 +768,7 @@ struct DiscreteQuantileFunction {
 		auto &function = input.GetBoundFunction();
 		auto &arguments = input.GetArguments();
 		function.ReplaceImplementation(GetAggregate(arguments[0]->GetReturnType()));
-		auto bind_data = BindQuantile(input);
-		if (HasExtremeDecimalQuantile(bind_data->Cast<QuantileBindData>())) {
-			function.SetFallible();
-		}
-		return bind_data;
+		return BindQuantile(input);
 	}
 };
 
@@ -843,7 +782,6 @@ struct ContinuousQuantileFunction {
 		// temporarily push an argument so we can bind the actual quantile
 		fun.GetSignature().AddParameter("quantile", LogicalType::DOUBLE);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 		return fun;
 	}
 
@@ -858,9 +796,9 @@ struct ContinuousQuantileFunction {
 	static unique_ptr<FunctionData> Bind(BindAggregateFunctionInput &input) {
 		auto &function = input.GetBoundFunction();
 		auto &arguments = input.GetArguments();
-		auto impl = GetAggregate(function.GetArguments()[0].id() == LogicalTypeId::DECIMAL
-		                             ? InterpolationType(arguments[0]->GetReturnType())
-		                             : function.GetArguments()[0]);
+		auto impl =
+		    GetAggregate(function.GetArguments()[0].id() == LogicalTypeId::DECIMAL ? arguments[0]->GetReturnType()
+		                                                                           : function.GetArguments()[0]);
 		function.ReplaceImplementation(impl);
 		return BindQuantile(input);
 	}
@@ -877,7 +815,6 @@ struct ContinuousQuantileListFunction {
 		auto list_of_double = LogicalType::LIST(LogicalType::DOUBLE);
 		fun.GetSignature().AddParameter("quantile", list_of_double);
 		fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-		fun.SetIsHolistic(true);
 		return fun;
 	}
 
@@ -892,9 +829,9 @@ struct ContinuousQuantileListFunction {
 	static unique_ptr<FunctionData> Bind(BindAggregateFunctionInput &input) {
 		auto &function = input.GetBoundFunction();
 		auto &arguments = input.GetArguments();
-		auto impl = GetAggregate(function.GetArguments()[0].id() == LogicalTypeId::DECIMAL
-		                             ? InterpolationType(arguments[0]->GetReturnType())
-		                             : function.GetArguments()[0]);
+		auto impl =
+		    GetAggregate(function.GetArguments()[0].id() == LogicalTypeId::DECIMAL ? arguments[0]->GetReturnType()
+		                                                                           : function.GetArguments()[0]);
 		function.ReplaceImplementation(impl);
 		return BindQuantile(input);
 	}
@@ -911,7 +848,6 @@ static AggregateFunction EmptyQuantileFunction(LogicalType input, const LogicalT
 	fun.SetSerializeCallback(QuantileBindData::Serialize);
 	fun.SetDeserializeCallback(OP::Deserialize);
 	fun.SetOrderDependent(AggregateOrderDependent::NOT_ORDER_DEPENDENT);
-	fun.SetIsHolistic(true);
 	return fun;
 }
 

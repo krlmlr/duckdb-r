@@ -59,9 +59,6 @@ public:
 	const vector<Identifier> &GetColumnNames();
 	idx_t GetColumnCount();
 	void SetColumnType(idx_t col_idx, LogicalType type);
-	//! Marks this binding as the NULL-producing side of an outer join
-	void SetNullExtended();
-	bool IsNullExtended() const;
 
 	static BindingAlias GetAlias(const Identifier &explicit_alias, const StandardEntry &entry);
 	static BindingAlias GetAlias(const Identifier &explicit_alias, optional_ptr<StandardEntry> entry);
@@ -70,7 +67,7 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		if (binding_type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast binding to type - binding type mismatch");
+			throw InternalException("Failed to cast binding to type - binding type mismatch");
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
@@ -78,7 +75,7 @@ public:
 	template <class TARGET>
 	const TARGET &Cast() const {
 		if (binding_type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast binding to type - binding type mismatch");
+			throw InternalException("Failed to cast binding to type - binding type mismatch");
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
@@ -101,8 +98,6 @@ protected:
 	vector<Identifier> names;
 	//! Name -> index for the names
 	identifier_map_t<column_t> name_map;
-	//! Whether rows of this binding can be NULL-extended by an outer join
-	bool null_extended = false;
 };
 
 struct EntryBinding : public Binding {
@@ -174,8 +169,7 @@ public:
 	unique_ptr<ParsedExpression> ParamToArg(ColumnRefExpression &col_ref);
 };
 
-//! CANNOT_BE_REFERENCED_RECURSIVE is the binding of a recursive CTE outside its recursive term
-enum class CTEType { CAN_BE_REFERENCED, CANNOT_BE_REFERENCED, CANNOT_BE_REFERENCED_RECURSIVE };
+enum class CTEType { CAN_BE_REFERENCED, CANNOT_BE_REFERENCED };
 struct CTEBinding;
 
 struct CTEBindState {
@@ -206,7 +200,6 @@ public:
 
 public:
 	bool CanBeReferenced() const;
-	bool IsRecursiveSelfReference() const;
 	bool IsReferenced() const;
 	void Reference();
 

@@ -41,18 +41,15 @@ ParquetKeys &ParquetKeys::Get(ClientContext &context) {
 }
 
 void ParquetKeys::AddKey(const string &key_name, const string &key) {
-	lock_guard<mutex> guard(lock);
 	keys[key_name] = key;
 }
 
 bool ParquetKeys::HasKey(const string &key_name) const {
-	lock_guard<mutex> guard(lock);
 	return keys.find(key_name) != keys.end();
 }
 
-string ParquetKeys::GetKey(const string &key_name) const {
-	lock_guard<mutex> guard(lock);
-	D_ASSERT(keys.find(key_name) != keys.end());
+const string &ParquetKeys::GetKey(const string &key_name) const {
+	D_ASSERT(HasKey(key_name));
 	return keys.at(key_name);
 }
 
@@ -150,11 +147,8 @@ ParquetEncryptionConfig::ParquetEncryptionConfig(ClientContext &context, const V
 	const auto &keys = ParquetKeys::Get(context);
 	for (idx_t i = 0; i < StructType::GetChildCount(arg.type()); i++) {
 		auto &struct_key = child_types[i].first;
-		if ((struct_key == "footer_key" || struct_key == "footer_key_value") && children[i].IsNull()) {
-			throw BinderException("Parquet encryption_config %s cannot be NULL", struct_key);
-		}
 		if (struct_key == "footer_key") {
-			const auto footer_key_name = StringValue::Get(children[i].CastAs(context, LogicalType::VARCHAR));
+			const auto footer_key_name = StringValue::Get(children[i].DefaultCastAs(LogicalType::VARCHAR));
 			if (!keys.HasKey(footer_key_name)) {
 				throw BinderException(
 				    "No key with name \"%s\" exists. Add it with PRAGMA add_parquet_key('<key_name>','<key>');",
@@ -164,11 +158,11 @@ ParquetEncryptionConfig::ParquetEncryptionConfig(ClientContext &context, const V
 			const auto &keys = ParquetKeys::Get(context);
 			footer_key = keys.GetKey(footer_key_name);
 		} else if (struct_key == "footer_key_value") {
-			footer_key = StringValue::Get(children[i].CastAs(context, LogicalType::BLOB));
+			footer_key = StringValue::Get(children[i].DefaultCastAs(LogicalType::BLOB));
 		} else if (struct_key == "column_keys") {
 			throw NotImplementedException("Parquet encryption_config column_keys not yet implemented");
 		} else {
-			throw BinderException("Unknown key in encryption_config %s", struct_key);
+			throw BinderException("Unknown key in encryption_config \"%s\"", struct_key);
 		}
 	}
 }
@@ -284,16 +278,13 @@ public:
 	uint32_t read_virt(uint8_t *buf, uint32_t len) override {
 		const uint32_t result = len;
 
-		// The page header and encrypted module must agree on the decrypted size before decryption.
-		const auto remaining = transport_remaining - ParquetCrypto::TAG_BYTES + read_buffer_size - read_buffer_offset;
-		if (len != remaining) {
-			throw DataCorruptionException("Encrypted Parquet module size mismatch (expected %u bytes, actual %u bytes)",
-			                              len, remaining);
+		if (len > transport_remaining - ParquetCrypto::TAG_BYTES + read_buffer_size - read_buffer_offset) {
+			throw InvalidInputException("Too many bytes requested from crypto buffer");
 		}
 
 		while (len != 0) {
 			if (read_buffer_offset == read_buffer_size) {
-				ReadBlock(buf, len);
+				ReadBlock(buf);
 			}
 			const auto next = MinValue(read_buffer_size - read_buffer_offset, len);
 			read_buffer_offset += next;
@@ -336,9 +327,6 @@ private:
 		data_t length_buf[ParquetCrypto::LENGTH_BYTES];
 		trans.read(length_buf, ParquetCrypto::LENGTH_BYTES);
 		total_bytes = Load<uint32_t>(length_buf);
-		if (total_bytes < ParquetCrypto::NONCE_BYTES + ParquetCrypto::TAG_BYTES) {
-			throw InvalidInputException("Encoded ciphertext length %d is smaller than the nonce and tag", total_bytes);
-		}
 		transport_remaining = total_bytes;
 		// Read nonce and initialize AES
 		transport_remaining -= trans.read(nonce.data(), nonce.total_size());
@@ -353,18 +341,20 @@ private:
 		}
 	}
 
-	void ReadBlock(uint8_t *buf, uint32_t buffer_size) {
+	void ReadBlock(uint8_t *buf) {
 		// Read from transport into read_buffer at one AES block size offset (up to the tag)
 		read_buffer_size = MinValue(ParquetCrypto::CRYPTO_BLOCK_SIZE, transport_remaining - ParquetCrypto::TAG_BYTES);
-		if (read_buffer_size > buffer_size) {
-			throw DataCorruptionException("Encrypted Parquet block exceeds the destination buffer size");
-		}
 		transport_remaining -= trans.read(read_buffer + ParquetCrypto::BLOCK_SIZE, read_buffer_size);
 
-		// Decrypt directly into the destination only after checking that the whole block fits.
-		auto size = aes->Process(read_buffer + ParquetCrypto::BLOCK_SIZE, read_buffer_size, buf, buffer_size);
+		// Decrypt from read_buffer + block size into read_buffer start (decryption can trail behind in same buffer)
+#ifdef DEBUG
+		auto size = aes->Process(read_buffer + ParquetCrypto::BLOCK_SIZE, read_buffer_size, buf,
+		                         ParquetCrypto::CRYPTO_BLOCK_SIZE + ParquetCrypto::BLOCK_SIZE);
 		D_ASSERT(size == read_buffer_size);
-		(void)size;
+#else
+		aes->Process(read_buffer + ParquetCrypto::BLOCK_SIZE, read_buffer_size, buf,
+		             ParquetCrypto::CRYPTO_BLOCK_SIZE + ParquetCrypto::BLOCK_SIZE);
+#endif
 		read_buffer_offset = 0;
 	}
 
@@ -396,12 +386,12 @@ public:
 
 	uint32_t read_virt(uint8_t *buf, uint32_t len) override {
 		const auto remaining = read_buffer_size - read_buffer_offset;
-		const auto read_size = MinValue(len, remaining);
-		if (read_size > 0) {
-			memcpy(buf, read_buffer + read_buffer_offset, read_size);
-			read_buffer_offset += read_size;
+		if (len > remaining) {
+			return remaining;
 		}
-		return read_size;
+		memcpy(buf, read_buffer + read_buffer_offset, len);
+		read_buffer_offset += len;
+		return len;
 	}
 
 private:
@@ -563,9 +553,6 @@ static string Base64Decode(const string &key) {
 }
 
 void ParquetCrypto::AddKey(ClientContext &context, const FunctionParameters &parameters) {
-	if (parameters.values[0].IsNull() || parameters.values[1].IsNull()) {
-		throw InvalidInputException("add_parquet_key: key name and key cannot be NULL");
-	}
 	const auto &key_name = StringValue::Get(parameters.values[0]);
 	const auto &key = StringValue::Get(parameters.values[1]);
 

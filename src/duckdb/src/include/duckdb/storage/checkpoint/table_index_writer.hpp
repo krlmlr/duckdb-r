@@ -14,7 +14,6 @@
 
 namespace duckdb {
 class PartialBlockManager;
-class PendingPublication;
 class SingleFileCheckpointWriter;
 class BoundIndex;
 
@@ -39,8 +38,8 @@ public:
 	}
 	//! Segments managed by this block manager will be packer on a per-index basis.
 	virtual PartialBlockManager CreatePerIndexPartialBlockManager() = 0;
-	//! Transfer prepared state to the enclosing checkpoint.
-	virtual void AddPendingPublication(unique_ptr<PendingPublication> publication) = 0;
+	//! Writes the index buffers to disk
+	virtual void Flush() = 0;
 	//! Get the targeted storage version for the current writer
 	StorageVersion GetStorageVersion() const;
 
@@ -56,7 +55,7 @@ public:
 
 private:
 	PartialBlockManager CreatePerIndexPartialBlockManager() override;
-	void AddPendingPublication(unique_ptr<PendingPublication> publication) override;
+	void Flush() override;
 
 private:
 	SingleFileCheckpointWriter &checkpoint_manager;

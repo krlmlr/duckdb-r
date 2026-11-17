@@ -9,6 +9,33 @@
 
 namespace duckdb {
 
+static unique_ptr<BaseStatistics> StatisticsOperationsNumericNumericCast(const BaseStatistics &input,
+                                                                         const LogicalType &target) {
+	// Bail out if the stats are not numeric
+	if (input.GetStatsType() != StatisticsType::NUMERIC_STATS) {
+		return nullptr;
+	}
+	if (!input.CanHaveNoNull()) {
+		auto result = NumericStats::CreateEmpty(target);
+		result.CopyBase(input);
+		return result.ToUnique();
+	}
+	if (!NumericStats::HasMinMax(input)) {
+		return nullptr;
+	}
+	auto min = NumericStats::Min(input).DefaultTryCastAs(target);
+	auto max = NumericStats::Max(input).DefaultTryCastAs(target);
+	if (!min || !max) {
+		// overflow in cast: bailout
+		return nullptr;
+	}
+	auto result = NumericStats::CreateEmpty(target);
+	result.CopyBase(input);
+	NumericStats::SetMin(result, *min);
+	NumericStats::SetMax(result, *max);
+	return result.ToUnique();
+}
+
 static bool IsPlainTimestamp(const LogicalTypeId id) {
 	switch (id) {
 	case LogicalTypeId::TIMESTAMP:
@@ -25,91 +52,6 @@ static bool IsTzTimestamp(const LogicalTypeId id) {
 	return id == LogicalTypeId::TIMESTAMP_TZ || id == LogicalTypeId::TIMESTAMP_TZ_NS;
 }
 
-static bool HasInfinities(const LogicalType &type) {
-	return type.id() == LogicalTypeId::DATE || IsPlainTimestamp(type.id()) || IsTzTimestamp(type.id());
-}
-
-//! Date and timestamp casts are discontinuous at -infinity, which sorts above the smallest finite value
-static bool WidenByInfinities(const BaseStatistics &input, const LogicalType &target, Value &min, Value &max) {
-	auto &source = input.GetType();
-	if (!HasInfinities(source)) {
-		return true;
-	}
-	if (max < min) {
-		std::swap(min, max);
-	}
-	auto source_min = NumericStats::Min(input);
-	auto source_max = NumericStats::Max(input);
-	for (auto &infinity : {Value::NegativeInfinity(source), Value::Infinity(source)}) {
-		if (infinity < source_min || infinity > source_max) {
-			continue;
-		}
-		auto cast_infinity = infinity.DefaultTryCastAs(target);
-		if (!cast_infinity) {
-			return false;
-		}
-		NumericStats::UpdateValue(*cast_infinity, min, max);
-	}
-	return true;
-}
-
-//! The statistics of numeric values: the fixed-size types and the bignum_t tier of decimals
-static bool IsNumericStats(const BaseStatistics &stats) {
-	return stats.GetStatsType() == StatisticsType::NUMERIC_STATS ||
-	       stats.GetStatsType() == StatisticsType::BIGNUM_STATS;
-}
-
-static bool HasNumericMinMax(const BaseStatistics &stats) {
-	if (stats.GetStatsType() == StatisticsType::BIGNUM_STATS) {
-		return BignumStats::HasMinMax(stats);
-	}
-	return NumericStats::HasMinMax(stats);
-}
-
-static Value NumericMin(const BaseStatistics &stats) {
-	return stats.GetStatsType() == StatisticsType::BIGNUM_STATS ? BignumStats::Min(stats) : NumericStats::Min(stats);
-}
-
-static Value NumericMax(const BaseStatistics &stats) {
-	return stats.GetStatsType() == StatisticsType::BIGNUM_STATS ? BignumStats::Max(stats) : NumericStats::Max(stats);
-}
-
-static void SetNumericMinMax(BaseStatistics &stats, const Value &min, const Value &max) {
-	if (stats.GetStatsType() == StatisticsType::BIGNUM_STATS) {
-		BignumStats::SetMin(stats, min);
-		BignumStats::SetMax(stats, max);
-	} else {
-		NumericStats::SetMin(stats, min);
-		NumericStats::SetMax(stats, max);
-	}
-}
-
-static unique_ptr<BaseStatistics> StatisticsOperationsNumericNumericCast(const BaseStatistics &input,
-                                                                         const LogicalType &target) {
-	// Bail out if the stats are not numeric
-	if (!IsNumericStats(input)) {
-		return nullptr;
-	}
-	if (!input.CanHaveNoNull()) {
-		auto result = BaseStatistics::CreateEmpty(target);
-		result.CopyBase(input);
-		return result.ToUnique();
-	}
-	if (!HasNumericMinMax(input)) {
-		return nullptr;
-	}
-	auto min = NumericMin(input).DefaultTryCastAs(target);
-	auto max = NumericMax(input).DefaultTryCastAs(target);
-	if (!min || !max || !WidenByInfinities(input, target, *min, *max)) {
-		// overflow in cast: bailout
-		return nullptr;
-	}
-	auto result = BaseStatistics::CreateEmpty(target);
-	result.CopyBase(input);
-	SetNumericMinMax(result, *min, *max);
-	return result.ToUnique();
-}
-
 bool CastStatistics::CanPropagate(const LogicalType &source, const LogicalType &target) {
 	if (source == target) {
 		return true;
@@ -118,13 +60,6 @@ bool CastStatistics::CanPropagate(const LogicalType &source, const LogicalType &
 		return false;
 	}
 	// we can only propagate numeric -> numeric
-	if (BaseStatistics::GetStatsType(source) == StatisticsType::BIGNUM_STATS) {
-		// the bignum_t tier of decimals casts to the numeric types
-		return target.IsNumeric();
-	}
-	if (BaseStatistics::GetStatsType(target) == StatisticsType::BIGNUM_STATS) {
-		return source.IsNumeric();
-	}
 	switch (source.InternalType()) {
 	case PhysicalType::INT8:
 	case PhysicalType::INT16:
@@ -218,10 +153,6 @@ static unique_ptr<BaseStatistics> StatisticsPropagateVariant(const BaseStatistic
 		// only try this for non-nested
 		return nullptr;
 	}
-	if (input.GetStatsType() != StatisticsType::VARIANT_STATS) {
-		// e.g. the unknown statistics of a prepared statement parameter
-		return nullptr;
-	}
 	if (!VariantStats::IsShredded(input)) {
 		// not shredded
 		return nullptr;
@@ -234,18 +165,12 @@ static unique_ptr<BaseStatistics> StatisticsPropagateVariant(const BaseStatistic
 	}
 	// extract the typed stats
 	auto &typed_stats = VariantStats::GetTypedStats(shredded_stats);
-	unique_ptr<BaseStatistics> result;
 	if (structured_type == target) {
 		// type matches - return stats directly
-		result = typed_stats.ToUnique();
-	} else {
-		// typed stats don't match - try to cast
-		result = CastStatistics::TryPropagate(typed_stats, structured_type, target);
+		return typed_stats.ToUnique();
 	}
-	if (result && input.CanHaveNull()) {
-		result->SetHasNull();
-	}
-	return result;
+	// typed stats don't match - try to cast
+	return CastStatistics::TryPropagate(typed_stats, structured_type, target);
 }
 
 static unique_ptr<BaseStatistics> StatisticsPropagateArrayToList(const BaseStatistics &input, const LogicalType &source,
@@ -261,8 +186,6 @@ static unique_ptr<BaseStatistics> StatisticsPropagateArrayToList(const BaseStati
 
 	auto result = ListStats::CreateEmpty(target);
 	result.CopyBase(input);
-	auto array_size = ArrayType::GetSize(source);
-	ListStats::SetLengthBounds(result, array_size, array_size);
 	ListStats::GetChildStats(result).Copy(ArrayStats::GetChildStats(input));
 	return result.ToUnique();
 }
@@ -279,10 +202,6 @@ unique_ptr<BaseStatistics> CastStatistics::TryPropagate(const BaseStatistics &st
 	if (source.id() == LogicalTypeId::GEOMETRY && target.id() == LogicalTypeId::GEOMETRY) {
 		// A geometry -> geometry cast only changes CRS metadata, not coordinates, so the bounding box,
 		// type set and null-ness are unchanged: propagate the statistics as-is.
-		return stats.Copy().ToUnique();
-	}
-	if (source.id() == LogicalTypeId::GEOGRAPHY && target.id() == LogicalTypeId::GEOGRAPHY) {
-		// Same as geometry -> geometry: only the CRS changes, so the (geodetic) statistics carry over as-is.
 		return stats.Copy().ToUnique();
 	}
 	if (source.id() == LogicalTypeId::ARRAY && target.id() == LogicalTypeId::LIST) {

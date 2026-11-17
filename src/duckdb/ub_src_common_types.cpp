@@ -2,8 +2,6 @@
 
 #include "src/common/types/bignum.cpp"
 
-#include "src/common/types/bignum_decimal.cpp"
-
 #include "src/common/types/bit.cpp"
 
 #include "src/common/types/blob.cpp"

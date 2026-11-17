@@ -9,7 +9,6 @@
 #pragma once
 
 #include "column_reader.hpp"
-#include "parquet_arena.h"
 #include "reader/templated_column_reader.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 
@@ -35,20 +34,19 @@ public:
 public:
 	ColumnReader &GetChildReader(idx_t child_idx);
 
-	void InitializeRead(idx_t row_group_idx_p, idx_t row_group_num_rows, const duckdb_parquet::ColumnChunkList &columns,
+	void InitializeRead(idx_t row_group_idx_p, idx_t row_group_num_rows, const vector<ColumnChunk> &columns,
 	                    TProtocol &protocol_p) override;
 
 	idx_t Read(ColumnReaderInput &input, Vector &result) override;
 
-	unique_ptr<BaseStatistics> Stats(idx_t row_group_idx_p, const duckdb_parquet::ColumnChunkList &columns) override;
+	unique_ptr<BaseStatistics> Stats(idx_t row_group_idx_p, const vector<ColumnChunk> &columns) override;
 
 	void Skip(idx_t num_values) override;
 	idx_t GroupRowsAvailable() override;
 	void Convert(Vector &metadata, Vector &group, Vector &result, idx_t count);
 	void PrepareChunk(DataChunk &chunk, idx_t &capacity, const vector<LogicalType> &types, idx_t count);
-	void GatherColumnChunks(unordered_set<idx_t> &column_chunks) override;
+	uint64_t TotalCompressedSize() override;
 	void RegisterPrefetch(ThriftFileTransport &transport, bool allow_merge) override;
-	void InitializePageIndex(const ParquetRowGroupPageIndex &page_index) override;
 	static bool TypedValueLayoutToType(const LogicalType &typed_value, LogicalType &logical_type);
 
 protected:

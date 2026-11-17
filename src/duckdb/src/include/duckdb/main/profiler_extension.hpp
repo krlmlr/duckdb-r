@@ -18,7 +18,7 @@ struct DBConfig;
 class ClientContext;
 class TreeRenderer;
 
-//! Factory that creates a TreeRenderer for a given client context; it is configured from the renderer settings after
+//! Factory that creates and configures a TreeRenderer for a given client context
 using create_tree_renderer_t = std::function<unique_ptr<TreeRenderer>(ClientContext &context)>;
 
 //! A ProfilerExtension registers a pluggable tree renderer for a profiler / EXPLAIN output format

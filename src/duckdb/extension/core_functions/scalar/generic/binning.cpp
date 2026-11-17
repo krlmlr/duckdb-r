@@ -414,25 +414,26 @@ struct EquiWidthBinsTimestamp {
 	}
 };
 
-void EquiWidthResolveTypes(ResolveScalarFunctionTypesInput &input) {
+unique_ptr<FunctionData> BindEquiWidthFunction(BindScalarFunctionInput &input) {
 	auto &bound_function = input.GetBoundFunction();
-	auto &max_type = input.GetArgumentType(1);
+	auto &arguments = input.GetArguments();
 	// while internally the bins are computed over a unified type
 	// the equi_width_bins function returns the same type as the input MAX
 	LogicalType child_type;
-	switch (max_type.id()) {
+	switch (arguments[1]->GetReturnType().id()) {
 	case LogicalTypeId::UNKNOWN:
 	case LogicalTypeId::SQLNULL:
-		return;
+		return nullptr;
 	case LogicalTypeId::DECIMAL:
 		// for decimals we promote to double because
 		child_type = LogicalType::DOUBLE;
 		break;
 	default:
-		child_type = max_type;
+		child_type = arguments[1]->GetReturnType();
 		break;
 	}
 	bound_function.SetReturnType(LogicalType::LIST(child_type));
+	return nullptr;
 }
 
 template <class T, class OP>
@@ -475,7 +476,7 @@ void EquiWidthBinFunction(DataChunk &args, ExpressionState &state, Vector &resul
 		    }
 		    return result_bins;
 	    });
-	VectorOperations::Cast(state.GetContext(), intermediate_result, result, args.size());
+	VectorOperations::DefaultCast(intermediate_result, result, args.size());
 }
 
 void UnsupportedEquiWidth(DataChunk &args, ExpressionState &state, Vector &) {
@@ -495,8 +496,7 @@ unique_ptr<FunctionData> EquiWidthBinDeserialize(Deserializer &deserializer, Bou
 
 static void AddEquiWidthBinFunction(ScalarFunctionSet &functions, const LogicalType &min_max_type,
                                     scalar_function_t function) {
-	ScalarFunction fun({}, LogicalType::LIST(LogicalType::ANY), std::move(function));
-	fun.SetResolveTypesCallback(EquiWidthResolveTypes);
+	ScalarFunction fun({}, LogicalType::LIST(LogicalType::ANY), function, BindEquiWidthFunction);
 	fun.GetSignature()
 	    .AddParameter("min", min_max_type)
 	    .AddParameter("max", min_max_type)

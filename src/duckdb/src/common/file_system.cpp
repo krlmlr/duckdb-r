@@ -1,4 +1,3 @@
-#include "duckdb/main/context.hpp"
 #include "duckdb/common/file_system.hpp"
 
 #include "duckdb/common/checksum.hpp"
@@ -33,7 +32,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#ifndef __EMSCRIPTEN__
+#ifdef __MVS__
 #include <sys/resource.h>
 #endif
 
@@ -104,7 +103,8 @@ FileSystem::~FileSystem() {
 }
 
 FileSystem &FileSystem::GetFileSystem(ClientContext &context) {
-	return context.GetContext().GetFileSystem();
+	auto &client_data = ClientData::Get(context);
+	return *client_data.client_file_system;
 }
 
 bool PathMatched(const string &path, const string &sub_path) {
@@ -287,25 +287,6 @@ string FileSystem::GetWorkingDirectory() {
 }
 
 #endif
-
-optional_idx FileSystem::GetFileDescriptorLimit() {
-#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
-	struct rlimit limit;
-	if (getrlimit(RLIMIT_NOFILE, &limit) != 0 || limit.rlim_cur == RLIM_INFINITY) {
-		return optional_idx();
-	}
-	if (limit.rlim_cur >= NumericLimits<idx_t>::Maximum()) {
-		return optional_idx();
-	}
-	return optional_idx(static_cast<idx_t>(limit.rlim_cur));
-#else
-	return optional_idx();
-#endif
-}
-
-idx_t FileSystem::GetFileDescriptorShare(idx_t file_descriptor_limit) {
-	return MaxValue<idx_t>(file_descriptor_limit / 8, 1);
-}
 
 string FileSystem::JoinPath(const string &a, const string &b) {
 	// A remote URL may carry a "?query" suffix (object version, requester-pays, an SSE-C key, ...).
@@ -533,14 +514,6 @@ FileMetadata FileSystem::Stats(FileHandle &handle) {
 	return metadata;
 }
 
-optional<FileMetadata> FileSystem::GetStatsIfExists(const OpenFileInfo &file, optional_ptr<FileOpener> opener) {
-	auto handle = OpenFile(file, FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_NULL_IF_NOT_EXISTS, opener);
-	if (!handle) {
-		return nullopt;
-	}
-	return Stats(*handle);
-}
-
 void FileSystem::Truncate(FileHandle &handle, int64_t new_size) {
 	throw NotImplementedException("%s: Truncate is not implemented!", GetName());
 }
@@ -747,10 +720,6 @@ void FileSystem::SetDisabledFileSystems(const vector<string> &names) {
 	throw NotImplementedException("%s: Can't disable file systems on a non-virtual file system", GetName());
 }
 
-vector<string> FileSystem::GetDisabledFileSystems() {
-	return vector<string>();
-}
-
 bool FileSystem::SubSystemIsDisabled(const string &name) {
 	throw NotImplementedException("%s: Non-virtual file system does not have subsystems", GetName());
 }
@@ -846,23 +815,16 @@ int64_t FileHandle::Read(void *buffer, idx_t nr_bytes) {
 	return file_system.Read(*this, buffer, UnsafeNumericCast<int64_t>(nr_bytes));
 }
 
-static optional_ptr<QueryProfiler> GetTrackingProfiler(bool track_io, const QueryContext &context) {
-	if (!track_io || !context.Valid()) {
-		return nullptr;
-	}
-	return context.GetContext()->TryGetQueryProfiler();
-}
-
 int64_t FileHandle::Read(QueryContext context, void *buffer, idx_t nr_bytes) {
-	auto profiler = GetTrackingProfiler(track_io, context);
-	const bool track = profiler != nullptr;
+	const bool track = track_io && context.GetClientContext();
 	const auto start = track ? TimePoint::Tick() : TimePoint();
 	// A sequential read can return fewer bytes than requested (e.g. at EOF), so track the bytes
 	// actually read rather than the requested amount.
 	auto bytes_read = file_system.Read(*this, buffer, UnsafeNumericCast<int64_t>(nr_bytes));
 	if (track) {
 		const auto elapsed_us = NumericCast<idx_t>(start.ElapsedMicros());
-		profiler->TrackBytesRead(UnsafeNumericCast<idx_t>(bytes_read), elapsed_us);
+		QueryProfiler::Get(*context.GetClientContext())
+		    .TrackBytesRead(UnsafeNumericCast<idx_t>(bytes_read), elapsed_us);
 	}
 
 	return bytes_read;
@@ -877,13 +839,13 @@ int64_t FileHandle::Write(void *buffer, idx_t nr_bytes) {
 }
 
 int64_t FileHandle::Write(QueryContext context, void *buffer, idx_t nr_bytes) {
-	auto profiler = GetTrackingProfiler(track_io, context);
-	const bool track = profiler != nullptr;
+	const bool track = track_io && context.GetClientContext();
 	const auto start = track ? TimePoint::Tick() : TimePoint();
 	auto bytes_written = file_system.Write(*this, buffer, UnsafeNumericCast<int64_t>(nr_bytes));
 	if (bytes_written > 0 && track) {
 		const auto elapsed_us = NumericCast<idx_t>(start.ElapsedMicros());
-		profiler->TrackBytesWritten(UnsafeNumericCast<idx_t>(bytes_written), elapsed_us);
+		QueryProfiler::Get(*context.GetClientContext())
+		    .TrackBytesWritten(UnsafeNumericCast<idx_t>(bytes_written), elapsed_us);
 	}
 
 	return bytes_written;
@@ -894,24 +856,22 @@ void FileHandle::Read(void *buffer, idx_t nr_bytes, idx_t location) {
 }
 
 void FileHandle::Read(QueryContext context, void *buffer, idx_t nr_bytes, idx_t location) {
-	auto profiler = GetTrackingProfiler(track_io, context);
-	const bool track = profiler != nullptr;
+	const bool track = track_io && context.GetClientContext();
 	const auto start = track ? TimePoint::Tick() : TimePoint();
 	file_system.Read(*this, buffer, UnsafeNumericCast<int64_t>(nr_bytes), location);
 	if (track) {
 		const auto elapsed_us = NumericCast<idx_t>(start.ElapsedMicros());
-		profiler->TrackBytesRead(nr_bytes, elapsed_us);
+		QueryProfiler::Get(*context.GetClientContext()).TrackBytesRead(nr_bytes, elapsed_us);
 	}
 }
 
 void FileHandle::Write(QueryContext context, void *buffer, idx_t nr_bytes, idx_t location) {
-	auto profiler = GetTrackingProfiler(track_io, context);
-	const bool track = profiler != nullptr;
+	const bool track = track_io && context.GetClientContext();
 	const auto start = track ? TimePoint::Tick() : TimePoint();
 	file_system.Write(*this, buffer, UnsafeNumericCast<int64_t>(nr_bytes), location);
 	if (track) {
 		const auto elapsed_us = NumericCast<idx_t>(start.ElapsedMicros());
-		profiler->TrackBytesWritten(nr_bytes, elapsed_us);
+		QueryProfiler::Get(*context.GetClientContext()).TrackBytesWritten(nr_bytes, elapsed_us);
 	}
 }
 
@@ -1008,9 +968,9 @@ void FileHandle::TryAddLogger(FileOpener &opener) {
 		return;
 	}
 
-	auto &context = opener.TryGetContext();
-	if (context.IsClient() && context.GetLogger().ShouldLog(FileSystemLogType::NAME, FileSystemLogType::LEVEL)) {
-		logger = context.GetLoggerPtr();
+	auto context = opener.TryGetClientContext();
+	if (context && Logger::Get(*context).ShouldLog(FileSystemLogType::NAME, FileSystemLogType::LEVEL)) {
+		logger = context->logger;
 		return;
 	}
 

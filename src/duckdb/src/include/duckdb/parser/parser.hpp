@@ -19,7 +19,6 @@
 
 namespace duckdb {
 
-class ClientContext;
 struct CompiledGrammar;
 struct MatcherToken;
 class TokenIterator;
@@ -37,15 +36,7 @@ struct UnicodeSpace {
 //! plan and executed.
 class Parser {
 public:
-	//! Snapshot the connection's parser settings, extensions and cached grammar.
-	explicit Parser(ClientContext &context);
-	//! Preserve identifier spelling when reparsing generated SQL.
-	explicit Parser(ClientContext &context, IdentifierCaseMode identifier_case_mode);
-	//! Explicit standalone configuration, without a client context.
-	explicit Parser(const ParserOptions &options);
-	Parser(Parser &&other) noexcept;
-	//! Built-in semantics and shared built-in grammar, independent of any connection.
-	static Parser GetBuiltinParser();
+	explicit Parser(const ParserOptions &options = ParserOptions());
 	~Parser();
 
 	//! The parsed SQL statements from an invocation to ParseQuery.
@@ -58,22 +49,21 @@ public:
 	//! variable.
 	void ParseQuery(const string &query);
 
-	//! Parse a single TopLevelStatement from the already-tokenized `query`. On success advances
-	//! `token_iterator` past the consumed tokens and returns the SQLStatement. Returns nullptr at
-	//! end-of-input or when the matched TLS was a separator-only run (no statement). A segment the
-	//! PEG grammar rejects is offered to the `parse_function` extensions first; only if none claims
-	//! it is a ParserException with the detailed syntax error thrown.
+	//! Parse a single TopLevelStatement from an already-tokenized stream. On success advances
+	//! `token_iterator` past the consumed tokens and returns
+	//! the SQLStatement. Returns nullptr at end-of-input or when the matched TLS was a
+	//! separator-only run (no statement). Throws ParserException on syntax error.
 	//!
 	//! Does NOT populate `stmt->query` — the caller owns the source string and can slice it
 	//! using `stmt->stmt_location` if needed.
-	DUCKDB_API unique_ptr<SQLStatement> ParseTopLevelStatement(TokenIterator &token_iterator, const string &query);
+	DUCKDB_API unique_ptr<SQLStatement> ParseTopLevelStatement(TokenIterator &token_iterator);
 
-	//! Whether `query` is a complete, semicolon-terminated statement sequence under this parser's
-	//! grammar. Interactive frontends use this to decide between submitting the buffer and reading
-	//! more input: an unterminated string or comment, a missing final semicolon, and a statement
-	//! prefix the grammar can extend are incomplete. Input the grammar rejects mid-way counts as
-	//! complete, so the error surfaces on execution.
-	DUCKDB_API bool IsQueryComplete(const string &query);
+	//! Run the `parse_function` extensions over the unconsumed tail of `query`,
+	//! the way `ParseQuery` does in its catch handler. Returns the produced `ExtensionStatement`
+	//! and advances `token_iterator` past the bytes the extension claimed. Returns nullptr if no
+	//! extension claims the segment. Used by both `ParseQuery` and the lazy `ParseIterator`
+	//! so the two paths handle PEG failures identically.
+	DUCKDB_API unique_ptr<SQLStatement> TryParseExtensionStatement(TokenIterator &token_iterator, const string &query);
 
 	//! Tokenize a query, returning the raw tokens together with their locations
 	static vector<SimplifiedToken> Tokenize(const string &query);
@@ -88,23 +78,24 @@ public:
 	// Returns the Keyword category
 	static KeywordCategory ToKeywordCategory(const string &text);
 	//! Parses a list of expressions (i.e. the list found in a SELECT clause)
-	DUCKDB_API vector<unique_ptr<ParsedExpression>> ParseExpressionList(const string &select_list);
-	//! Parses exactly one expression, throwing an InternalException otherwise
-	DUCKDB_API unique_ptr<ParsedExpression> ParseSingleExpression(const string &expression);
-	//! Parses a single SELECT statement into its node
-	DUCKDB_API unique_ptr<QueryNode> ParseSelectNode(const string &query);
+	DUCKDB_API static vector<unique_ptr<ParsedExpression>>
+	ParseExpressionList(const string &select_list, const ParserOptions &options = ParserOptions());
 	//! Parses a list of GROUP BY expressions
-	GroupByNode ParseGroupByList(const string &group_by);
+	static GroupByNode ParseGroupByList(const string &group_by, const ParserOptions &options = ParserOptions());
 	//! Parses a list as found in an ORDER BY expression (i.e. including optional ASCENDING/DESCENDING modifiers)
-	vector<OrderByNode> ParseOrderList(const string &select_list);
+	static vector<OrderByNode> ParseOrderList(const string &select_list,
+	                                          const ParserOptions &options = ParserOptions());
 	//! Parses an update list (i.e. the list found in the SET clause of an UPDATE statement)
-	void ParseUpdateList(const string &update_list, vector<Identifier> &update_columns,
-	                     vector<unique_ptr<ParsedExpression>> &expressions);
+	static void ParseUpdateList(const string &update_list, vector<Identifier> &update_columns,
+	                            vector<unique_ptr<ParsedExpression>> &expressions,
+	                            const ParserOptions &options = ParserOptions());
 	//! Parses a VALUES list (i.e. the list of expressions after a VALUES clause)
-	vector<vector<unique_ptr<ParsedExpression>>> ParseValuesList(const string &value_list);
+	static vector<vector<unique_ptr<ParsedExpression>>> ParseValuesList(const string &value_list,
+	                                                                    const ParserOptions &options = ParserOptions());
 	//! Parses a column list (i.e. as found in a CREATE TABLE statement)
-	ColumnList ParseColumnList(const string &column_list);
-	ColumnDefinition ParseColumnDefinition(const string &column_definition);
+	static ColumnList ParseColumnList(const string &column_list, const ParserOptions &options = ParserOptions());
+	static ColumnDefinition ParseColumnDefinition(const string &column_definition,
+	                                              const ParserOptions &options = ParserOptions());
 
 	static bool StripUnicodeSpaces(const string &query_str, string &new_query);
 
@@ -115,10 +106,6 @@ public:
 	void ThrowParserOverrideError(ParserOverrideResult &result);
 
 private:
-	//! Run the `parse_function` extensions over the unconsumed tail of `query`. Returns the produced
-	//! `ExtensionStatement` and advances `token_iterator` past the tokens the extension claimed, or
-	//! nullptr if no extension claims the segment.
-	unique_ptr<SQLStatement> TryParseExtensionStatement(TokenIterator &token_iterator, const string &query);
 	CompiledGrammar &GetGrammar();
 
 	ParserOptions options;

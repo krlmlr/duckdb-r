@@ -35,11 +35,8 @@ public:
 	//! Returns a snapshot of all known metrics.
 	DUCKDB_API vector<MetricInfo> GetAllMetrics() const;
 
-	//! Register an extension-defined metric. Silently ignores duplicates (same name) and the profiler's own metrics.
+	//! Register an extension-defined metric. Silently ignores duplicates (same name).
 	DUCKDB_API void RegisterMetric(MetricInfo info);
-
-	//! Whether an extension registered the metric `name`. The profiler's own metrics cannot be registered.
-	DUCKDB_API bool IsRegisteredMetric(const string &name) const;
 
 private:
 	mutable mutex registered_metrics_lock;

@@ -25,12 +25,6 @@ when the two disagree, the handbook leaf is right.
 |---|---|
 | Simplifying the vendoring pipeline: one verdict store, tooling from `main`, a docs tree | [`PLAN-vendoring-simplification.md`](PLAN-vendoring-simplification.md) |
 | Implementing `dbSendQueryArrow()` and the DBI Arrow API | [`PLAN-dbSendQueryArrow.md`](PLAN-dbSendQueryArrow.md) |
-| A producer thread for streaming results: overlapping engine production with R-side conversion, and spillable materialized results | [`PLAN-streaming-thread.md`](PLAN-streaming-thread.md) |
-| Making Ctrl+C reach a DuckDB call blocked in a network wait, and why the obvious escalation is refused | [`PLAN-query-cancellation.md`](PLAN-query-cancellation.md) |
-| Opening the v2.0 series out of the preview line it forks from, and what becomes of the preview line | [`PLAN-v2-series-open.md`](PLAN-v2-series-open.md) |
-| Cloning a connection with its session, `dbConnect(con)`, so a stream survives the next statement on the original, and why not a private context behind every result | [`PLAN-connection-clone.md`](PLAN-connection-clone.md) |
-| Geometry on the write side: stopping the silent `sfc` loss, writing `wk_wkb` as `GEOMETRY`, and which half of #117 belongs to sf | [`PLAN-spatial-interop.md`](PLAN-spatial-interop.md) |
-| The type gaps the catalogs found that are decisions rather than fixes, and the routes they have not measured yet | [`PLAN-type-documentation.md`](PLAN-type-documentation.md) |
 
 ## `done/` — plans that came true
 
@@ -61,9 +55,7 @@ topic today.
 
 | To read about | Read |
 |---|---|
-| What the TIMESTAMPTZ session-`TimeZone` fix ([#2401](https://github.com/duckdb/duckdb-r/pull/2401)) was verified against, scenario by scenario, and the limitations it left | [`history/2026-05-timestamptz-icu.md`](history/2026-05-timestamptz-icu.md) |
 | Findings verified against the code by the closed handbook wave, and the issues its defects became | [`history/2026-08-handbook-wave-salvage.md`](history/2026-08-handbook-wave-salvage.md) |
-| The glue adaptations the August 2026 forward of all three series replayed, where each modification was placed, and what the run found out about the routine | [`history/2026-08-series-forward-glue.md`](history/2026-08-series-forward-glue.md) |
 
 ## Adding a document here
 

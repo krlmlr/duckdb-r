@@ -1,5 +1,4 @@
 #include "duckdb/common/render_tree.hpp"
-#include "duckdb/common/enum_util.hpp"
 #include "duckdb/main/profiler/profiling_node.hpp"
 #include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
 #include "duckdb/execution/operator/join/physical_delim_join.hpp"
@@ -136,7 +135,7 @@ static unique_ptr<RenderTreeNode> CreateNode(const PipelineRenderNode &op) {
 static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op) {
 	auto &info = op.GetOperatorMetrics();
 
-	auto node_name = EnumUtil::ToString(info.operator_type);
+	auto &node_name = info.name;
 	auto result = make_uniq<RenderTreeNode>(node_name, info.GetExtraInfo());
 	if (info.total_row_groups_to_scan > 0) {
 		result->extra_text["Row Groups Scanned"] =

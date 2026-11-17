@@ -24,7 +24,7 @@ static AggregateFunction NameArgParameter(AggregateFunction fun) {
 }
 
 template <class OP>
-AggregateFunction GetBitfieldUnaryAggregate(const LogicalType &type) {
+AggregateFunction GetBitfieldUnaryAggregate(LogicalType type) {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
 		return NameArgParameter(AggregateFunction::UnaryAggregate<BitState<uint8_t>, int8_t, int8_t, OP>(type, type));
@@ -111,9 +111,7 @@ struct BitwiseOperation {
 };
 
 template <class OP>
-struct NumericBitwiseOperation // NOLINT(bugprone-crtp-constructor-accessibility)
-    : public BitwiseOperation,
-      public ClusteredStateCopy {
+struct NumericBitwiseOperation : public BitwiseOperation, public ClusteredStateCopy {
 	template <class INPUT_TYPE, class STATE>
 	static void UpdateClusteredLocal(STATE &local, const INPUT_TYPE &input) {
 		if (!local.is_set) {
@@ -259,11 +257,9 @@ AggregateFunctionSet BitAndFun::GetFunctions() {
 	for (auto &type : LogicalType::Integral()) {
 		bit_and.AddFunction(GetBitfieldUnaryAggregate<BitAndOperation>(type));
 	}
-	auto bit_and_bit =
+	bit_and.AddFunction(
 	    NameArgParameter(AggregateFunction::UnaryAggregate<BitStringState, string_t, string_t, BitStringAndOperation>(
-	        LogicalType::BIT, LogicalType::BIT));
-	bit_and_bit.SetFallible(); // combining bit strings of different lengths throws at runtime
-	bit_and.AddFunction(std::move(bit_and_bit));
+	        LogicalType::BIT, LogicalType::BIT)));
 	return bit_and;
 }
 
@@ -272,11 +268,9 @@ AggregateFunctionSet BitOrFun::GetFunctions() {
 	for (auto &type : LogicalType::Integral()) {
 		bit_or.AddFunction(GetBitfieldUnaryAggregate<BitOrOperation>(type));
 	}
-	auto bit_or_bit =
+	bit_or.AddFunction(
 	    NameArgParameter(AggregateFunction::UnaryAggregate<BitStringState, string_t, string_t, BitStringOrOperation>(
-	        LogicalType::BIT, LogicalType::BIT));
-	bit_or_bit.SetFallible(); // combining bit strings of different lengths throws at runtime
-	bit_or.AddFunction(std::move(bit_or_bit));
+	        LogicalType::BIT, LogicalType::BIT)));
 	return bit_or;
 }
 
@@ -285,11 +279,9 @@ AggregateFunctionSet BitXorFun::GetFunctions() {
 	for (auto &type : LogicalType::Integral()) {
 		bit_xor.AddFunction(GetBitfieldUnaryAggregate<BitXorOperation>(type));
 	}
-	auto bit_xor_bit =
+	bit_xor.AddFunction(
 	    NameArgParameter(AggregateFunction::UnaryAggregate<BitStringState, string_t, string_t, BitStringXorOperation>(
-	        LogicalType::BIT, LogicalType::BIT));
-	bit_xor_bit.SetFallible(); // combining bit strings of different lengths throws at runtime
-	bit_xor.AddFunction(std::move(bit_xor_bit));
+	        LogicalType::BIT, LogicalType::BIT)));
 	return bit_xor;
 }
 

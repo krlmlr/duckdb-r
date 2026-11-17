@@ -1,6 +1,7 @@
 #include "duckdb/parser/parsed_data/create_index_info.hpp"
 
 #include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/parser/parsed_expression_iterator.hpp"
 
 namespace duckdb {
 
@@ -14,16 +15,15 @@ CreateIndexInfo::CreateIndexInfo(const duckdb::CreateIndexInfo &info)
 	SetQualifiedName(info.GetQualifiedName());
 }
 
-// only a top-level column reference is qualified with the table name when the index is created, column references
-// inside expressions are stored as written (and may be struct fields of a column named like the table)
-static void RemoveTableQualification(ParsedExpression &expr, const Identifier &table_name) {
-	if (expr.GetExpressionType() != ExpressionType::COLUMN_REF) {
-		return;
-	}
-	auto &col_names = expr.Cast<ColumnRefExpression>().ColumnNamesMutable();
-	if (col_names.size() == 2 && col_names[0] == table_name) {
-		col_names.erase(col_names.begin());
-	}
+static void RemoveTableQualificationRecursive(unique_ptr<ParsedExpression> &root_expr, const Identifier &table_name) {
+	ParsedExpressionIterator::VisitExpressionMutable<ColumnRefExpression>(
+	    *root_expr, [&](ColumnRefExpression &col_ref) {
+		    auto &col_names = col_ref.ColumnNamesMutable();
+		    // the table qualifier is the component directly before the column name
+		    if (col_ref.IsQualified() && col_names[col_names.size() - 2] == table_name) {
+			    col_names.erase(col_names.begin());
+		    }
+	    });
 }
 
 vector<string> CreateIndexInfo::ExpressionsToList() const {
@@ -33,8 +33,9 @@ vector<string> CreateIndexInfo::ExpressionsToList() const {
 		auto &expr = parsed_expressions[i];
 		auto copy = expr->Copy();
 
-		// column references are qualified with the table name, remove it to reproduce the original query
-		RemoveTableQualification(*copy, table);
+		// Column reference expressions are qualified with the table name.
+		// We need to remove them to reproduce the original query.
+		RemoveTableQualificationRecursive(copy, table);
 		bool add_parenthesis = true;
 		if (copy->GetExpressionType() == ExpressionType::COLUMN_REF) {
 			auto &column_ref = copy->Cast<ColumnRefExpression>();
@@ -93,9 +94,10 @@ string CreateIndexInfo::ToString() const {
 			if (i > 0) {
 				result += ", ";
 			}
-			result += SQLIdentifier(opt.first);
-			if (!opt.second.IsNull()) {
-				result += " = " + opt.second.ToSQLString();
+			if (opt.second.IsNull()) {
+				result += opt.first;
+			} else {
+				result += StringUtil::Format("%s = %s", opt.first, opt.second.ToString());
 			}
 			i++;
 		}

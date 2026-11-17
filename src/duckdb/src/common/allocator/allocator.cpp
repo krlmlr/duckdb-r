@@ -8,7 +8,6 @@
 #include "duckdb/common/time_point.hpp"
 
 #include <cstdint>
-#include <new>
 
 #ifdef __GLIBC__
 #include <malloc.h>
@@ -27,9 +26,6 @@ namespace duckdb {
 constexpr const idx_t Allocator::MAXIMUM_ALLOC_SIZE;
 
 AllocatedData::AllocatedData() : allocator(nullptr), pointer(nullptr), allocated_size(0) {
-}
-
-AllocatedData::AllocatedData(Allocator &allocator) : allocator(allocator), pointer(nullptr), allocated_size(0) {
 }
 
 AllocatedData::AllocatedData(Allocator &allocator, data_ptr_t pointer, idx_t allocated_size)
@@ -85,7 +81,6 @@ private:
 	mutex pointer_lock;
 	//! Set of active outstanding pointers together with stack traces
 	unordered_map<data_ptr_t, pair<idx_t, string>> pointers;
-	bool track_pointers = true;
 #endif
 #endif
 };
@@ -215,9 +210,6 @@ AllocatorDebugInfo::~AllocatorDebugInfo() {
 #ifdef DUCKDB_DEBUG_ALLOCATION
 	if (allocation_count != 0) {
 		printf("Outstanding allocations found for Allocator\n");
-		if (!track_pointers) {
-			printf("Pointer tracing was disabled after an allocation failure\n");
-		}
 		for (auto &entry : pointers) {
 			printf("Allocation of size %llu at address %p\n", entry.second.first, (void *)entry.first);
 			printf("Stack trace:\n%s\n", entry.second.second.c_str());
@@ -235,15 +227,7 @@ void AllocatorDebugInfo::AllocateData(data_ptr_t pointer, idx_t size) {
 	allocation_count += size;
 #ifdef DUCKDB_DEBUG_ALLOCATION
 	lock_guard<mutex> l(pointer_lock);
-	if (track_pointers) {
-		try {
-			pointers[pointer] = make_pair(size, Exception::GetStackTrace());
-		} catch (const std::bad_alloc &) {
-			// Bookkeeping must not make an already committed allocation or reallocation fail.
-			pointers.clear();
-			track_pointers = false;
-		}
-	}
+	pointers[pointer] = make_pair(size, Exception::GetStackTrace());
 #endif
 }
 
@@ -252,9 +236,6 @@ void AllocatorDebugInfo::FreeData(data_ptr_t pointer, idx_t size) {
 	allocation_count -= size;
 #ifdef DUCKDB_DEBUG_ALLOCATION
 	lock_guard<mutex> l(pointer_lock);
-	if (!track_pointers) {
-		return;
-	}
 	// verify that the pointer exists
 	D_ASSERT(pointers.find(pointer) != pointers.end());
 	// verify that the stored size matches the passed in size

@@ -2,6 +2,7 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/compression/alp/alp_analyze.hpp"
 #include "duckdb/storage/compression/alp/alp_compress.hpp"
+#include "duckdb/storage/compression/alp/alp_fetch.hpp"
 #include "duckdb/storage/compression/alp/alp_scan.hpp"
 
 namespace duckdb {
@@ -52,22 +53,18 @@ CompressionFunction GetAlpFunction(PhysicalType data_type) {
 
 template <>
 CompressionFunction GetAlpFunction<float>(PhysicalType data_type) {
-	CompressionFunction result(CompressionType::COMPRESSION_ALP, data_type, AlpInitAnalyze<float>, AlpAnalyze<float>,
+	return CompressionFunction(CompressionType::COMPRESSION_ALP, data_type, AlpInitAnalyze<float>, AlpAnalyze<float>,
 	                           AlpFinalAnalyze<float>, AlpInitCompression<float>, AlpCompress<float>,
 	                           AlpFinalizeCompress<float>, AlpInitScan<float>, AlpScan<float>, AlpScanPartial<float>,
-	                           AlpSkip<float>);
-	result.zero_initialize_segments = false;
-	return result;
+	                           AlpFetchRow<float>, AlpSkip<float>);
 }
 
 template <>
 CompressionFunction GetAlpFunction<double>(PhysicalType data_type) {
-	CompressionFunction result(CompressionType::COMPRESSION_ALP, data_type, AlpInitAnalyze<double>, AlpAnalyze<double>,
+	return CompressionFunction(CompressionType::COMPRESSION_ALP, data_type, AlpInitAnalyze<double>, AlpAnalyze<double>,
 	                           AlpFinalAnalyze<double>, AlpInitCompression<double>, AlpCompress<double>,
 	                           AlpFinalizeCompress<double>, AlpInitScan<double>, AlpScan<double>,
-	                           AlpScanPartial<double>, AlpSkip<double>);
-	result.zero_initialize_segments = false;
-	return result;
+	                           AlpScanPartial<double>, AlpFetchRow<double>, AlpSkip<double>);
 }
 
 CompressionFunction AlpCompressionFun::GetFunction(PhysicalType type) {

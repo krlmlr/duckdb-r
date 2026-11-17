@@ -9,7 +9,6 @@
 #pragma once
 
 #include <stdint.h>
-#include "parquet_arena.h"
 
 #include "column_reader.hpp"
 #include "duckdb/common/constants.hpp"
@@ -33,7 +32,7 @@ public:
 
 	idx_t fixed_width_string_length;
 
-	unique_ptr<BaseStatistics> Stats(idx_t, const duckdb_parquet::ColumnChunkList &) override {
+	unique_ptr<BaseStatistics> Stats(idx_t, const vector<ColumnChunk> &) override {
 		return {};
 	}
 
@@ -60,18 +59,18 @@ struct ByteArrayLengthValueConversion {
 	template <bool CHECKED>
 	static int64_t PlainRead(ByteBuffer &plain_data, ColumnReader &reader) {
 		auto &r = reader.Cast<ByteArrayLengthColumnReader>();
-		const uint32_t len = r.fixed_width_string_length == DConstants::INVALID_INDEX ? plain_data.Read<uint32_t>()
+		const uint32_t len = r.fixed_width_string_length == DConstants::INVALID_INDEX ? plain_data.read<uint32_t>()
 		                                                                              : r.fixed_width_string_length;
-		plain_data.Available(len);
-		plain_data.Inc(len);
+		plain_data.available(len);
+		plain_data.inc(len);
 		return static_cast<int64_t>(len);
 	}
 	template <bool CHECKED>
 	static void PlainSkip(ByteBuffer &plain_data, ColumnReader &reader) {
 		auto &r = reader.Cast<ByteArrayLengthColumnReader>();
-		const uint32_t len = r.fixed_width_string_length == DConstants::INVALID_INDEX ? plain_data.Read<uint32_t>()
+		const uint32_t len = r.fixed_width_string_length == DConstants::INVALID_INDEX ? plain_data.read<uint32_t>()
 		                                                                              : r.fixed_width_string_length;
-		plain_data.Inc(len);
+		plain_data.inc(len);
 	}
 	static bool PlainAvailable(const ByteBuffer &, const idx_t) {
 		return false;

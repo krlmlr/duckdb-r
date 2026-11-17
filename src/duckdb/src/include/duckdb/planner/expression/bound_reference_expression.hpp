@@ -25,8 +25,9 @@ public:
 	idx_t Index() const {
 		return index;
 	}
-	//! Create a reference to a different index
-	unique_ptr<Expression> WithIndex(idx_t new_index) const;
+	idx_t &IndexMutable() {
+		return index;
+	}
 	bool IsScalar() const override {
 		return false;
 	}

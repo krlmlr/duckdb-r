@@ -12,16 +12,11 @@
 
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
-#include "duckdb/common/type_visitor.hpp"
 
 #include "duckdb/function/cast/variant/to_variant.hpp"
 
 namespace duckdb {
 namespace variant {
-
-void ThrowEnumIndexOutOfRange(idx_t index, idx_t size) {
-	throw InternalException("ENUM index %llu is out of range for an ENUM with %llu values", index, size);
-}
 
 void InitializeOffsets(DataChunk &offsets, idx_t count) {
 	auto keys = OffsetData::GetKeys(offsets);
@@ -121,13 +116,9 @@ struct VariantCastData : BoundCastData {
 };
 
 struct VariantLocalData : FunctionLocalState {
-	VariantLocalData(const LogicalType &shredded_type, Allocator &allocator) : allocator(allocator) {
+	explicit VariantLocalData(const LogicalType &shredded_type) {
 		Initialize(shredded_type, STANDARD_VECTOR_SIZE);
 	}
-
-	//! Allocator for temporary conversion memory (e.g. JSON parsing), backed by the buffer allocator when possible
-	//! so the memory is tracked
-	Allocator &allocator;
 
 	void Initialize(const LogicalType &shredded_type, idx_t new_capacity) {
 		capacity = new_capacity;
@@ -156,8 +147,7 @@ private:
 
 unique_ptr<FunctionLocalState> CastToVariantLocalState(CastLocalStateParameters &parameters) {
 	auto &cast_data = parameters.cast_data->Cast<VariantCastData>();
-	auto &allocator = parameters.context ? BufferAllocator::Get(*parameters.context) : Allocator::DefaultAllocator();
-	return make_uniq<VariantLocalData>(cast_data.shredded_type, allocator);
+	return make_uniq<VariantLocalData>(cast_data.shredded_type);
 }
 
 static bool SupportsShreddedCast(const LogicalType &type) {
@@ -224,7 +214,6 @@ static bool CastToVARIANT(Vector &source, Vector &result, idx_t count, CastParam
 	if (TryToShreddedCast(source, result, count, parameters)) {
 		return true;
 	}
-	auto &local_data = parameters.local_state->Cast<VariantLocalData>();
 	DataChunk offsets;
 	offsets.Initialize(Allocator::DefaultAllocator(),
 	                   {LogicalType::UINTEGER, LogicalType::UINTEGER, LogicalType::UINTEGER, LogicalType::UINTEGER},
@@ -234,15 +223,13 @@ static bool CastToVARIANT(Vector &source, Vector &result, idx_t count, CastParam
 	auto &keys_entry = ListVector::GetChildMutable(keys);
 
 	//! Initialize the dictionary
-	OrderedOwningStringMap<uint32_t> dictionary;
-	auto &keys_arena = StringVector::GetStringAllocator(keys_entry);
+	OrderedOwningStringMap<uint32_t> dictionary(StringVector::GetStringAllocator(keys_entry));
 	SelectionVector keys_selvec;
 	ToVariantSourceData source_data(source, count);
 
 	{
 		VariantVectorData variant_data(result);
-		ToVariantGlobalResultData result_data(variant_data, offsets, dictionary, keys_arena, keys_selvec,
-		                                      local_data.allocator);
+		ToVariantGlobalResultData result_data(variant_data, offsets, dictionary, keys_selvec);
 		if (!GatherOffsetsAndSizes(source_data, result_data, count)) {
 			return false;
 		}
@@ -254,8 +241,7 @@ static bool CastToVARIANT(Vector &source, Vector &result, idx_t count, CastParam
 
 	{
 		VariantVectorData variant_data(result);
-		ToVariantGlobalResultData result_data(variant_data, offsets, dictionary, keys_arena, keys_selvec,
-		                                      local_data.allocator);
+		ToVariantGlobalResultData result_data(variant_data, offsets, dictionary, keys_selvec);
 		if (!WriteVariantResultData(source_data, result_data, count)) {
 			return false;
 		}
@@ -280,10 +266,6 @@ static bool CastToVARIANT(Vector &source, Vector &result, idx_t count, CastParam
 
 BoundCastInfo DefaultCasts::ImplicitToVariantCast(BindCastInput &input, const LogicalType &source,
                                                   const LogicalType &target) {
-	if (TypeVisitor::Contains(source, LogicalTypeId::TYPE)) {
-		//! TYPE has no VARIANT representation - only NULL values can be cast
-		return TryVectorNullCast;
-	}
 	return BoundCastInfo(variant::CastToVARIANT, make_uniq<variant::VariantCastData>(source),
 	                     variant::CastToVariantLocalState);
 }

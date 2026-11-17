@@ -11,17 +11,17 @@
 #include "duckdb/common/optional_ptr.hpp"
 
 namespace duckdb {
-class Context;
+class ClientContext;
 
 //! The TaskNotifier notifies ClientContextState listener about started / stopped tasks
 class TaskNotifier {
 public:
-	explicit TaskNotifier(optional_ptr<Context> context_p);
+	explicit TaskNotifier(optional_ptr<ClientContext> context_p);
 
 	~TaskNotifier();
 
 private:
-	optional_ptr<Context> context;
+	optional_ptr<ClientContext> context;
 };
 
 } // namespace duckdb

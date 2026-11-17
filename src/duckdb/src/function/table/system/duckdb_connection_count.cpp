@@ -38,11 +38,8 @@ void DuckDBConnectionCountFunction(ClientContext &context, TableFunctionInput &d
 }
 
 void DuckDBConnectionCountFun::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction connection_count_fun("duckdb_connection_count", {}, DuckDBConnectionCountFunction,
-	                                   DuckDBConnectionCountBind, DuckDBConnectionCountInit);
-	// reads the live connection registry
-	connection_count_fun.stability = FunctionStability::VOLATILE;
-	set.AddFunction(std::move(connection_count_fun));
+	set.AddFunction(TableFunction("duckdb_connection_count", {}, DuckDBConnectionCountFunction,
+	                              DuckDBConnectionCountBind, DuckDBConnectionCountInit));
 }
 
 } // namespace duckdb

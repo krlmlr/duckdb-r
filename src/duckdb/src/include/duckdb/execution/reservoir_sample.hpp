@@ -135,7 +135,7 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		if (type != TARGET::TYPE && TARGET::TYPE != SampleType::BLOCKING_SAMPLE) {
-			InternalException::Throw("Failed to cast sample to type - sample type mismatch");
+			throw InternalException("Failed to cast sample to type - sample type mismatch");
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
@@ -143,7 +143,7 @@ public:
 	template <class TARGET>
 	const TARGET &Cast() const {
 		if (type != TARGET::TYPE && TARGET::TYPE != SampleType::BLOCKING_SAMPLE) {
-			InternalException::Throw("Failed to cast sample to type - sample type mismatch");
+			throw InternalException("Failed to cast sample to type - sample type mismatch");
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
@@ -299,7 +299,6 @@ public:
 	//! Fetches a chunk from the sample. If destroy = true this method is descructive
 	unique_ptr<DataChunk> GetChunk() override;
 	void Finalize() override;
-	idx_t GetActiveSampleCount() const;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<BlockingSample> Deserialize(Deserializer &deserializer);

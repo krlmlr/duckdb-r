@@ -4,12 +4,16 @@
       DBI::dbGetQuery(con, "EXPLAIN SELECT 1;")
     Output
       physical_plan
-      ╭─ Projection ───╮
-      │ Projections: 1 │
-      │ ~1 row         │
-      ╰────────┬───────╯
-      ╭─ Dummy Scan ───╮
-      ╰────────────────╯
+      ┌───────────────────────────┐
+      │         PROJECTION        │
+      │    ────────────────────   │
+      │             1             │
+      │                           │
+      │           ~1 row          │
+      └─────────────┬─────────────┘
+      ┌─────────────┴─────────────┐
+      │         DUMMY_SCAN        │
+      └───────────────────────────┘
 
 # EXPLAIN shows logical, optimized and physical plan
 
@@ -21,26 +25,39 @@
       DBI::dbGetQuery(con, "EXPLAIN SELECT 1;")
     Output
       logical_plan
-      ╭─ Projection ───╮
-      │ Expressions: 1 │
-      ╰────────┬───────╯
-      ╭─ Dummy Scan ───╮
-      ╰────────────────╯
+      ┌───────────────────────────┐
+      │         PROJECTION        │
+      │    ────────────────────   │
+      │       Expressions: 1      │
+      └─────────────┬─────────────┘
+      ┌─────────────┴─────────────┐
+      │         DUMMY_SCAN        │
+      │    ────────────────────   │
+      └───────────────────────────┘
       logical_opt
-      ╭─ Projection ───╮
-      │ Expressions: 1 │
-      │ ~1 row         │
-      ╰────────┬───────╯
-      ╭─ Dummy Scan ───╮
-      │ ~1 row         │
-      ╰────────────────╯
+      ┌───────────────────────────┐
+      │         PROJECTION        │
+      │    ────────────────────   │
+      │       Expressions: 1      │
+      │                           │
+      │           ~1 row          │
+      └─────────────┬─────────────┘
+      ┌─────────────┴─────────────┐
+      │         DUMMY_SCAN        │
+      │    ────────────────────   │
+      │           ~1 row          │
+      └───────────────────────────┘
       physical_plan
-      ╭─ Projection ───╮
-      │ Projections: 1 │
-      │ ~1 row         │
-      ╰────────┬───────╯
-      ╭─ Dummy Scan ───╮
-      ╰────────────────╯
+      ┌───────────────────────────┐
+      │         PROJECTION        │
+      │    ────────────────────   │
+      │             1             │
+      │                           │
+      │           ~1 row          │
+      └─────────────┬─────────────┘
+      ┌─────────────┴─────────────┐
+      │         DUMMY_SCAN        │
+      └───────────────────────────┘
 
 # zero length input is smoothly skipped
 

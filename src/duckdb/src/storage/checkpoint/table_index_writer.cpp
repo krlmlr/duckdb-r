@@ -1,5 +1,4 @@
 #include "duckdb/storage/checkpoint/table_index_writer.hpp"
-#include "duckdb/storage/checkpoint/pending_publication.hpp"
 #include "duckdb/storage/partial_block_manager.hpp"
 #include "duckdb/storage/checkpoint_manager.hpp"
 
@@ -18,15 +17,16 @@ StorageVersion TableIndexWriter::GetStorageVersion() const {
 
 SingleFileTableIndexWriter::SingleFileTableIndexWriter(SingleFileCheckpointWriter &checkpoint_manager,
                                                        const StorageVersion version)
-    : TableIndexWriter(checkpoint_manager.partial_block_manager, version), checkpoint_manager(checkpoint_manager) {
+    : TableIndexWriter(checkpoint_manager.index_partial_block_manager, version),
+      checkpoint_manager(checkpoint_manager) {
 }
 
 PartialBlockManager SingleFileTableIndexWriter::CreatePerIndexPartialBlockManager() {
 	return checkpoint_manager.CreatePerIndexPartialBlockManager();
 }
 
-void SingleFileTableIndexWriter::AddPendingPublication(unique_ptr<PendingPublication> publication) {
-	checkpoint_manager.AddPendingPublication(std::move(publication));
+void SingleFileTableIndexWriter::Flush() {
+	partial_block_manager.FlushPartialBlocks();
 }
 
 } // namespace duckdb

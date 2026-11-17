@@ -83,7 +83,13 @@ vector<Identifier> DependencyManager::GetSchemaPath(const CatalogEntry &entry) {
 	} else {
 		schema = entry.ParentSchema();
 	}
-	return schema ? schema->GetSchemaPath() : vector<Identifier>();
+	vector<Identifier> path;
+	while (schema) {
+		path.push_back(schema->name);
+		schema = schema->GetParentSchema().get();
+	}
+	std::reverse(path.begin(), path.end());
+	return path;
 }
 
 MangledEntryName DependencyManager::MangleName(const CatalogEntryInfo &info) {
@@ -363,10 +369,17 @@ CatalogEntryInfo DependencyManager::GetLookupProperties(const CatalogEntry &entr
 
 optional_ptr<SchemaCatalogEntry> DependencyManager::NavigateSchemaPath(CatalogTransaction transaction,
                                                                        const vector<Identifier> &schema_path) {
-	if (schema_path.empty()) {
-		return nullptr;
+	optional_ptr<SchemaCatalogEntry> schema;
+	reference<CatalogSet> current = catalog.GetSchemaCatalogSet();
+	for (auto &component : schema_path) {
+		auto entry = current.get().GetEntry(transaction, component);
+		if (!entry) {
+			return nullptr;
+		}
+		schema = entry->Cast<SchemaCatalogEntry>();
+		current = schema->Cast<DuckSchemaEntry>().GetCatalogSet(CatalogType::SCHEMA_ENTRY);
 	}
-	return catalog.GetSchema(transaction, schema_path, OnEntryNotFound::RETURN_NULL);
+	return schema;
 }
 
 optional_ptr<CatalogEntry> DependencyManager::LookupEntry(CatalogTransaction transaction,
@@ -427,7 +440,7 @@ void DependencyManager::CleanupDependencies(CatalogTransaction transaction, Cata
 	}
 }
 
-static string EntryToString(const CatalogEntryInfo &info) {
+static string EntryToString(CatalogEntryInfo &info) {
 	auto type = info.type;
 	switch (type) {
 	case CatalogType::TABLE_ENTRY: {
@@ -493,33 +506,13 @@ static string EntryToString(const CatalogEntryInfo &info) {
 	};
 }
 
-static string DependencyToString(const CatalogEntryInfo &subject, const CatalogEntryInfo &dependent) {
-	return StringUtil::Format("%s depends on %s.\n", EntryToString(dependent), EntryToString(subject));
-}
-
-static string DropErrorToString(const Identifier &name, const string &dependents) {
-	return StringUtil::Format("Cannot drop entry %s because there are entries that depend on it.\n%s"
-	                          "Use DROP...CASCADE to drop all dependents.",
-	                          name, dependents);
-}
-
-string DependencyManager::FormatDropError(const CatalogEntry &object,
-                                          const vector<reference<CatalogEntry>> &dependents) {
-	auto subject = GetLookupProperties(object);
-	string result;
-	for (auto &dependent : dependents) {
-		result += DependencyToString(subject, GetLookupProperties(dependent));
-	}
-	return DropErrorToString(object.name, result);
-}
-
 string DependencyManager::CollectDependents(CatalogTransaction transaction, catalog_entry_set_t &entries,
                                             CatalogEntryInfo &info) {
 	string result;
 	for (auto &entry : entries) {
 		D_ASSERT(!IsSystemEntry(entry.get()));
 		auto other_info = GetLookupProperties(entry);
-		result += DependencyToString(info, other_info);
+		result += StringUtil::Format("%s depends on %s.\n", EntryToString(other_info), EntryToString(info));
 		catalog_entry_set_t entry_dependents;
 		ScanDependents(transaction, other_info, [&](DependencyEntry &dep) {
 			auto child = LookupEntry(transaction, dep);
@@ -537,8 +530,7 @@ string DependencyManager::CollectDependents(CatalogTransaction transaction, cata
 	return result;
 }
 
-void DependencyManager::VerifyExistence(CatalogTransaction transaction, CatalogTransaction snapshot_transaction,
-                                        DependencyEntry &object) {
+void DependencyManager::VerifyExistence(CatalogTransaction transaction, DependencyEntry &object) {
 	auto &subject = object.Subject();
 
 	CatalogEntryInfo info;
@@ -554,7 +546,7 @@ void DependencyManager::VerifyExistence(CatalogTransaction transaction, CatalogT
 
 	// navigate the (possibly nested) schema path to the schema that directly contains the subject
 	auto schema = NavigateSchemaPath(transaction, schema_path);
-	CatalogSet::EntryLookup lookup_result {nullptr, CatalogSet::EntryLookup::FailureReason::NOT_PRESENT};
+	CatalogSet::EntryLookup lookup_result;
 	if (type == CatalogType::SCHEMA_ENTRY) {
 		auto &container = schema ? schema->Cast<DuckSchemaEntry>().GetCatalogSet(CatalogType::SCHEMA_ENTRY)
 		                         : catalog.GetSchemaCatalogSet();
@@ -572,19 +564,8 @@ void DependencyManager::VerifyExistence(CatalogTransaction transaction, CatalogT
 	if (!subject.flags.IsOwnership() && subject.oid.IsValid() && lookup_result.result &&
 	    lookup_result.result->oid != subject.oid.GetIndex()) {
 		throw DependencyException(
-		    "Could not commit creation of dependency, subject %s was dropped and re-created by another transaction",
+		    "Could not commit creation of dependency, subject \"%s\" was dropped and re-created by another transaction",
 		    object.EntryInfo().name);
-	}
-	// An alter preserves the oid. If the subject changed after this transaction's snapshot, the entry decides
-	// whether the change breaks what the dependent was bound against.
-	if (!subject.flags.IsOwnership() && lookup_result.result &&
-	    lookup_result.result->timestamp >= snapshot_transaction.view.visibility_bound) {
-		auto bound_entry = LookupEntry(snapshot_transaction, info);
-		if (bound_entry && lookup_result.result->InvalidatesDependents(*bound_entry)) {
-			throw DependencyException("Could not commit creation of dependency, subject %s was altered incompatibly "
-			                          "by another transaction",
-			                          object.EntryInfo().name);
-		}
 	}
 }
 
@@ -652,8 +633,11 @@ catalog_entry_set_t DependencyManager::CheckDropDependencies(CatalogTransaction 
 		}
 	});
 	if (!blocking_dependents.empty()) {
-		throw DependencyException(
-		    DropErrorToString(object.name, CollectDependents(transaction, blocking_dependents, info)));
+		string error_string =
+		    StringUtil::Format("Cannot drop entry %s because there are entries that depend on it.\n", object.name);
+		error_string += CollectDependents(transaction, blocking_dependents, info);
+		error_string += "Use DROP...CASCADE to drop all dependents.";
+		throw DependencyException(error_string);
 	}
 
 	// Look through all the entries that 'object' depends on

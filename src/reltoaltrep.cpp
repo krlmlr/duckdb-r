@@ -7,6 +7,7 @@
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/client_config.hpp"
+#include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/relation/limit_relation.hpp"
 #include "duckdb/main/settings.hpp"
@@ -19,9 +20,6 @@
 #include <cinttypes>
 #include <cmath>
 #include <cstddef>
-
-// Handbook: handbook/usage/memory/reading/README.md
-// (what materialization allocates on either side, and when it is freed)
 
 #ifdef TRUE
 #undef TRUE
@@ -79,10 +77,6 @@ void RelToAltrep::Initialize(DllInfo *dll) {
 	R_set_altvec_Dataptr_method(string_class, VectorDataptr);
 
 	R_set_altvec_Dataptr_or_null_method(rownames_class, RownamesDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(logical_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(int_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(real_class, VectorDataptrOrNull);
-	R_set_altvec_Dataptr_or_null_method(string_class, VectorDataptrOrNull);
 
 	R_set_altinteger_Elt_method(rownames_class, RownamesElt);
 	R_set_altinteger_Get_region_method(rownames_class, RownamesGetRegion);
@@ -136,50 +130,16 @@ AltrepRelationWrapper::AltrepRelationWrapper(rel_extptr_t rel_, size_t n_rows_, 
     : n_rows(n_rows_), n_cells(n_cells_), rel_eptr(rel_), rel(rel_->rel) {
 }
 
-bool AltrepRelationWrapper::Materialized() const {
-	return materialized;
+bool AltrepRelationWrapper::HasQueryResult() const {
+	return (bool)mat_result;
 }
 
-idx_t AltrepRelationWrapper::RowCount() {
-	if (!materialized) {
-		return GetQueryResult()->RowCount();
-	}
-	return row_count;
-}
-
-void AltrepRelationWrapper::RegisterAltrepColumn() {
-	++altrep_columns;
-}
-
-void AltrepRelationWrapper::MarkColumnAsTransformed() {
-	// Keep track of how many of the ALTREP columns have been transformed
-	// to their R representation
-	D_ASSERT(transformed_columns < altrep_columns);
-	++transformed_columns;
-	// Once all columns have been transformed, the data lives in R vectors,
-	// so the materialized result is released to free the memory early.
-	// Consumers that only need metadata keep working:
-	// the row count is cached in row_count,
-	// and the materialized state remains visible through Materialized().
-	if (transformed_columns == altrep_columns) {
-		mat_result.reset();
-	}
-}
-
-QueryResult *AltrepRelationWrapper::GetQueryResult() {
+MaterializedQueryResult *AltrepRelationWrapper::GetQueryResult() {
 	if (!mat_error.empty()) {
 		rapi_error_with_context("GetQueryResult", mat_error);
 	}
 
 	if (!mat_result) {
-		if (materialized) {
-			// The result was released after all columns were transformed;
-			// re-executing the query here would be silent and possibly
-			// non-deterministic, so fail loudly instead
-			rapi_error_with_context("GetQueryResult",
-			                        "Internal error: the materialized result has already been released.");
-		}
-
 		if (n_cells == 0) {
 			rapi_error_with_context("GetQueryResult",
 			                        "Materialization is disabled, use `collect()` or `as_tibble()` to materialize.");
@@ -188,11 +148,7 @@ QueryResult *AltrepRelationWrapper::GetQueryResult() {
 		auto materialize_callback = Rf_GetOption1(RStrings::get().materialize_callback_sym);
 		if (Rf_isFunction(materialize_callback)) {
 			sexp call = Rf_lang2(materialize_callback, rel_eptr);
-			// safe[], not a bare Rf_eval(): an error in the callback would
-			// otherwise long-jmp out of the ALTREP method that called us,
-			// skipping ~AltrepGuard() and leaving the guard stuck on for the
-			// rest of the session. Matches RProgressBarDisplay::Update().
-			cpp11::safe[Rf_eval](call, R_BaseEnv);
+			Rf_eval(call, R_BaseEnv);
 		}
 
 		auto materialize_message = Rf_GetOption1(RStrings::get().materialize_message_sym);
@@ -202,23 +158,11 @@ QueryResult *AltrepRelationWrapper::GetQueryResult() {
 			Rprintf("duckplyr: materializing\n");
 		}
 
-		// A running query reaches here when its bind scans this data frame (src/scan.cpp), and it holds the handler.
-		// A query of the same connection would wait for the lock that query holds, so it fails instead, and before
-		// any open result of its connection is ended: ending one takes that lock too.
-		// One of another connection runs nested, and leaves the interrupt to the outer query's handler.
-		auto &context = *rel->context->GetContext();
-		if (ScopedInterruptHandler::IsActiveFor(context)) {
-			rapi_error_with_context("GetQueryResult",
-			                        "Cannot materialize a relation of the connection that is running the query.");
-		}
-		EndOpenResults(context);
-		duckdb::unique_ptr<ScopedInterruptHandler> signal_handler;
-		if (!ScopedInterruptHandler::IsActive()) {
-			signal_handler = make_uniq<ScopedInterruptHandler>(rel->context->GetContext());
-		}
+		ScopedInterruptHandler signal_handler(rel->context->GetContext());
 
 		// We need to temporarily allow a deeper execution stack
 		// https://github.com/duckdb/duckdb-r/issues/101
+		auto &context = *rel->context->GetContext();
 		auto old_depth = Settings::Get<MaxExpressionDepthSetting>(context);
 		auto &client_config = ClientConfig::GetConfig(*rel->context->GetContext());
 		client_config.GetConfig(context).user_settings.SetUserSetting(MaxExpressionDepthSetting::SettingIndex,
@@ -243,13 +187,12 @@ QueryResult *AltrepRelationWrapper::GetQueryResult() {
 		client_config.user_settings.SetUserSetting(MaxExpressionDepthSetting::SettingIndex, Value::UBIGINT(old_depth));
 		reset_max_expression_depth.release();
 
-		if (signal_handler) {
-			signal_handler->HandleInterrupt();
-			signal_handler->Disable();
-		}
+		signal_handler.HandleInterrupt();
+
+		signal_handler.Disable();
 	}
 	D_ASSERT(mat_result);
-	return mat_result.get();
+	return (MaterializedQueryResult *)mat_result.get();
 }
 
 void AltrepRelationWrapper::Materialize() {
@@ -278,9 +221,11 @@ void AltrepRelationWrapper::Materialize() {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", local_res->GetError().c_str());
 		return;
 	}
+	D_ASSERT(local_res->GetResultType() == QueryResultType::MATERIALIZED_RESULT);
 
 	if (max_rows < MAX_SIZE_T) {
-		if (local_res->RowCount() > max_rows) {
+		auto local_mat_res = (MaterializedQueryResult *)local_res.get();
+		if (local_mat_res->RowCount() > max_rows) {
 			mat_error = duckdb_fmt::format(
 			    "Materialization would result in more than {} rows. Use `collect()` or `as_tibble()` to materialize.",
 			    max_rows);
@@ -288,10 +233,6 @@ void AltrepRelationWrapper::Materialize() {
 		}
 	}
 
-	// Cache the row count so that it remains available
-	// after the materialized result has been released
-	row_count = local_res->RowCount();
-	materialized = true;
 	mat_result = std::move(local_res);
 }
 
@@ -305,7 +246,7 @@ struct AltrepRownamesWrapper {
 	}
 
 	idx_t RowCount() {
-		return rel->RowCount();
+		return rel->GetQueryResult()->RowCount();
 	}
 
 	int32_t *Materialize(idx_t row_count) {
@@ -321,28 +262,6 @@ struct AltrepRownamesWrapper {
 	std::vector<int32_t> rownames_data;
 	duckdb::shared_ptr<AltrepRelationWrapper> rel;
 };
-
-// Allocate a column's R vector from inside an ALTREP method.
-// Failing for want of memory is the R error such a method meets in practice,
-// and R raises it by long-jumping, which must unwind ~AltrepGuard() on its way
-// (handbook/architecture/glue/altrep/README.md): cpp11::unwind_protect() turns the jump into an exception here.
-// duckdb_r_allocate() also throws, which must not cross R's frames inside that call, so it is carried across.
-static SEXP AllocateAltrepColumn(const LogicalType &type, idx_t nrows, const string &name,
-                                 const ConvertOpts &convert_opts) {
-	std::exception_ptr error;
-	SEXP out = cpp11::unwind_protect([&]() -> SEXP {
-		try {
-			return duckdb_r_allocate(type, nrows, name, convert_opts, "Dataptr");
-		} catch (...) {
-			error = std::current_exception();
-			return R_NilValue;
-		}
-	});
-	if (error) {
-		std::rethrow_exception(error);
-	}
-	return out;
-}
 
 struct AltrepVectorWrapper {
 	// In the absence of nested types, parent_column_index is empty.
@@ -360,7 +279,8 @@ struct AltrepVectorWrapper {
 	}
 
 	idx_t RowCount() {
-		return rel->RowCount();
+		auto res = rel->GetQueryResult();
+		return res->RowCount();
 	}
 
 	const string &Name() {
@@ -436,31 +356,15 @@ struct AltrepVectorWrapper {
 		if (transformed_vector.data() == R_NilValue) {
 			const auto &convert_opts = rel->rel_eptr->convert_opts;
 
-			transformed_vector = AllocateAltrepColumn(Type(), RowCount(), Name(), convert_opts);
-			// A conversion that throws part way leaves the vector partly filled:
-			// drop it, so that the next access converts again instead of returning it.
-			// It stays set while converting, which is what a nested access sees.
-			duckdb_httplib::detail::scope_exit drop_partial([&]() { transformed_vector = R_NilValue; });
+			transformed_vector = duckdb_r_allocate(Type(), RowCount(), Name(), convert_opts, "Dataptr");
 			idx_t dest_offset = 0;
 			for (const auto &chunk : Chunks()) {
 				SEXP dest = transformed_vector.data();
 				duckdb_r_transform(ChunkData(chunk), dest, dest_offset, chunk.size(), convert_opts, FullName());
 				dest_offset += chunk.size();
 			}
-			drop_partial.release();
-			converted.store(true, std::memory_order_release);
-
-			rel->MarkColumnAsTransformed();
 		}
 		return const_cast<void *>(DATAPTR_RO(transformed_vector));
-	}
-
-	// What Dataptr() returns once the column is converted, without converting it
-	const void *DataptrOrNull() {
-		if (!converted.load(std::memory_order_acquire)) {
-			return nullptr;
-		}
-		return DATAPTR_RO(transformed_vector);
 	}
 
 	SEXP RVector() {
@@ -472,15 +376,11 @@ struct AltrepVectorWrapper {
 	idx_t column_index;
 	std::vector<idx_t> parent_column_index;
 	cpp11::sexp transformed_vector;
-	// Set once transformed_vector is filled, which Dataptr() sets before it fills it.
-	// Atomic: a bind on an engine thread reads it while R's thread may be converting (src/scan.cpp).
-	std::atomic<bool> converted {false};
 };
 
 Rboolean RelToAltrep::RownamesInspect(SEXP x, int pre, int deep, int pvec,
                                       void (*inspect_subtree)(SEXP, int, int, int)) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	AltrepRownamesWrapper::Get(x); // make sure this is alive
 	Rprintf("DUCKDB_ALTREP_REL_ROWNAMES\n");
 	return TRUE;
@@ -489,7 +389,6 @@ Rboolean RelToAltrep::RownamesInspect(SEXP x, int pre, int deep, int pvec,
 
 Rboolean RelToAltrep::RelInspect(SEXP x, int pre, int deep, int pvec, void (*inspect_subtree)(SEXP, int, int, int)) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto wrapper = AltrepVectorWrapper::Get(x); // make sure this is alive
 	auto &col = wrapper->rel->rel->Columns()[wrapper->column_index];
 	Rprintf("DUCKDB_ALTREP_REL_VECTOR %s (%s)\n", col.Name().c_str(), col.Type().ToString().c_str());
@@ -513,7 +412,6 @@ SEXP get_attrib(SEXP vec, SEXP name) {
 
 R_xlen_t RelToAltrep::RownamesLength(SEXP x) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	return rownames_wrapper->RowCount();
 	END_CPP11_EX(0)
@@ -521,14 +419,12 @@ R_xlen_t RelToAltrep::RownamesLength(SEXP x) {
 
 int RelToAltrep::RownamesElt(SEXP x, R_xlen_t i) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	return static_cast<int>(i + 1);
 	END_CPP11_EX(NA_INTEGER)
 }
 
 R_xlen_t RelToAltrep::RownamesGetRegion(SEXP x, R_xlen_t start, R_xlen_t size, int *out) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto row_count = static_cast<R_xlen_t>(rownames_wrapper->RowCount());
 	R_xlen_t n = row_count - start;
@@ -555,7 +451,6 @@ int RelToAltrep::RownamesNoNA(SEXP x) {
 
 SEXP RelToAltrep::RownamesSum(SEXP x, Rboolean na_rm) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto n = rownames_wrapper->RowCount();
 	double sum = (static_cast<double>(n) * (static_cast<double>(n) + 1.0)) / 2.0;
@@ -565,13 +460,10 @@ SEXP RelToAltrep::RownamesSum(SEXP x, Rboolean na_rm) {
 
 SEXP RelToAltrep::RownamesMin(SEXP x, Rboolean na_rm) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto n = rownames_wrapper->RowCount();
 	if (n == 0) {
-		// cpp11::warning(), not Rf_warning(): a warning turned into an error long-jumps,
-		// which must unwind ~AltrepGuard() (handbook/architecture/glue/altrep/README.md)
-		cpp11::warning("no non-missing arguments to min; returning Inf");
+		Rf_warning("no non-missing arguments to min; returning Inf");
 		return Rf_ScalarReal(R_PosInf);
 	}
 	return Rf_ScalarInteger(1);
@@ -580,11 +472,10 @@ SEXP RelToAltrep::RownamesMin(SEXP x, Rboolean na_rm) {
 
 SEXP RelToAltrep::RownamesMax(SEXP x, Rboolean na_rm) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	auto n = rownames_wrapper->RowCount();
 	if (n == 0) {
-		cpp11::warning("no non-missing arguments to max; returning -Inf");
+		Rf_warning("no non-missing arguments to max; returning -Inf");
 		return Rf_ScalarReal(R_NegInf);
 	}
 	if (n > (idx_t)NumericLimits<int32_t>::Maximum()) {
@@ -602,7 +493,6 @@ SEXP RelToAltrep::MakeRowNamesSexp(duckdb::shared_ptr<AltrepRelationWrapper> rel
 
 SEXP RelToAltrep::RownamesDuplicate(SEXP x, Rboolean deep) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	return MakeRowNamesSexp(rownames_wrapper->rel);
 	END_CPP11
@@ -610,14 +500,12 @@ SEXP RelToAltrep::RownamesDuplicate(SEXP x, Rboolean deep) {
 
 void *RelToAltrep::RownamesDataptr(SEXP x, Rboolean writeable) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	return DoRownamesDataptrGet(x);
 	END_CPP11
 }
 
 const void *RelToAltrep::RownamesDataptrOrNull(SEXP x) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto rownames_wrapper = AltrepRownamesWrapper::Get(x);
 	if (rownames_wrapper->rownames_data.empty()) {
 		return nullptr;
@@ -637,29 +525,18 @@ void *RelToAltrep::DoRownamesDataptrGet(SEXP x) {
 
 R_xlen_t RelToAltrep::VectorLength(SEXP x) {
 	BEGIN_CPP11
-	AltrepGuard guard;
-	return AltrepVectorWrapper::Get(x)->RowCount();
+	return AltrepVectorWrapper::Get(x)->rel->GetQueryResult()->RowCount();
 	END_CPP11_EX(0)
 }
 
 void *RelToAltrep::VectorDataptr(SEXP x, Rboolean writeable) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	return AltrepVectorWrapper::Get(x)->Dataptr();
-	END_CPP11
-}
-
-// Converts nothing, so the data frame scan's bind may ask from any thread (handbook/architecture/glue/threading/)
-const void *RelToAltrep::VectorDataptrOrNull(SEXP x) {
-	BEGIN_CPP11
-	AltrepGuard guard;
-	return AltrepVectorWrapper::Get(x)->DataptrOrNull();
 	END_CPP11
 }
 
 SEXP RelToAltrep::VectorStringElt(SEXP x, R_xlen_t i) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	return STRING_ELT(AltrepVectorWrapper::Get(x)->RVector(), i);
 	END_CPP11
 }
@@ -667,7 +544,6 @@ SEXP RelToAltrep::VectorStringElt(SEXP x, R_xlen_t i) {
 #if defined(R_HAS_ALTLIST)
 R_xlen_t RelToAltrep::StructLength(SEXP x) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	auto const *wrapper = AltrepVectorWrapper::Get(x);
 	auto const column_index = wrapper->column_index;
 	auto const &res = wrapper->rel->GetQueryResult();
@@ -679,7 +555,6 @@ R_xlen_t RelToAltrep::StructLength(SEXP x) {
 
 SEXP RelToAltrep::VectorListElt(SEXP x, R_xlen_t i) {
 	BEGIN_CPP11
-	AltrepGuard guard;
 	return VECTOR_ELT(AltrepVectorWrapper::Get(x)->RVector(), i);
 	END_CPP11
 }
@@ -698,7 +573,7 @@ static R_altrep_class_t LogicalTypeToAltrepType(const LogicalType &type, const d
 		return RelToAltrep::string_class;
 #if defined(R_HAS_ALTLIST)
 	case VECSXP:
-		if (StructType::IsStruct(type)) {
+		if (type.id() == LogicalTypeId::STRUCT) {
 			return RelToAltrep::struct_class;
 		} else {
 			return RelToAltrep::list_class;
@@ -748,15 +623,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 		types.push_back(make_pair(col_name, col_type));
 	}
 
-	// Capture the session's TimeZone setting so TIMESTAMP WITH TIME ZONE columns
-	// can be decorated with the matching `tzone` attribute. The session settings
-	// can only be queried while the connection is live, which it is here.
-	ConvertOpts local_convert_opts = rel->convert_opts;
-	if (drel->context) {
-		local_convert_opts.session_time_zone = drel->context->GetContext()->GetClientProperties().time_zone;
-	}
-
-	return rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, types, local_convert_opts);
+	return rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, types, rel->convert_opts);
 }
 
 SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_wrapper, SEXP row_names_sexp,
@@ -776,25 +643,21 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 		names.push_back(col_name.GetIdentifierName());
 
 		auto &col_type = types[col_idx].second;
+		cpp11::external_pointer<AltrepVectorWrapper> ptr(
+		    new AltrepVectorWrapper(relation_wrapper, col_idx, parent_col_idx));
+		R_SetExternalPtrTag(ptr, RStrings::get().duckdb_vector_sym);
 
 		cpp11::sexp vector_sexp;
 
 		// Special case: Only STRUCTs have a redundant row names attribute
 		// Moving this logic into duckdb_r_decorate() would add too much noise elsewhere
-		if (StructType::IsStruct(col_type)) {
-			auto child_types = RApiTypes::StructLikeChildTypes(col_type);
+		if (col_type.id() == LogicalTypeId::STRUCT) {
+			auto &child_types = StructType::GetChildTypes(col_type);
 			std::vector<idx_t> child_col_idx = parent_col_idx;
 			child_col_idx.push_back(col_idx);
 			vector_sexp =
 			    rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, child_types, convert_opts, child_col_idx);
 		} else {
-			cpp11::external_pointer<AltrepVectorWrapper> ptr(
-			    new AltrepVectorWrapper(relation_wrapper, col_idx, parent_col_idx));
-			R_SetExternalPtrTag(ptr, RStrings::get().duckdb_vector_sym);
-
-			// Register the vector so that the relation wrapper knows
-			// when all ALTREP columns have been transformed
-			relation_wrapper->RegisterAltrepColumn();
 			vector_sexp =
 			    R_new_altrep(LogicalTypeToAltrepType(col_type, col_name.GetIdentifierName()), ptr, R_NilValue);
 			duckdb_r_decorate(col_type, vector_sexp, convert_opts);
@@ -857,7 +720,7 @@ shared_ptr<AltrepRelationWrapper> rapi_rel_wrapper_from_altrep_df(SEXP df, bool 
 
 	auto wrapper = GetFromExternalPtr<AltrepRownamesWrapper>(row_names);
 	if (!allow_materialized) {
-		if (wrapper->rel->Materialized()) {
+		if (wrapper->rel->mat_result.get()) {
 			// We return NULL here even for strict = true
 			// because this is expected from df_is_materialized()
 			return nullptr;
@@ -865,14 +728,6 @@ shared_ptr<AltrepRelationWrapper> rapi_rel_wrapper_from_altrep_df(SEXP df, bool 
 	}
 
 	return wrapper->rel;
-}
-
-[[cpp11::register]] bool rapi_df_has_query_result(SEXP df) {
-	// Internal introspection for tests:
-	// TRUE while the materialized result is held,
-	// FALSE before materialization and after the result has been released
-	auto wrapper = rapi_rel_wrapper_from_altrep_df(df, true, true);
-	return (bool)wrapper->mat_result;
 }
 
 [[cpp11::register]] SEXP rapi_rel_from_altrep_df(SEXP df, bool strict, bool allow_materialized, bool wrap) {
@@ -892,7 +747,5 @@ shared_ptr<AltrepRelationWrapper> rapi_rel_wrapper_from_altrep_df(SEXP df, bool 
 // clang-format off
 [[cpp11::init]] void RelToAltrep_Initialize(DllInfo* dll) {
 	// clang-format on
-	// R calls the init hooks on its own thread when it loads the package
-	RecordRThread();
 	RelToAltrep::Initialize(dll);
 }

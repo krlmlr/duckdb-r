@@ -2,37 +2,31 @@
 
 using namespace duckdb::capiv2;
 
-DUCKDB_V2_ERROR duckdb_v2_error_info_get_text(duckdb_v2_error_info_handle info, const char **out_text,
-                                              idx_t *out_text_length) {
-	if (!info || !out_text || !out_text_length) {
+DUCKDB_V2_ERROR duckdb_v2_error_info_get_text(duckdb_v2_error_info_handle info, duckdb_v2_str *out_text) {
+	if (!info || !out_text) {
 		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	const auto *ei = Convert(info);
-	SetStringOut(out_text, out_text_length, ei->message);
+	*out_text = Convert(ei->message);
 	return DUCKDB_V2_ERROR_NONE;
 }
 
-DUCKDB_V2_ERROR duckdb_v2_error_info_get_raw_text(duckdb_v2_error_info_handle info, const char **out_raw_text,
-                                                  idx_t *out_raw_text_length) {
-	if (!info || !out_raw_text || !out_raw_text_length) {
+DUCKDB_V2_ERROR duckdb_v2_error_info_get_raw_message(duckdb_v2_error_info_handle info, duckdb_v2_str *out_raw_message) {
+	if (!info || !out_raw_message) {
 		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	const auto *ei = Convert(info);
-	SetStringOut(out_raw_text, out_raw_text_length,
-	             ei->raw_message ? std::string_view(ei->raw_message.value()) : std::string_view());
+	*out_raw_message = ei->raw_message.empty() ? duckdb_v2_str {nullptr, 0} : Convert(ei->raw_message);
 	return DUCKDB_V2_ERROR_NONE;
 }
 
-DUCKDB_V2_ERROR duckdb_v2_error_info_set_text(duckdb_v2_error_info_handle info, const char *text, idx_t text_length) {
-	if (!info) {
-		return DUCKDB_V2_ERROR_NONE;
-	}
-	if (IsNullArgument(text, text_length)) {
+DUCKDB_V2_ERROR duckdb_v2_error_info_set_text(duckdb_v2_error_info_handle info, duckdb_v2_str text) {
+	if (!info || (!text.ptr && text.len > 0)) {
 		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	auto *ei = Convert(info);
-	ei->message = Convert(text, text_length);
-	ei->raw_message.reset(); // Directly-set message has no raw body.
+	ei->message = Convert(text);
+	ei->raw_message.clear(); // Directly-set message has no raw body.
 	return DUCKDB_V2_ERROR_NONE;
 }
 
@@ -47,7 +41,7 @@ DUCKDB_V2_ERROR duckdb_v2_error_info_get_code(duckdb_v2_error_info_handle info, 
 
 DUCKDB_V2_ERROR duckdb_v2_error_info_set_code(duckdb_v2_error_info_handle info, DUCKDB_V2_ERROR code) {
 	if (!info) {
-		return DUCKDB_V2_ERROR_NONE;
+		return DUCKDB_V2_ERROR_INPUT_INVALID;
 	}
 	const auto ei = Convert(info);
 	ei->code = code;

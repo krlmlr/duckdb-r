@@ -1,29 +1,15 @@
 #include "duckdb/common/adbc/adbc-init.hpp"
 #include "duckdb/common/enum_util.hpp"
-#include "duckdb/common/local_file_system.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "include/rfuns_extension.hpp"
 #include "rapi.hpp"
 #include "typesr.hpp"
-
-#include <thread>
 
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
 #undef FALSE
 
 using namespace duckdb;
-
-// Written once when R loads the package, before any engine thread exists; until then no thread is R's.
-static std::thread::id r_thread;
-
-void duckdb::RecordRThread() {
-	r_thread = std::this_thread::get_id();
-}
-
-bool duckdb::OnRThread() {
-	return std::this_thread::get_id() == r_thread;
-}
 
 [[cpp11::register]] SEXP rapi_adbc_init_func() {
 	return R_MakeExternalPtrFn((DL_FUNC)duckdb_adbc_init, R_NilValue, R_NilValue);
@@ -43,29 +29,6 @@ bool duckdb::OnRThread() {
 #else
 	return RStrings::get().cxx_stdlib_unknown_str;
 #endif
-}
-
-// Resolve a database path the way the engine itself does, so the driver cache
-// is keyed on what DuckDB considers the database's identity. Explained in
-// handbook/usage/connections/README.md.
-//
-// `CanonicalizePath()` canonicalizes the longest existing prefix of the path
-// and appends the rest, so a database that does not exist yet resolves without
-// anything being created. It does not throw when nothing resolves: the caller
-// gets a path back either way. It does throw when a relative path has no
-// working directory to resolve against, and that error reaches R as a
-// `duckdb_error` like every other engine error.
-[[cpp11::register]] cpp11::r_string rapi_canonicalize_path(std::string path) {
-	// The `LocalFileSystem` override takes the opener explicitly; only the
-	// `FileSystem` base declaration defaults it.
-	LocalFileSystem fs;
-	string result;
-	try {
-		result = fs.CanonicalizePath(path, nullptr);
-	} catch (std::exception &e) {
-		rapi_error_with_context("rapi_canonicalize_path", ErrorData(e));
-	}
-	return result;
 }
 
 [[cpp11::register]] cpp11::r_string rapi_ptr_to_str(SEXP extptr) {
@@ -169,16 +132,8 @@ static void AppendColumnSegment(SRC *source_data, Vector &result, idx_t count) {
 }
 
 R_len_t RApiTypes::GetVecSize(RType rtype, SEXP coldata) {
-	// A data frame counts its rows in its first column, not in its row names:
-	// the scan also calls this from a task thread for a list of data frames,
-	// and reading compact row names allocates.
 	while (rtype.id() == RTypeId::STRUCT) {
-		auto child_rtypes = rtype.GetStructChildTypes();
-		if (child_rtypes.empty()) {
-			// No column to count in, and no values to read
-			return 0;
-		}
-		rtype = child_rtypes[0].second;
+		rtype = rtype.GetStructChildTypes()[0].second;
 		D_ASSERT(TYPEOF(coldata) == VECSXP);
 		coldata = VECTOR_ELT(coldata, 0);
 	}
@@ -195,9 +150,7 @@ R_len_t RApiTypes::GetVecSize(SEXP coldata, bool integer64) {
 }
 
 Value RApiTypes::SexpToValue(SEXP valsexp, R_len_t idx, bool typed_logical_null) {
-	// An integer64 parameter binds as BIGINT whatever `bigint` says about reading;
-	// read as NUMERIC, its bits would be taken for a double (handbook/usage/types/README.md).
-	auto rtype = RApiTypes::DetectRType(valsexp, true);
+	auto rtype = RApiTypes::DetectRType(valsexp, false); // TODO
 	switch (rtype.id()) {
 	case RType::LOGICAL: {
 		auto lgl_val = INTEGER_POINTER(valsexp)[idx];
@@ -207,10 +160,6 @@ Value RApiTypes::SexpToValue(SEXP valsexp, R_len_t idx, bool typed_logical_null)
 	case RType::INTEGER: {
 		auto int_val = INTEGER_POINTER(valsexp)[idx];
 		return RIntegerType::IsNull(int_val) ? Value(LogicalType::INTEGER) : Value::INTEGER(int_val);
-	}
-	case RType::INTEGER64: {
-		auto i64_val = ((int64_t *)NUMERIC_POINTER(valsexp))[idx];
-		return RInteger64Type::IsNull(i64_val) ? Value(LogicalType::BIGINT) : Value::BIGINT(i64_val);
 	}
 	case RType::NUMERIC: {
 		auto dbl_val = NUMERIC_POINTER(valsexp)[idx];
@@ -359,9 +308,7 @@ SEXP RApiTypes::ValueToSexp(const Value &val, const ConvertOpts &convert_opts) {
 	Vector vec(type, 1);
 	vec.SetValue(0, val);
 
-	// Hold the destination across `duckdb_r_decorate()` and `duckdb_r_transform()`:
-	// both allocate, and an unprotected `dest` can be collected mid-conversion.
-	cpp11::sexp dest = duckdb_r_allocate(type, 1, "variant", convert_opts, "ValueToSexp");
+	SEXP dest = duckdb_r_allocate(type, 1, "variant", convert_opts, "ValueToSexp");
 	duckdb_r_decorate(type, dest, convert_opts);
 	duckdb_r_transform(vec, dest, 0, 1, convert_opts, "variant");
 
@@ -390,19 +337,8 @@ SEXP RApiTypes::ValueToSexp(const Value &val, const ConvertOpts &convert_opts) {
 	db->db->LoadStaticExtension<RfunsExtension>();
 }
 
-// ALTREP guard depth counter; see the class comment in rapi.hpp.
-std::atomic<int> AltrepGuard::depth {0};
-
 // Helper functions to communicate errors via R's stop() function
 [[noreturn]] void rapi_error_with_context(const std::string &context, const std::string &message) {
-	// Inside an ALTREP method, calling back into R via cpp11::function is
-	// unsafe: the R function calls stop() which long-jmps out of the ALTREP
-	// method without unwinding C++ frames. Throw a regular C++ exception so
-	// BEGIN_CPP11/END_CPP11 can catch it and surface a clean R error.
-	if (AltrepGuard::IsActive()) {
-		throw std::runtime_error(context + ": " + message);
-	}
-
 	// Look up R function in duckdb namespace
 	static cpp11::function rapi_error = cpp11::package(DUCKDB_PACKAGE_NAME)["rapi_error"];
 	rapi_error(context, message);
@@ -416,11 +352,6 @@ std::atomic<int> AltrepGuard::depth {0};
 }
 
 [[noreturn]] void rapi_error_with_context(const std::string &context, const duckdb::ErrorData &error_data) {
-	// Inside an ALTREP method, see comment in the string overload above.
-	if (AltrepGuard::IsActive()) {
-		throw std::runtime_error(context + ": " + error_data.Message());
-	}
-
 	// Look up R function in duckdb namespace
 	static cpp11::function rapi_error = cpp11::package(DUCKDB_PACKAGE_NAME)["rapi_error"];
 
@@ -431,21 +362,21 @@ std::atomic<int> AltrepGuard::depth {0};
 	// Convert ExceptionType to string
 	std::string error_type = EnumUtil::ToChars(error_data.Type());
 
-	// Convert extra_info to a named character vector, which `rapi_error()` hands
-	// to the caller as the `extra_info` field of the condition.
+	// Convert extra_info to R list
+	cpp11::writable::list extra_info;
 	const auto &info_map = error_data.ExtraInfo();
 
 	cpp11::writable::strings names(info_map.size());
-	cpp11::writable::strings extra_info(info_map.size());
+	cpp11::writable::strings values(info_map.size());
 
 	size_t i = 0;
 	for (const auto &pair : info_map) {
 		names[i] = pair.first;
-		extra_info[i] = pair.second;
+		values[i] = pair.second;
 		i++;
 	}
 
-	extra_info.names() = names;
+	values.names() = names;
 
 	// Call R function with all parameters
 	rapi_error(context, message, error_type, raw_message, extra_info);

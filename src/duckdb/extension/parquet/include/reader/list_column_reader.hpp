@@ -9,7 +9,6 @@
 #pragma once
 
 #include "column_reader.hpp"
-#include "parquet_arena.h"
 #include "reader/templated_column_reader.hpp"
 
 namespace duckdb {
@@ -27,7 +26,7 @@ public:
 
 	void ApplyPendingSkips(data_ptr_t define_out, data_ptr_t repeat_out) override;
 
-	void InitializeRead(idx_t row_group_idx_p, idx_t row_group_num_rows, const duckdb_parquet::ColumnChunkList &columns,
+	void InitializeRead(idx_t row_group_idx_p, idx_t row_group_num_rows, const vector<ColumnChunk> &columns,
 	                    TProtocol &protocol_p) override {
 		child_column_reader->InitializeRead(row_group_idx_p, row_group_num_rows, columns, protocol_p);
 	}
@@ -36,8 +35,8 @@ public:
 		return child_column_reader->GroupRowsAvailable() + overflow_child_count;
 	}
 
-	void GatherColumnChunks(unordered_set<idx_t> &column_chunks) override {
-		child_column_reader->GatherColumnChunks(column_chunks);
+	uint64_t TotalCompressedSize() override {
+		return child_column_reader->TotalCompressedSize();
 	}
 
 	void RegisterPrefetch(ThriftFileTransport &transport, bool allow_merge) override {

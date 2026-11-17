@@ -111,27 +111,19 @@ struct VariantToVariantSizeAnalyzer {
 	static uint32_t VisitGeometry(const string_t &geom, AnalyzeState &state) {
 		return VisitString(geom, state);
 	}
-	static uint32_t VisitGeography(const string_t &geog, AnalyzeState &state) {
-		return VisitString(geog, state);
-	}
 	static uint32_t VisitBitstring(const string_t &bits, AnalyzeState &state) {
 		return VisitString(bits, state);
 	}
 
 	template <typename T>
-	static uint32_t VisitDecimal(T val, uint32_t width, uint32_t scale, AnalyzeState &state) {
+	static uint32_t VisitDecimal(T, uint32_t width, uint32_t scale, AnalyzeState &state) {
 		uint32_t size = GetVarintSize(width) + GetVarintSize(scale);
-		if constexpr (std::is_same<T, bignum_t>::value) {
-			// the BIGNUM blob of a decimal wider than 38 digits
-			size += VisitString(val.data, state);
-		} else {
-			size += sizeof(T);
-		}
+		size += sizeof(T);
 		return size;
 	}
 
 	static uint32_t VisitArray(const UnifiedVariantVectorData &variant, idx_t row, const VariantNestedData &nested_data,
-	                           idx_t depth, AnalyzeState &state) {
+	                           AnalyzeState &state) {
 		uint32_t size = GetVarintSize(nested_data.child_count);
 		if (nested_data.child_count) {
 			size += GetVarintSize(nested_data.children_idx + state.children_offset);
@@ -140,8 +132,8 @@ struct VariantToVariantSizeAnalyzer {
 	}
 
 	static uint32_t VisitObject(const UnifiedVariantVectorData &variant, idx_t row,
-	                            const VariantNestedData &nested_data, idx_t depth, AnalyzeState &state) {
-		return VisitArray(variant, row, nested_data, depth, state);
+	                            const VariantNestedData &nested_data, AnalyzeState &state) {
+		return VisitArray(variant, row, nested_data, state);
 	}
 
 	static uint32_t VisitDefault(VariantLogicalType type_id, const_data_ptr_t, AnalyzeState &) {
@@ -222,9 +214,6 @@ struct VariantToVariantDataWriter {
 	static void VisitGeometry(const string_t &geom, WriteState &state) {
 		return VisitString(geom, state);
 	}
-	static void VisitGeography(const string_t &geog, WriteState &state) {
-		return VisitString(geog, state);
-	}
 	static void VisitBitstring(const string_t &bits, WriteState &state) {
 		return VisitString(bits, state);
 	}
@@ -233,17 +222,12 @@ struct VariantToVariantDataWriter {
 	static void VisitDecimal(T val, uint32_t width, uint32_t scale, WriteState &state) {
 		state.blob_size += VarintEncode(width, state.GetDestination());
 		state.blob_size += VarintEncode(scale, state.GetDestination());
-		if constexpr (std::is_same<T, bignum_t>::value) {
-			// the BIGNUM blob of a decimal wider than 38 digits
-			VisitString(val.data, state);
-		} else {
-			Store<T>(val, state.GetDestination());
-			state.blob_size += sizeof(T);
-		}
+		Store<T>(val, state.GetDestination());
+		state.blob_size += sizeof(T);
 	}
 
 	static void VisitArray(const UnifiedVariantVectorData &variant, idx_t row, const VariantNestedData &nested_data,
-	                       idx_t depth, WriteState &state) {
+	                       WriteState &state) {
 		state.blob_size += VarintEncode(nested_data.child_count, state.GetDestination());
 		if (nested_data.child_count) {
 			//! NOTE: The 'child_index' stored in the OBJECT/ARRAY data could require more bits
@@ -253,8 +237,8 @@ struct VariantToVariantDataWriter {
 	}
 
 	static void VisitObject(const UnifiedVariantVectorData &variant, idx_t row, const VariantNestedData &nested_data,
-	                        idx_t depth, WriteState &state) {
-		return VisitArray(variant, row, nested_data, depth, state);
+	                        WriteState &state) {
+		return VisitArray(variant, row, nested_data, state);
 	}
 
 	static void VisitDefault(VariantLogicalType type_id, const_data_ptr_t, WriteState &) {
@@ -306,6 +290,9 @@ bool ConvertVariantToVariant(ToVariantSourceData &source_data, ToVariantGlobalRe
 			result.values_index_data[values_index_selvec->get_index(source_index)] = values_offset;
 		}
 
+		//! FIXME: we might want to add some checks to make sure the NumericLimits<uint32_t>::Maximum isn't exceeded,
+		//! but that's hard to test
+
 		//! First write all children
 		//! NOTE: this has to happen first because we use 'values_offset', which is increased when we write the values
 		auto source_children_list_entry = source.GetChildrenListEntry(scan_index);
@@ -351,22 +338,21 @@ bool ConvertVariantToVariant(ToVariantSourceData &source_data, ToVariantGlobalRe
 				WriteVariantMetadata<WRITE_DATA>(result_data, result_index, values_offset_data, blob_offset + blob_size,
 				                                 nullptr, 0, source_type_id);
 
-				VariantVisitor<VariantToVariantDataWriter>::Visit(source, scan_index, source_value_index, 0,
-				                                                  write_state);
+				VariantVisitor<VariantToVariantDataWriter>::Visit(source, scan_index, source_value_index, write_state);
 			}
 		} else {
 			AnalyzeState analyze_state(children_offset);
 			for (uint32_t source_value_index = 0; source_value_index < source_values_list_entry.length;
 			     source_value_index++) {
 				values_offset_data[result_index]++;
-				OffsetData::AddBlobOffset(blob_size, VariantVisitor<VariantToVariantSizeAnalyzer>::Visit(
-				                                         source, scan_index, source_value_index, 0, analyze_state));
+				blob_size += VariantVisitor<VariantToVariantSizeAnalyzer>::Visit(source, scan_index, source_value_index,
+				                                                                 analyze_state);
 			}
 		}
 
 		keys_offset += keys_count;
 		children_offset += source_children_list_entry.length;
-		OffsetData::AddBlobOffset(blob_offset, blob_size);
+		blob_offset += blob_size;
 	}
 	return true;
 }

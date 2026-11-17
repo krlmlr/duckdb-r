@@ -47,12 +47,7 @@ SequenceCatalogEntry &BindSequenceFromContext(ClientContext &context, const Qual
 }
 
 SequenceCatalogEntry &BindSequence(Binder &binder, const Identifier &name) {
-	QualifiedName qname;
-	string error;
-	if (!QualifiedName::TryParse(name.GetIdentifierName(), qname, error)) {
-		throw ParserException(error);
-	}
-	return BindSequence(binder, qname);
+	return BindSequence(binder, QualifiedName::Parse(name.GetIdentifierName()));
 }
 
 struct NextValLocalState : public FunctionLocalState {
@@ -74,7 +69,7 @@ unique_ptr<FunctionLocalState> NextValLocalFunction(ExpressionState &state, cons
 	if (!bind_data) {
 		return nullptr;
 	}
-	auto &context = state.GetClientContext();
+	auto &context = state.GetContext();
 	auto &info = bind_data->Cast<NextvalBindData>();
 	auto &sequence = info.sequence;
 	auto &transaction = DuckTransaction::Get(context, sequence.catalog);
@@ -157,16 +152,6 @@ void NextValModifiedDatabases(ClientContext &context, FunctionModifiedDatabasesI
 	input.properties.RegisterDBModify(seq.sequence.ParentCatalog(), context, DatabaseModificationType::SEQUENCE);
 }
 
-//! currval reads the sequence but holds a reference to its catalog entry, so a prepared statement must be rebound
-//! when the catalog changes (e.g. the sequence is dropped) without marking the database as modified
-void CurrValReadDatabases(ClientContext &context, FunctionModifiedDatabasesInput &input) {
-	if (!input.bind_data) {
-		return;
-	}
-	auto &seq = input.bind_data->Cast<NextvalBindData>();
-	input.properties.RegisterDBRead(seq.sequence.ParentCatalog(), context);
-}
-
 } // namespace
 
 ScalarFunction NextvalFun::GetFunction() {
@@ -191,7 +176,6 @@ ScalarFunction CurrvalFun::GetFunction() {
 	curr_val.SetBindCallback(NextValBind);
 	curr_val.SetSerializeCallback(Serialize);
 	curr_val.SetDeserializeCallback(Deserialize);
-	curr_val.SetModifiedDatabasesCallback(CurrValReadDatabases);
 	curr_val.SetInitStateCallback(NextValLocalFunction);
 	curr_val.SetVolatile();
 	curr_val.SetFallible();

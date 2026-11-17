@@ -119,7 +119,7 @@ public:
 		// NOP
 	}
 
-	static void SetPinPayload(const bool &, idx_t = 0, idx_t = DConstants::INVALID_INDEX) {
+	static void SetPinPayload(const bool &) {
 		// NOP
 	}
 
@@ -195,12 +195,8 @@ public:
 		current_chunk_idx = DConstants::INVALID_INDEX;
 	}
 
-	void SetPinPayload(const bool &enable, idx_t begin = 0, idx_t end = DConstants::INVALID_INDEX) {
+	void SetPinPayload(const bool &enable) {
 		pin_payload = enable;
-		payload_begin = begin;
-		payload_end = MinValue(end, tuple_count);
-		D_ASSERT(payload_begin <= payload_end);
-		current_chunk_idx = DConstants::INVALID_INDEX;
 	}
 
 private:
@@ -217,12 +213,7 @@ private:
 				payload_scan_state.pin_state.row_handles.acquire_handles(pins);
 				payload_scan_state.pin_state.heap_handles.acquire_handles(pins);
 			}
-			const auto chunk_begin = chunk_idx * STANDARD_VECTOR_SIZE;
-			D_ASSERT(chunk_begin < payload_end && chunk_begin + STANDARD_VECTOR_SIZE > payload_begin);
-			const auto begin = payload_begin > chunk_begin ? payload_begin - chunk_begin : 0;
-			const auto end = MinValue<idx_t>(payload_end - chunk_begin, STANDARD_VECTOR_SIZE);
-			SortKeyPayloadState skp_state {key_scan_state.chunk_state, key_data.GetLayout().GetSortKeyType(), begin,
-			                               end};
+			SortKeyPayloadState skp_state {key_scan_state.chunk_state, key_data.GetLayout().GetSortKeyType()};
 			payload_data->FetchChunk(payload_scan_state, chunk_idx, false, &skp_state);
 		}
 	}
@@ -239,8 +230,6 @@ private:
 
 	bool keep_pinned;
 	bool pin_payload;
-	idx_t payload_begin = 0;
-	idx_t payload_end = DConstants::INVALID_INDEX;
 	vector<BufferHandle> pins;
 };
 

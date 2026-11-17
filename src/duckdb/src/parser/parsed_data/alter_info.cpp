@@ -1,5 +1,4 @@
 #include "duckdb/parser/parsed_data/alter_info.hpp"
-
 #include "duckdb/catalog/dependency_list.hpp"
 
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
@@ -16,17 +15,6 @@ AlterInfo::AlterInfo(AlterType type) : ParseInfo(TYPE), type(type) {
 }
 
 AlterInfo::~AlterInfo() {
-}
-
-vector<reference<LogicalType>> AlterInfo::GetTypesToBind() {
-	return {};
-}
-
-vector<CatalogType> AlterInfo::GetEntryLookupTypes() const {
-	return {GetCatalogType()};
-}
-
-void AlterInfo::SetResolvedEntryType(CatalogType type) {
 }
 
 AlterEntryData AlterInfo::GetAlterEntryData() const {

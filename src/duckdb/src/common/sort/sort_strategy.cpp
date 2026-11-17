@@ -3,7 +3,6 @@
 #include "duckdb/common/sorting/hashed_sort.hpp"
 #include "duckdb/common/sorting/natural_sort.hpp"
 #include "duckdb/common/sorting/partitioned_sort.hpp"
-#include "duckdb/common/types/row/tuple_data_collection.hpp"
 
 namespace duckdb {
 
@@ -54,10 +53,6 @@ unique_ptr<SortStrategy> SortStrategy::Factory(ClientContext &client,
 //===--------------------------------------------------------------------===//
 SinkNextBatchType SortStrategy::NextBatch(ExecutionContext &context, OperatorSinkNextBatchInput &batch) const {
 	return SinkNextBatchType::READY;
-}
-
-unique_ptr<TupleDataCollection> SortStrategy::TryTakeSinglePartition(idx_t, GlobalSourceState &) const {
-	return nullptr;
 }
 
 void SortStrategy::RegisterHyperLogLog(LocalSinkState &, ParallelHyperLogLogLocalState &) const {

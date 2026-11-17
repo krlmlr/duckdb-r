@@ -43,9 +43,4 @@ public:
 	ParquetFullMetadataFunction();
 };
 
-class ParquetPageIndexFunction : public TableFunction {
-public:
-	ParquetPageIndexFunction();
-};
-
 } // namespace duckdb

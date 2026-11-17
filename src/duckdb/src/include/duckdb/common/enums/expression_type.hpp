@@ -123,7 +123,6 @@ enum class ExpressionType : uint8_t {
 	ARRAY_CONSTRUCTOR = 156,
 	ARROW = 157,
 	OPERATOR_TRY = 158,
-	OPERATOR_HAS_ERROR = 159,
 
 	// -----------------------------
 	// Subquery IN/EXISTS

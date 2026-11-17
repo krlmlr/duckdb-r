@@ -35,7 +35,6 @@ struct ParquetColumnSchema;
 class ParquetReader;
 class ColumnReader;
 class ClientContext;
-class Context;
 
 struct GeometryColumnReader {
 	static unique_ptr<ColumnReader> Create(const ParquetReader &reader, const ParquetColumnSchema &schema,
@@ -87,9 +86,6 @@ struct GeoParquetColumnMetadata {
 	// The crs of the geometry column (if any) in PROJJSON format
 	string projjson;
 
-	// The edge interpretation of the column: GEODETIC ("edges": "spherical") columns are GEOGRAPHY
-	GeometryModel geometry_model = GeometryModel::PLANAR;
-
 	// Used to track the "primary" geometry column (if any)
 	idx_t insertion_index = 0;
 
@@ -116,7 +112,7 @@ public:
 
 	bool IsGeometryColumn(const string &column_name) const;
 
-	static bool IsGeoParquetConversionEnabled(const Context &context);
+	static bool IsGeoParquetConversionEnabled(const ClientContext &context);
 
 private:
 	mutex write_lock;

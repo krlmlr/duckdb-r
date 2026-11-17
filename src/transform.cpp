@@ -22,7 +22,7 @@ static void VectorToR(const Vector &src_vec, size_t count, void *dest, uint64_t 
 	auto &mask = FlatVector::Validity(src_vec);
 	auto dest_ptr = ((DEST *)dest) + dest_offset;
 	for (size_t row_idx = 0; row_idx < count; row_idx++) {
-		dest_ptr[row_idx] = !mask.RowIsValid(row_idx) ? na_val : static_cast<DEST>(src_ptr[row_idx]);
+		dest_ptr[row_idx] = !mask.RowIsValid(row_idx) ? na_val : src_ptr[row_idx];
 	}
 }
 
@@ -72,7 +72,6 @@ int duckdb_r_typeof(const LogicalType &type, const string &name, const char *cal
 		return duckdb_r_typeof(child_type, name, caller);
 	}
 	case LogicalTypeId::STRUCT:
-	case LogicalTypeId::TUPLE:
 		return VECSXP;
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::UUID:
@@ -106,14 +105,11 @@ SEXP duckdb_r_allocate(const LogicalType &type, idx_t nrows, const string &name,
 		    duckdb_r_allocate(child_type, (nrows * array_size), name, convert_opts, "LogicalTypeId::ARRAY");
 		return varvalue;
 	}
-	case LogicalTypeId::STRUCT:
-	case LogicalTypeId::TUPLE: {
-		const auto child_types = RApiTypes::StructLikeChildTypes(type);
-
+	case LogicalTypeId::STRUCT: {
 		cpp11::writable::list dest_list;
-		dest_list.reserve(child_types.size());
+		dest_list.reserve(StructType::GetChildTypes(type).size());
 
-		for (const auto &child : child_types) {
+		for (const auto &child : StructType::GetChildTypes(type)) {
 			const auto &child_name = child.first;
 			const auto &child_type = child.second;
 
@@ -207,10 +203,7 @@ void ConvertTimestampVector(const Vector &src_vec, size_t count, const SEXP dest
 	}
 }
 
-// Whether this session has warned about coercing nanoseconds.
-// A plain flag: only R's thread converts, and the warning is raised with
-// cpp11::warning(), which a std::call_once() would have to let an exception through.
-static bool nanosecond_coercion_warned = false;
+std::once_flag nanosecond_coercion_warning;
 
 void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::ConvertOpts &convert_opts) {
 	if (type.GetAlias() == R_STRING_TYPE_NAME) {
@@ -287,7 +280,9 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
 		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
 			// Attribute added here here, also useful for ALTREP
@@ -296,25 +291,6 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 			}
 		} else {
 			// Conversion happens in the R layer
-			Rf_setAttrib(dest, RStrings::get().tzone_sym, RStrings::get().UTC_str);
-		}
-		break;
-	case LogicalTypeId::TIMESTAMP_TZ:
-	case LogicalTypeId::TIMESTAMP_TZ_NS:
-		// TIMESTAMP WITH TIME ZONE stores microseconds since the UTC epoch.
-		// Prefer the session's TimeZone (settable via `SET TimeZone = ...` with
-		// the ICU extension) so the displayed clock matches DuckDB's own
-		// rendering, and only fall back to `timezone_out` on paths that
-		// decorate without a captured session timezone (e.g. value-at-a-time
-		// conversion through RApiTypes::ValueToSexp()).
-		SET_CLASS(dest, RStrings::get().POSIXct_POSIXt_str);
-		if (convert_opts.tz_out_convert == ConvertOpts::TzOutConvert::WITH) {
-			const string &tz =
-			    convert_opts.session_time_zone != "" ? convert_opts.session_time_zone : convert_opts.timezone_out;
-			if (tz != "") {
-				Rf_setAttrib(dest, RStrings::get().tzone_sym, StringsToSexp({tz}));
-			}
-		} else {
 			Rf_setAttrib(dest, RStrings::get().tzone_sym, RStrings::get().UTC_str);
 		}
 		break;
@@ -333,9 +309,8 @@ void duckdb_r_decorate(const LogicalType &type, const SEXP dest, const duckdb::C
 			Rf_setAttrib(dest, R_ClassSymbol, RStrings::get().integer64_str);
 		}
 		break;
-	case LogicalTypeId::STRUCT:
-	case LogicalTypeId::TUPLE: {
-		const auto child_types = RApiTypes::StructLikeChildTypes(type);
+	case LogicalTypeId::STRUCT: {
+		const auto &child_types = StructType::GetChildTypes(type);
 		cpp11::writable::strings names;
 		names.reserve(child_types.size());
 
@@ -447,7 +422,7 @@ static void TransformArrayVector(const Vector &src_vec, const SEXP dest, idx_t d
 void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offset, idx_t n,
                         const duckdb::ConvertOpts &convert_opts, const string &name) {
 	if (src_vec.GetType().GetAlias() == R_STRING_TYPE_NAME) {
-		ptrdiff_t sexp_header_size = (const_data_ptr_t)DATAPTR_RO(R_BlankString) - (const_data_ptr_t)R_BlankString;
+		ptrdiff_t sexp_header_size = (data_ptr_t)DATAPTR_RO(R_BlankString) - (data_ptr_t)R_BlankString;
 
 		auto child_ptr = FlatVector::GetData<uintptr_t>(src_vec);
 		auto &mask = FlatVector::Validity(src_vec);
@@ -496,23 +471,13 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		break;
 	case LogicalTypeId::TIMESTAMP_NS:
 		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_NS>(src_vec, n, dest, dest_offset);
-		if (!nanosecond_coercion_warned) {
-			nanosecond_coercion_warned = true;
-			// Not Rf_warning(): a warning turned into an error long-jumps,
-			// past the C++ frames above and an ALTREP method's AltrepGuard
-			// (handbook/architecture/glue/altrep/README.md)
-			cpp11::warning("Coercing nanoseconds to a lower resolution may result in a loss of data.");
-		}
+		std::call_once(nanosecond_coercion_warning, Rf_warning,
+		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;
 	case LogicalTypeId::TIMESTAMP_TZ_NS:
 		ConvertTimestampVector<LogicalTypeId::TIMESTAMP_TZ_NS>(src_vec, n, dest, dest_offset);
-		if (!nanosecond_coercion_warned) {
-			nanosecond_coercion_warned = true;
-			// Not Rf_warning(): a warning turned into an error long-jumps,
-			// past the C++ frames above and an ALTREP method's AltrepGuard
-			// (handbook/architecture/glue/altrep/README.md)
-			cpp11::warning("Coercing nanoseconds to a lower resolution may result in a loss of data.");
-		}
+		std::call_once(nanosecond_coercion_warning, Rf_warning,
+		               "Coercing nanoseconds to a lower resolution may result in a loss of data.");
 		break;
 	case LogicalTypeId::DATE: {
 		auto src_data = FlatVector::GetData<date_t>(src_vec);
@@ -694,8 +659,7 @@ void duckdb_r_transform(const Vector &src_vec, const SEXP dest, idx_t dest_offse
 		TransformArrayVector(src_vec, dest, dest_offset, n, convert_opts, name);
 		break;
 	}
-	case LogicalTypeId::STRUCT:
-	case LogicalTypeId::TUPLE: {
+	case LogicalTypeId::STRUCT: {
 		const auto &children = StructVector::GetEntries(src_vec);
 
 		for (size_t i = 0; i < children.size(); i++) {

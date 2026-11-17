@@ -24,7 +24,6 @@ class DuckTransactionManager;
 class StorageLockKey;
 class StorageCommitState;
 struct UndoBufferProperties;
-struct WrittenRows;
 
 struct CommitInfo {
 	transaction_t commit_id;
@@ -67,8 +66,6 @@ public:
 	void PushCatalogEntry(CatalogEntry &entry, data_ptr_t extra_data, idx_t extra_data_size);
 	void PushAttach(AttachedDatabase &db);
 
-	//! Acquire a shared checkpoint lock for a statement, or return null if this transaction already holds one.
-	unique_ptr<StorageLockKey> GetCheckpointLockForStatement();
 	void SetModifications(DatabaseModificationType type) override;
 
 	bool ShouldWriteToWAL(AttachedDatabase &db);
@@ -94,9 +91,8 @@ public:
 	bool ChangesMade();
 	UndoBufferProperties GetUndoProperties();
 
-	//! Pushes the undo entry of a delete (DELETE_TUPLE) or of an update's markers (UPDATE_ROWS) in one vector
-	void PushWrite(UndoFlags type, DuckTableEntry &table_entry, RowVersionManager &info, idx_t vector_idx,
-	               idx_t base_row, const WrittenRows &written);
+	void PushDelete(DuckTableEntry &table_entry, RowVersionManager &info, idx_t vector_idx, row_t rows[], idx_t count,
+	                idx_t base_row);
 	void PushSequenceUsage(SequenceCatalogEntry &entry, const SequenceData &data);
 	void PushAppend(DuckTableEntry &table_entry, idx_t row_start, idx_t row_count);
 	UndoBufferReference CreateUpdateInfo(DuckTableEntry &table_entry, idx_t type_size, idx_t capacity,

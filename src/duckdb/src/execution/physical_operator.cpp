@@ -482,16 +482,12 @@ static void FlattenDictColumn(CachingOperatorState &state, DataChunk &cache, idx
 	slot.entry = nullptr;
 }
 
-//! Append source into a lazily created cache, retaining its largest capacity across flushes.
-//! Accumulable dictionary columns concatenate selection indices instead of flattening.
+//! Append source into the cache (created lazily). On the first append into an empty cache, detect
+//! accumulable dictionary columns; those concatenate their selection indices instead of flattening.
 static void AppendToCache(CachingOperatorState &state, DataChunk &source, ClientContext &client_context) {
 	if (!state.cached_chunk) {
-		// dictionary columns accumulate selection indices in place and cannot grow, so they need the full capacity
-		const idx_t initial_capacity =
-		    ChunkHasAccumulableDictionary(source) ? STANDARD_VECTOR_SIZE : CachingPhysicalOperator::CACHE_THRESHOLD;
-		state.cached_chunk_capacity = MaxValue(state.cached_chunk_capacity, initial_capacity);
 		state.cached_chunk = make_uniq<DataChunk>();
-		state.cached_chunk->Initialize(Allocator::Get(client_context), source.GetTypes(), state.cached_chunk_capacity);
+		state.cached_chunk->Initialize(Allocator::Get(client_context), source.GetTypes());
 	}
 	auto &cache = *state.cached_chunk;
 	if (cache.size() == 0 && !state.dict_cache_active && ChunkHasAccumulableDictionary(source)) {
@@ -499,10 +495,7 @@ static void AppendToCache(CachingOperatorState &state, DataChunk &source, Client
 	}
 	if (!state.dict_cache_active) {
 		// no dict columns: plain flat append
-		cache.Append(source, VectorAppendMode::ALLOW_RESIZE);
-		if (cache.size() > state.cached_chunk_capacity) {
-			state.cached_chunk_capacity = VectorBuffer::GetReserveSize(cache.size());
-		}
+		cache.Append(source);
 		return;
 	}
 	const idx_t base = cache.size();
@@ -516,15 +509,8 @@ static void AppendToCache(CachingOperatorState &state, DataChunk &source, Client
 			auto &source_col = source.data[col_idx];
 			// Compare the pinned entry by pointer: cheaper than the string id and exact, since pinning keeps the
 			// address stable (no ABA). The type check must come first to guard the Cast against a flat vector.
-			bool same_dict = false;
-			if (source_col.GetVectorType() == VectorType::DICTIONARY_VECTOR) {
-				auto &source_entry = source_col.Buffer().Cast<DictionaryBuffer>().GetEntry();
-				// Reinterpret (e.g. a type-changing function) re-wraps a global dictionary in a new entry per chunk
-				// that keeps its id, so a global dictionary is also matched by id
-				same_dict = &source_entry == slot.entry.get() ||
-				            (slot.entry->global_dictionary && source_entry.global_dictionary &&
-				             !slot.entry->id.empty() && source_entry.id == slot.entry->id);
-			}
+			const bool same_dict = source_col.GetVectorType() == VectorType::DICTIONARY_VECTOR &&
+			                       &source_col.Buffer().Cast<DictionaryBuffer>().GetEntry() == slot.entry.get();
 			if (same_dict) {
 				const auto &source_sel = DictionaryVector::SelVector(source_col);
 				for (idx_t row = 0; row < added; row++) {
@@ -532,14 +518,19 @@ static void AppendToCache(CachingOperatorState &state, DataChunk &source, Client
 				}
 				continue;
 			}
-			// an operator above the producer may forward its global dictionary for some chunks only (a CASE branch, a
-			// spilled probe, a cross product): demote the column to flat
+			// A global dictionary wraps the same entry for the producer's lifetime, so a change is a producer bug
+			// that would desync the downstream sink layout -> fail loudly. A non-global dict rotating is normal.
+			if (slot.entry->global_dictionary) {
+				throw InternalException("dict-surviving cache: global dictionary column %llu changed identity "
+				                        "after being seeded for dictionary caching",
+				                        static_cast<uint64_t>(col_idx));
+			}
 			FlattenDictColumn(state, cache, col_idx, base);
 		}
 		// reached by originally-flat and just-demoted columns
 		D_ASSERT(!slot.entry);
 		FlatVector::SetSize(cache.data[col_idx], base);
-		cache.data[col_idx].Append(source.data[col_idx], added, VectorAppendMode::ALLOW_RESIZE);
+		cache.data[col_idx].Append(source.data[col_idx], added, VectorAppendMode::ERROR_ON_NO_SPACE);
 	}
 	// dict columns are rewrapped on flush, flat columns already sized; this only sets the cardinality
 	cache.SetChildCardinality(base + added);
@@ -557,21 +548,18 @@ static void RewrapDictColumns(CachingOperatorState &state, DataChunk &chunk, idx
 	}
 }
 
-//! Hand the cached rows to chunk (reconstructing dict columns) and drop the cache; the next append creates a new
-//! one. Referencing keeps the output chunk's own vectors, so its buffer layout is preserved.
-static void FlushCacheToChunk(CachingOperatorState &state, DataChunk &chunk) {
-	const idx_t count = state.cached_chunk->size();
-	if (chunk.ColumnCount() == 0) {
-		// the output chunk was moved out to hold a continuation chunk: take over the cache instead
-		chunk.Move(*state.cached_chunk);
-	} else {
-		chunk.Reference(*state.cached_chunk);
-	}
-	state.cached_chunk.reset();
+//! Move the cache into chunk (reconstructing dict columns) and re-initialize an empty cache for the next
+//! batch. With no dict columns this is the plain flat flush.
+static void FlushCacheToChunk(CachingOperatorState &state, DataChunk &chunk, ClientContext &client_context) {
 	if (!state.dict_cache_active) {
+		chunk.Move(*state.cached_chunk);
+		state.cached_chunk->Initialize(Allocator::Get(client_context), chunk.GetTypes());
 		return;
 	}
+	const idx_t count = state.cached_chunk->size();
+	chunk.Move(*state.cached_chunk);
 	RewrapDictColumns(state, chunk, count);
+	state.cached_chunk->Initialize(Allocator::Get(client_context), chunk.GetTypes());
 	state.ResetDictCache();
 }
 
@@ -581,7 +569,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 
 	if (state.initialized && state.must_return_continuation_chunk) {
 		chunk.Move(*state.cached_chunk);
-		state.cached_chunk.reset();
+		state.cached_chunk->Initialize(Allocator::Get(context.client), chunk.GetTypes());
 		if (state.cached_result == OperatorResultType::BLOCKED && chunk.size() > 0) {
 			// In case of BLOCKED, first the chunk + HAVE_MORE_OUTPUT, then blocking
 			// This should currently be forbidden, so the assertion, but HAVE_MORE_OUTPUT is also a valid solution
@@ -613,26 +601,24 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 	switch (execution_mode) {
 	case CachingPhysicalOperatorExecuteMode::RETURN_CACHED_APPEND_CHUNK: {
 		auto tmp = make_uniq<DataChunk>();
-		tmp->InitializeEmpty(chunk.GetTypes());
-		tmp->Reference(chunk);
-		FlushCacheToChunk(state, chunk);
+		tmp->Move(chunk);
+		FlushCacheToChunk(state, chunk, context.client);
 		AppendToCache(state, *tmp, context.client);
 		break;
 	}
 	case CachingPhysicalOperatorExecuteMode::RETURN_CACHED_PLUS_CHUNK:
 		AppendToCache(state, chunk, context.client);
-		FlushCacheToChunk(state, chunk);
+		FlushCacheToChunk(state, chunk, context.client);
 		break;
 	case CachingPhysicalOperatorExecuteMode::RETURN_CACHED:
 		D_ASSERT(chunk.size() == 0);
-		FlushCacheToChunk(state, chunk);
+		FlushCacheToChunk(state, chunk, context.client);
 		break;
 	case CachingPhysicalOperatorExecuteMode::RETURN_CACHED_THEN_CHUNK_VIA_CONTINUATION: {
 		// Swap chunk and *state.cached_chunk
 		auto tmp = make_uniq<DataChunk>();
 		tmp->Move(chunk);
-		FlushCacheToChunk(state, chunk);
-		state.cached_chunk = make_uniq<DataChunk>();
+		FlushCacheToChunk(state, chunk, context.client);
 		state.cached_chunk->Move(*tmp);
 
 		// Now chunk holds what was in (*state.cached_chunk), and it's returned directly
@@ -650,6 +636,17 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 		break;
 	}
 
+	// A flushed/reset dict column can leave the reused output chunk holding a DICTIONARY_VECTOR over a null cache
+	// slot that Reset cannot flatten; on an empty result that desyncs the chunk, so flatten stale columns to flat.
+	if (chunk.size() == 0) {
+		for (auto &vector : chunk.data) {
+			const auto vector_type = vector.GetVectorType();
+			if (vector_type != VectorType::FLAT_VECTOR && vector_type != VectorType::CONSTANT_VECTOR) {
+				vector.Initialize();
+			}
+		}
+	}
+
 	return child_result;
 }
 
@@ -660,7 +657,7 @@ OperatorFinalizeResultType CachingPhysicalOperator::FinalExecute(ExecutionContex
 	if (state.cached_chunk) {
 		const idx_t count = state.cached_chunk->size();
 		const bool dict_cache_active = state.dict_cache_active;
-		chunk.Reference(*state.cached_chunk);
+		chunk.Move(*state.cached_chunk);
 		if (dict_cache_active) {
 			RewrapDictColumns(state, chunk, count);
 			state.ResetDictCache();

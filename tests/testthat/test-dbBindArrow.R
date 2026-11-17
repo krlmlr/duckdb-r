@@ -4,12 +4,8 @@ test_that("dbSendQueryArrow() accepts params= and binds them", {
   con <- local_con()
   dbWriteTable(con, "mt", mtcars)
 
-  res <- dbSendQueryArrow(
-    con,
-    "SELECT * FROM mt WHERE cyl = ?",
-    params = list(6L)
-  )
-  withr::defer(dbClearResult(res))
+  res <- dbSendQueryArrow(con, "SELECT * FROM mt WHERE cyl = ?", params = list(6L))
+  on.exit(dbClearResult(res), add = TRUE)
 
   stream <- dbFetchArrow(res)
   df <- as.data.frame(nanoarrow::collect_array_stream(
@@ -24,7 +20,7 @@ test_that("dbBind() rebinds an arrow result", {
   dbWriteTable(con, "mt", mtcars)
 
   res <- dbSendQueryArrow(con, "SELECT * FROM mt WHERE cyl = ?")
-  withr::defer(dbClearResult(res))
+  on.exit(dbClearResult(res), add = TRUE)
 
   dbBind(res, list(4L))
   stream <- dbFetchArrow(res)
@@ -40,7 +36,7 @@ test_that("dbBindArrow() works with a nanoarrow stream", {
   dbWriteTable(con, "mt", mtcars)
 
   res <- dbSendQueryArrow(con, "SELECT * FROM mt WHERE cyl = ?")
-  withr::defer(dbClearResult(res))
+  on.exit(dbClearResult(res), add = TRUE)
 
   arrow_params <- nanoarrow::as_nanoarrow_array_stream(
     stats::setNames(data.frame(8L), "")
@@ -60,7 +56,7 @@ test_that("dbBind() resets completion state for re-use", {
   dbExecute(con, "CREATE TABLE t AS SELECT range a FROM range(10)")
 
   res <- dbSendQueryArrow(con, "SELECT a FROM t WHERE a >= ?")
-  withr::defer(dbClearResult(res))
+  on.exit(dbClearResult(res), add = TRUE)
 
   dbBind(res, list(5L))
   dbFetchArrow(res)
@@ -74,7 +70,7 @@ test_that("dbBindArrow() runs the query once per row for multi-row streams", {
   con <- local_con()
 
   res <- dbSendQueryArrow(con, "SELECT ? + 1.0 AS a")
-  withr::defer(dbClearResult(res))
+  on.exit(dbClearResult(res), add = TRUE)
 
   arrow_params <- nanoarrow::as_nanoarrow_array_stream(
     stats::setNames(data.frame(c(1, 2, 3) - 1), "")
@@ -82,29 +78,4 @@ test_that("dbBindArrow() runs the query once per row for multi-row streams", {
   dbBindArrow(res, arrow_params)
   df <- dbFetch(res)
   expect_equal(df$a, c(1, 2, 3))
-})
-
-test_that("dbClearResult() frees the results of a multi-row bind not read yet", {
-  con <- local_con()
-
-  res <- dbSendQueryArrow(con, "SELECT ?::INTEGER AS a")
-  dbBind(res, list(1:3))
-  pending <- res@env$pending_query_results
-  expect_length(pending, 2L)
-
-  expect_equal(dbFetchArrowChunk(res)$length, 1L)
-  dbClearResult(res)
-  expect_null(res@env$pending_query_results)
-
-  # Freed by dbClearResult() itself, not whenever the garbage collector next runs.
-  for (query_result in pending) {
-    expect_error(
-      rapi_fetch_arrow_array(
-        query_result,
-        nanoarrow::nanoarrow_allocate_array(),
-        10L
-      ),
-      "consumed"
-    )
-  }
 })

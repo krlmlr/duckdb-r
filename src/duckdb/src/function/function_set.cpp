@@ -15,12 +15,14 @@ ScalarFunctionSet::ScalarFunctionSet(ScalarFunction fun) : FunctionSet(fun.name)
 
 shared_ptr<const ScalarFunction> ScalarFunctionSet::GetFunctionByArguments(ClientContext &context,
                                                                            const vector<LogicalType> &arguments) {
-	auto index = FunctionBinder::SelectFunction(context, *this, arguments);
-	if (!index.IsSuccess()) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto index = binder.BindFunction(name, *this, arguments, error);
+	if (!index.IsValid()) {
 		throw BinderException("Failed to find function %s(%s)\n%s", name, StringUtil::ToString(arguments, ","),
-		                      index.GetError().RawMessage());
+		                      error.RawMessage());
 	}
-	return index.GetBinding().GetFunction<ScalarFunction>();
+	return GetFunctionByOffset(index.GetIndex());
 }
 
 AggregateFunctionSet::AggregateFunctionSet() : FunctionSet("") {
@@ -35,12 +37,33 @@ AggregateFunctionSet::AggregateFunctionSet(AggregateFunction fun) : FunctionSet(
 
 shared_ptr<const AggregateFunction> AggregateFunctionSet::GetFunctionByArguments(ClientContext &context,
                                                                                  const vector<LogicalType> &arguments) {
-	auto index = FunctionBinder::SelectFunction(context, *this, arguments);
-	if (!index.IsSuccess()) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto index = binder.BindFunction(name, *this, arguments, error);
+	if (!index.IsValid()) {
+		// check if the arguments are a prefix of any of the arguments
+		// this is used for functions such as quantile or string_agg that delete part of their arguments during bind
+		// FIXME: we should come up with a better solution here
+		for (auto &func : functions) {
+			auto &sig = func->GetSignature();
+			if (arguments.size() >= sig.GetParameters().size()) {
+				continue;
+			}
+			bool is_prefix = true;
+			for (idx_t k = 0; k < arguments.size(); k++) {
+				if (arguments[k].id() != sig.GetParameter(k).GetType().id()) {
+					is_prefix = false;
+					break;
+				}
+			}
+			if (is_prefix) {
+				return func;
+			}
+		}
 		throw BinderException("Failed to find function %s(%s)\n%s", name, StringUtil::ToString(arguments, ","),
-		                      index.GetError().RawMessage());
+		                      error.RawMessage());
 	}
-	return index.GetBinding().GetFunction<AggregateFunction>();
+	return GetFunctionByOffset(index.GetIndex());
 }
 
 WindowFunctionSet::WindowFunctionSet() : FunctionSet("") {
@@ -55,12 +78,14 @@ WindowFunctionSet::WindowFunctionSet(WindowFunction fun) : FunctionSet(fun.name)
 
 shared_ptr<const WindowFunction> WindowFunctionSet::GetFunctionByArguments(ClientContext &context,
                                                                            const vector<LogicalType> &arguments) {
-	auto index = FunctionBinder::SelectFunction(context, *this, arguments);
-	if (!index.IsSuccess()) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto index = binder.BindFunction(name, *this, arguments, error);
+	if (!index.IsValid()) {
 		throw BinderException("Failed to find function %s(%s)\n%s", name, StringUtil::ToString(arguments, ","),
-		                      index.GetError().RawMessage());
+		                      error.RawMessage());
 	}
-	return index.GetBinding().GetFunction<WindowFunction>();
+	return GetFunctionByOffset(index.GetIndex());
 }
 
 TableFunctionSet::TableFunctionSet(Identifier name) : FunctionSet(std::move(name)) {
@@ -72,12 +97,14 @@ TableFunctionSet::TableFunctionSet(TableFunction fun) : FunctionSet(fun.name) {
 
 shared_ptr<const TableFunction> TableFunctionSet::GetFunctionByArguments(ClientContext &context,
                                                                          const vector<LogicalType> &arguments) {
-	auto index = FunctionBinder::SelectFunction(context, *this, arguments);
-	if (!index.IsSuccess()) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto index = binder.BindFunction(name, *this, arguments, error);
+	if (!index.IsValid()) {
 		throw BinderException("Failed to find function %s(%s)\n%s", name, StringUtil::ToString(arguments, ","),
-		                      index.GetError().RawMessage());
+		                      error.RawMessage());
 	}
-	return index.GetBinding().GetFunction<TableFunction>();
+	return GetFunctionByOffset(index.GetIndex());
 }
 
 PragmaFunctionSet::PragmaFunctionSet(Identifier name) : FunctionSet(std::move(name)) {

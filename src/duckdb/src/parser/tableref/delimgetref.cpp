@@ -13,9 +13,7 @@ bool DelimGetRef::Equals(const TableRef &other) const {
 }
 
 unique_ptr<TableRef> DelimGetRef::Copy() {
-	auto copy = make_uniq<DelimGetRef>(types);
-	CopyProperties(*copy);
-	return std::move(copy);
+	return make_uniq<DelimGetRef>(types);
 }
 
 void DelimGetRef::Serialize(Serializer &serializer) const {

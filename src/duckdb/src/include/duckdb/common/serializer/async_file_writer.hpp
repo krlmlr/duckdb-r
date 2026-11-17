@@ -18,7 +18,7 @@
 
 namespace duckdb {
 
-class Context;
+class ClientContext;
 class CopiedAsyncWriteBuffer;
 
 //! WriteStream implementation that registers writes cheaply and drains them on the async task scheduler.
@@ -54,7 +54,7 @@ public:
 	DUCKDB_API static const FileOpenFlags DEFAULT_OPEN_FLAGS;
 
 public:
-	DUCKDB_API AsyncFileWriter(Context &context, FileSystem &fs, const string &path,
+	DUCKDB_API AsyncFileWriter(QueryContext context, FileSystem &fs, const string &path,
 	                           const FileOpenFlags &open_flags = DEFAULT_OPEN_FLAGS);
 	DUCKDB_API ~AsyncFileWriter() override;
 	using WriteStream::Write;
@@ -143,7 +143,8 @@ private:
 	void WaitAllInternal(BatchDrainMode batch_drain_mode);
 
 private:
-	Context &context;
+	QueryContext context;
+	ClientContext &client_context;
 	FileSystem &fs;
 	string path;
 	unique_ptr<FileHandle> handle;

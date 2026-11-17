@@ -100,17 +100,13 @@ $RECYCLE.BIN/
 /build
 *.tar.gz
 *.tgz
-/src/duckdb.tar
+/src/duckdb.tar.xz
 /src/**/*.o
 /src/*.d
 /src/*.so
 /src/*.dll
 /scripts/__pycache__
 /duckdb
-# Where scripts/rconfigure.py keeps the tree it is replacing while it
-# regenerates src/duckdb/; removed at the end of every run, so it exists only
-# while one is in flight.
-/src/.duckdb-previous
 /src/Makevars.duckdb
 /src/Makevars.rstrtmgr
 /src/Makevars.system-lib
@@ -126,5 +122,3 @@ cmake-build-debug
 /.ccache/
 /extensions/
 /inst/extensions/
-.cache-memory-clients/
-.cache-memory-ingest/

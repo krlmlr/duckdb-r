@@ -13,15 +13,19 @@ bool CanCastImplicitly(ClientContext &context, const LogicalType &source, const 
 }
 
 void CanCastImplicitlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	throw InternalException("can_cast_implicitly cannot be executed directly");
+	auto &context = state.GetContext();
+	bool can_cast_implicitly = CanCastImplicitly(context, args.data[0].GetType(), args.data[1].GetType());
+	auto v = Value::BOOLEAN(can_cast_implicitly);
+	result.Reference(v, count_t(args.size()));
 }
 
 unique_ptr<Expression> BindCanCastImplicitlyExpression(FunctionBindExpressionInput &input) {
 	auto &source_type = input.children[0]->GetReturnType();
 	auto &target_type = input.children[1]->GetReturnType();
-	if (source_type.id() == LogicalTypeId::UNKNOWN || target_type.id() == LogicalTypeId::UNKNOWN) {
+	if (source_type.id() == LogicalTypeId::UNKNOWN || source_type.id() == LogicalTypeId::SQLNULL ||
+	    target_type.id() == LogicalTypeId::UNKNOWN || target_type.id() == LogicalTypeId::SQLNULL) {
 		// parameter - unknown return type
-		throw ParameterNotResolvedException();
+		return nullptr;
 	}
 	// emit a constant expression
 	return make_uniq<BoundConstantExpression>(

@@ -12,41 +12,22 @@
 
 namespace duckdb {
 
-class RelationManager;
-
-struct JoinPlanCost {
-	double work;
-	double memory_excess;
-
-	bool operator<(const JoinPlanCost &other) const {
-		return memory_excess != other.memory_excess ? memory_excess < other.memory_excess : work < other.work;
-	}
-	bool operator==(const JoinPlanCost &other) const {
-		return memory_excess == other.memory_excess && work == other.work;
-	}
-};
+class QueryGraphManager;
 
 class CostModel {
 public:
-	explicit CostModel(CardinalityEstimator &cardinality_estimator);
+	explicit CostModel(QueryGraphManager &query_graph_manager, CardinalityEstimator &cardinality_estimator);
 
 public:
-	//! Compute work for the selected operator and its estimated output.
-	double ComputeCost(const DPJoinNode &left, const DPJoinNode &right, optional_ptr<JoinOrderOperator> join_operator,
-	                   double output_rows);
+	//! Compute cost of a join relation set
+	double ComputeCost(DPJoinNode &left, DPJoinNode &right, JoinRelationSet &combination,
+	                   const vector<reference<NeighborInfo>> &possible_connections);
 	CardinalityEstimator &GetCardinalityEstimator();
-	void InitializeRecursiveMemory(ClientContext &context, RelationManager &relations);
-	void UpdateBuildMemory(DPJoinNode &result, const DPJoinNode &left, const DPJoinNode &right);
-	JoinPlanCost GetCost(const DPJoinNode &node) const;
 
 private:
-	double GetBuildSize(const DPJoinNode &node);
-
-private:
+	//! query graph storing relation manager information
+	QueryGraphManager &query_graph_manager;
 	CardinalityEstimator &cardinality_estimator;
-	optional_ptr<RelationManager> recursive_relations;
-	reference_map_t<JoinRelationSet, double> row_widths;
-	double memory_budget = 0;
 };
 
 } // namespace duckdb

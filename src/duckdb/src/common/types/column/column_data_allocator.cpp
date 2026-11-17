@@ -1,6 +1,5 @@
 #include "duckdb/common/types/column/column_data_allocator.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/context.hpp"
 
 #include "duckdb/common/radix_partitioning.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
@@ -26,22 +25,17 @@ ColumnDataAllocator::ColumnDataAllocator(BufferManager &buffer_manager, ColumnDa
 
 ColumnDataAllocator::ColumnDataAllocator(ClientContext &context, ColumnDataAllocatorType allocator_type,
                                          ColumnDataCollectionLifetime lifetime)
-    : ColumnDataAllocator(context.GetContext(), allocator_type, lifetime) {
-}
-
-ColumnDataAllocator::ColumnDataAllocator(Context &context, ColumnDataAllocatorType allocator_type,
-                                         ColumnDataCollectionLifetime lifetime)
     : type(allocator_type) {
 	switch (type) {
 	case ColumnDataAllocatorType::BUFFER_MANAGER_ALLOCATOR:
 	case ColumnDataAllocatorType::HYBRID:
-		alloc.buffer_manager = &context.GetBufferManager();
+		alloc.buffer_manager = &BufferManager::GetBufferManager(context);
 		if (lifetime == ColumnDataCollectionLifetime::THROW_ERROR_AFTER_DATABASE_CLOSES) {
-			managed_result_set = ResultSetManager::Get(context.GetDatabase()).Add(*this);
+			managed_result_set = ResultSetManager::Get(context).Add(*this);
 		}
 		break;
 	case ColumnDataAllocatorType::IN_MEMORY_ALLOCATOR:
-		alloc.allocator = &Allocator::Get(context.GetDatabase());
+		alloc.allocator = &Allocator::Get(context);
 		break;
 	default:
 		throw InternalException("Unrecognized column data allocator type");
@@ -86,14 +80,13 @@ ColumnDataAllocator::~ColumnDataAllocator() {
 
 BufferHandle ColumnDataAllocator::Pin(uint32_t block_id) {
 	D_ASSERT(type == ColumnDataAllocatorType::BUFFER_MANAGER_ALLOCATOR || type == ColumnDataAllocatorType::HYBRID);
-	if (!shared) {
-		return blocks[block_id].Pin(*alloc.buffer_manager);
-	}
 	shared_ptr<BlockHandle> handle;
-	{
+	if (shared) {
 		// we only need to grab the lock when accessing the vector, because vector access is not thread-safe:
 		// the vector can be resized by another thread while we try to access it
 		lock_guard<mutex> guard(lock);
+		handle = blocks[block_id].GetHandle();
+	} else {
 		handle = blocks[block_id].GetHandle();
 	}
 	return alloc.buffer_manager->Pin(handle);
@@ -159,7 +152,8 @@ void ColumnDataAllocator::AllocateBuffer(idx_t size, uint32_t &block_id, uint32_
 	block_id = NumericCast<uint32_t>(blocks.size() - 1);
 	if (chunk_state && chunk_state->handles.find(block_id) == chunk_state->handles.end()) {
 		// not guaranteed to be pinned already by this thread (if shared allocator)
-		chunk_state->handles[block_id] = block.Pin(*alloc.buffer_manager);
+		auto handle = blocks[block_id].GetHandle();
+		chunk_state->handles[block_id] = alloc.buffer_manager->Pin(handle);
 	}
 	offset = block.size;
 	block.size += size;
@@ -261,13 +255,10 @@ void ColumnDataAllocator::UnswizzlePointers(ChunkManagementState &state, Vector 
                                             SwizzleMetaData &swizzle_segment, const VectorMetaData &string_heap_segment,
                                             const idx_t &v_offset, const bool &copied) {
 	D_ASSERT(result.GetType().InternalType() == PhysicalType::VARCHAR);
+	lock_guard<mutex> guard(lock);
+	const auto old_base_ptr = char_ptr_cast(swizzle_segment.ptr);
 	const auto new_base_ptr =
 	    char_ptr_cast(GetDataPointer(state, string_heap_segment.block_id, string_heap_segment.offset));
-	if (!copied && swizzle_segment.ptr.load(std::memory_order_acquire) == data_ptr_cast(new_base_ptr)) {
-		return;
-	}
-	lock_guard<mutex> guard(lock);
-	const auto old_base_ptr = char_ptr_cast(swizzle_segment.ptr.load(std::memory_order_relaxed));
 	if (old_base_ptr == new_base_ptr) {
 		return; // pointers are still valid
 	}
@@ -295,7 +286,7 @@ void ColumnDataAllocator::UnswizzlePointers(ChunkManagementState &state, Vector 
 
 	if (!copied) {
 		// if the data was not copied, we modified data on the blocks. store the new base ptr
-		swizzle_segment.ptr.store(data_ptr_cast(new_base_ptr), std::memory_order_release);
+		swizzle_segment.ptr = data_ptr_cast(new_base_ptr);
 	}
 }
 
@@ -367,14 +358,6 @@ shared_ptr<BlockHandle> BlockMetaData::GetHandle() const {
 		throw ConnectionException("Trying to access a query result after the database instance has been closed");
 	}
 	return res;
-}
-
-BufferHandle BlockMetaData::Pin(BufferManager &buffer_manager) {
-	if (handle) {
-		return buffer_manager.Pin(handle);
-	}
-	auto owned_handle = GetHandle();
-	return buffer_manager.Pin(owned_handle);
 }
 
 void BlockMetaData::SetHandle(ManagedResultSet &managed_result_set, shared_ptr<BlockHandle> handle_p) {

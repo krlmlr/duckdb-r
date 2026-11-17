@@ -8,11 +8,6 @@ unique_ptr<BaseStatistics> BaseFileReader::GetStatistics(ClientContext &context,
 	return nullptr;
 }
 
-unique_ptr<BaseStatistics> BaseFileReader::GetVirtualColumnStatistics(ClientContext &context,
-                                                                      column_t virtual_column_id) {
-	return nullptr;
-}
-
 shared_ptr<BaseUnionData> BaseFileReader::GetUnionData(idx_t file_idx) {
 	throw NotImplementedException("Union by name not supported for reader of type %s", GetReaderType());
 }
@@ -42,10 +37,6 @@ InsertionOrderPreservingMap<Value> BaseFileReader::GetMetadata() const {
 }
 
 unique_ptr<BaseStatistics> BaseUnionData::GetStatistics(ClientContext &context, const Identifier &name) {
-	return nullptr;
-}
-
-unique_ptr<BaseStatistics> BaseUnionData::GetVirtualColumnStatistics(ClientContext &, column_t) {
 	return nullptr;
 }
 

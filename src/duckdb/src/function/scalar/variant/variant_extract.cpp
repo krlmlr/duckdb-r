@@ -50,12 +50,7 @@ static unique_ptr<BaseStatistics> VariantExtractPropagateStats(ClientContext &co
 		return nullptr;
 	}
 
-	auto result = VariantStats::WrapExtractedFieldAsVariant(variant_stats, *found_stats);
-	if (info.component.lookup_mode == VariantChildLookupMode::BY_INDEX) {
-		// Element statistics do not account for NULLs from out-of-bounds array indexes.
-		result->SetHasNull();
-	}
-	return result;
+	return VariantStats::WrapExtractedFieldAsVariant(variant_stats, *found_stats);
 }
 
 static unique_ptr<FunctionData> VariantExtractBind(BindScalarFunctionInput &input) {
@@ -82,16 +77,13 @@ static unique_ptr<FunctionData> VariantExtractBind(BindScalarFunctionInput &inpu
 	}
 }
 
-enum class ShreddedExtractResult : uint8_t { SUCCESS, NOT_SUPPORTED, KEY_NOT_FOUND };
-
-static ShreddedExtractResult TryShreddedExtractRecursive(const Vector &input,
-                                                         const vector<VariantPathComponent> &components, Vector &result,
-                                                         idx_t count, idx_t path_index = 0) {
+static bool TryShreddedExtractRecursive(const Vector &input, const vector<VariantPathComponent> &components,
+                                        Vector &result, idx_t count, idx_t path_index = 0) {
 	if (path_index >= components.size()) {
 		// reached the end of the path - shred
 		if (input.GetType().IsNested()) {
 			// we only support this for non-nested types for now
-			return ShreddedExtractResult::NOT_SUPPORTED;
+			return false;
 		}
 		// create the shredded vector with an empty unshredded part
 		auto shredded_type = VariantUtils::ShreddedType(input.GetType());
@@ -108,28 +100,20 @@ static ShreddedExtractResult TryShreddedExtractRecursive(const Vector &input,
 
 		FlatVector::SetSize(shredded_vector, count_t(count));
 		result.Shred(shredded_vector, count);
-		return ShreddedExtractResult::SUCCESS;
+		return true;
 	}
 	auto &component = components[path_index];
 	if (component.lookup_mode != VariantChildLookupMode::BY_KEY) {
 		// only by key supported
-		return ShreddedExtractResult::NOT_SUPPORTED;
+		return false;
 	}
 	if (input.GetType().id() != LogicalTypeId::STRUCT) {
 		//! Not shredded on OBJECT, can't extract a key
-		return ShreddedExtractResult::NOT_SUPPORTED;
+		return false;
 	}
 	// first entry is "typed_value"
 	auto &typed_entries = StructVector::GetEntries(input);
-	if (typed_entries.empty()) {
-		// An empty shredded STRUCT has no typed_value child.
-		return ShreddedExtractResult::NOT_SUPPORTED;
-	}
 	auto &typed_value = typed_entries[0];
-	if (typed_value.GetType().id() != LogicalTypeId::STRUCT) {
-		// A shredded wrapper can also contain a primitive or an array.
-		return ShreddedExtractResult::NOT_SUPPORTED;
-	}
 
 	// find the type in the struct type
 	auto &child_types = StructType::GetChildTypes(typed_value.GetType());
@@ -141,8 +125,8 @@ static ShreddedExtractResult TryShreddedExtractRecursive(const Vector &input,
 			return TryShreddedExtractRecursive(child_entries[child_idx], components, result, count, path_index + 1);
 		}
 	}
-	// the vector is fully shredded, so a key outside the shredded type is NULL in every row
-	return ShreddedExtractResult::KEY_NOT_FOUND;
+	// key not found - bail (FIXME: could we emit constant NULL here?)
+	return false;
 }
 
 static bool TryFromShreddedExtract(const Vector &variant_vec, const vector<VariantPathComponent> &components,
@@ -156,15 +140,7 @@ static bool TryFromShreddedExtract(const Vector &variant_vec, const vector<Varia
 		return false;
 	}
 	auto &shredded_vec = ShreddedVector::GetShreddedVector(variant_vec);
-	switch (TryShreddedExtractRecursive(shredded_vec, components, result, count)) {
-	case ShreddedExtractResult::SUCCESS:
-		return true;
-	case ShreddedExtractResult::KEY_NOT_FOUND:
-		ConstantVector::SetNull(result, count_t(count));
-		return true;
-	default:
-		return false;
-	}
+	return TryShreddedExtractRecursive(shredded_vec, components, result, count);
 }
 
 void VariantUtils::VariantExtract(const Vector &variant_vec, const vector<VariantPathComponent> &components,

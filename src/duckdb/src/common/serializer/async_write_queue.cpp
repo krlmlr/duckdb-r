@@ -4,7 +4,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/helper.hpp"
-#include "duckdb/main/context.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
@@ -73,27 +73,31 @@ public:
 	AsyncWriteQueueTask(AsyncWriteQueue &queue_p, TaskExecutor &executor) : BaseExecutorTask(executor), queue(queue_p) {
 	}
 
-	void ExecuteTask() override {
-		queue.DrainRequests();
+	~AsyncWriteQueueTask() override {
+		if (!started) {
+			queue.CancelScheduledTask();
+		}
 	}
 
-	void Cancel() override {
-		queue.CancelScheduledTask();
+	void ExecuteTask() override {
+		started = true;
+		queue.DrainRequests();
 	}
 
 private:
 	AsyncWriteQueue &queue;
+	bool started = false;
 };
 
-AsyncWriteQueue::AsyncWriteQueue(Context &context_p, AsyncWriteTarget &target_p)
-    : context(context_p), target(target_p) {
-	auto &scheduler = context.GetTaskScheduler();
+AsyncWriteQueue::AsyncWriteQueue(ClientContext &client_context_p, AsyncWriteTarget &target_p)
+    : client_context(client_context_p), target(target_p) {
+	auto &scheduler = TaskScheduler::GetScheduler(client_context);
 	auto async_threads = scheduler.NumberOfAsyncThreads();
 	max_active_tasks = MaxValue<idx_t>(async_threads, 1);
 	if (async_threads == 0) {
 		return;
 	}
-	executor = make_uniq<TaskExecutor>(context, TaskSchedulerType::ASYNC);
+	executor = make_uniq<TaskExecutor>(client_context, TaskSchedulerType::ASYNC);
 }
 
 AsyncWriteQueue::~AsyncWriteQueue() {
@@ -120,7 +124,14 @@ void AsyncWriteQueue::Submit(AsyncWriteRequest request) {
 	}
 	auto request_size = request.Size();
 	if (executor && executor->HasError()) {
-		auto error = executor->GetError();
+		ErrorData error;
+		try {
+			executor->ThrowError();
+		} catch (const std::exception &ex) {
+			error = ErrorData(ex);
+		} catch (...) { // LCOV_EXCL_START
+			error = ErrorData("Unknown exception during async write");
+		} // LCOV_EXCL_STOP
 		request.payload.reset();
 		CompleteRequest(request, request_size, error);
 		error.Throw();
@@ -200,9 +211,7 @@ void AsyncWriteQueue::ScheduleTasksInternal(bool force) {
 			auto selected_bytes = SelectPendingRequestBytes(scheduled_pending_bytes + scheduled_bytes);
 			auto task_budget = TaskByteBudget();
 			auto has_active_task = active_tasks + schedule_count > 0;
-			auto unscheduled_bytes = pending_bytes - scheduled_pending_bytes - scheduled_bytes;
-			// A small leading request must not block a larger request behind it.
-			if (!force && has_active_task && unscheduled_bytes < task_budget) {
+			if (!force && has_active_task && selected_bytes < task_budget) {
 				break;
 			}
 			schedule_count++;
@@ -307,7 +316,14 @@ void AsyncWriteQueue::DrainRequests() {
 		}
 	} catch (...) {
 		auto error_ptr = std::current_exception();
-		auto error = ErrorDataFromExceptionPtr(error_ptr);
+		ErrorData error;
+		try {
+			std::rethrow_exception(error_ptr);
+		} catch (const std::exception &ex) {
+			error = ErrorData(ex);
+		} catch (...) { // LCOV_EXCL_START
+			error = ErrorData("Unknown exception during async write");
+		} // LCOV_EXCL_STOP
 		request_idx++;
 		for (; request_idx < requests.size(); request_idx++) {
 			auto &request = requests[request_idx].request;
@@ -403,10 +419,15 @@ void AsyncWriteQueue::Flush() {
 		return;
 	}
 
-	{
-		// join before leaving this scope, whether the scheduling succeeds or throws
-		TaskExecutor::JoinGuard join(*executor);
+	try {
 		ScheduleTasksInternal(true);
+		executor->WorkOnTasks();
+	} catch (...) {
+		try {
+			executor->WorkOnTasks();
+		} catch (...) {
+		}
+		throw;
 	}
 	RethrowTaskError();
 }
@@ -504,14 +525,14 @@ idx_t ManagedAsyncWriteQueue::PendingWrite::Size() const {
 	return size;
 }
 
-ManagedAsyncWriteQueue::ManagedAsyncWriteQueue(Context &context_p, AsyncWriteTarget &target_p)
-    : context(context_p), target(target_p), memory_governor(context_p) {
-	auto &scheduler = context.GetTaskScheduler();
+ManagedAsyncWriteQueue::ManagedAsyncWriteQueue(ClientContext &client_context_p, AsyncWriteTarget &target_p)
+    : client_context(client_context_p), target(target_p), memory_governor(client_context_p) {
+	auto &scheduler = TaskScheduler::GetScheduler(client_context);
 	auto async_threads = scheduler.NumberOfAsyncThreads();
 	max_active_drain_tasks = MaxValue<idx_t>(async_threads, 1);
 
 	AsyncWriteTarget &async_target = *this;
-	write_queue = make_uniq<AsyncWriteQueue>(context, async_target);
+	write_queue = make_uniq<AsyncWriteQueue>(client_context, async_target);
 }
 
 ManagedAsyncWriteQueue::~ManagedAsyncWriteQueue() {
@@ -753,7 +774,7 @@ void ManagedAsyncWriteQueue::ApplyBackpressure() {
 		idx_t current_pending_bytes;
 		{
 			lock_guard<mutex> guard(lock);
-			// external bytes a stream wrapper has not adopted yet are still pending
+			D_ASSERT(external_pending_bytes == 0);
 			current_pending_bytes = TotalPendingBytes();
 		}
 		if (current_pending_bytes <= BackpressureBudget()) {
@@ -958,8 +979,8 @@ idx_t ManagedAsyncWriteStreamQueue::PendingWrite::Size() const {
 
 class ManagedAsyncWriteStreamQueue::CoalescedWritePayload : public AsyncWritePayload {
 public:
-	CoalescedWritePayload(Context &context_p, deque<PendingWrite> writes_p, idx_t size_p)
-	    : context(context_p), writes(std::move(writes_p)), size(size_p) {
+	CoalescedWritePayload(ClientContext &client_context_p, deque<PendingWrite> writes_p, idx_t size_p)
+	    : client_context(client_context_p), writes(std::move(writes_p)), size(size_p) {
 	}
 
 	data_ptr_t Ptr() override {
@@ -967,7 +988,7 @@ public:
 			return writes.front().payload->Ptr();
 		}
 		if (!coalesced.get()) {
-			coalesced = BufferAllocator::Get(context).Allocate(size);
+			coalesced = BufferAllocator::Get(client_context).Allocate(size);
 			idx_t offset = 0;
 			for (auto &write : writes) {
 				auto current_size = write.Size();
@@ -986,7 +1007,7 @@ public:
 	}
 
 private:
-	Context &context;
+	ClientContext &client_context;
 	deque<PendingWrite> writes;
 	AllocatedData coalesced;
 	idx_t size;
@@ -1020,8 +1041,9 @@ private:
 	idx_t size;
 };
 
-ManagedAsyncWriteStreamQueue::ManagedAsyncWriteStreamQueue(Context &context_p, ManagedAsyncWriteStreamTarget &target_p)
-    : context(context_p), target(target_p) {
+ManagedAsyncWriteStreamQueue::ManagedAsyncWriteStreamQueue(ClientContext &client_context_p,
+                                                           ManagedAsyncWriteStreamTarget &target_p)
+    : client_context(client_context_p), target(target_p) {
 	auto local_file = target.IsLocalFile();
 	coalesce_threshold =
 	    local_file ? AsyncWriteConfig::LOCAL_COALESCE_THRESHOLD : AsyncWriteConfig::REMOTE_COALESCE_THRESHOLD;
@@ -1029,7 +1051,7 @@ ManagedAsyncWriteStreamQueue::ManagedAsyncWriteStreamQueue(Context &context_p, M
 	drain_task_byte_budget = MaxValue(AsyncWriteConfig::DRAIN_TASK_BYTE_BUDGET, coalesce_threshold);
 	limit_coalesced_write_size = local_file;
 
-	auto &scheduler = context.GetTaskScheduler();
+	auto &scheduler = TaskScheduler::GetScheduler(client_context);
 	auto async_threads = scheduler.NumberOfAsyncThreads();
 
 	write_mode = target.GetWriteMode();
@@ -1040,7 +1062,7 @@ ManagedAsyncWriteStreamQueue::ManagedAsyncWriteStreamQueue(Context &context_p, M
 	}
 
 	AsyncWriteTarget &async_target = *this;
-	write_queue = make_uniq<ManagedAsyncWriteQueue>(context, async_target);
+	write_queue = make_uniq<ManagedAsyncWriteQueue>(client_context, async_target);
 }
 
 ManagedAsyncWriteStreamQueue::~ManagedAsyncWriteStreamQueue() {
@@ -1319,8 +1341,10 @@ bool ManagedAsyncWriteStreamQueue::TakePendingWriteRequest(AsyncWriteRequest &re
 	}
 
 	idx_t selected_bytes = 0;
-	// The queued-byte threshold was checked above; a small prefix may precede a large zero-copy payload.
 	auto end = SelectPhysicalWriteEnd(0, selected_bytes);
+	if (policy == SchedulePolicy::THRESHOLD && selected_bytes < first_task_schedule_threshold) {
+		return false;
+	}
 
 	auto write_offset = pending_writes.front().offset;
 	unique_ptr<AsyncWritePayload> payload;
@@ -1358,7 +1382,7 @@ unique_ptr<AsyncWritePayload> ManagedAsyncWriteStreamQueue::CreatePayload(deque<
 	if (writes.size() == 1) {
 		return std::move(writes.front().payload);
 	}
-	return make_uniq<CoalescedWritePayload>(context, std::move(writes), size);
+	return make_uniq<CoalescedWritePayload>(client_context, std::move(writes), size);
 }
 
 unique_ptr<AsyncWritePayload> ManagedAsyncWriteStreamQueue::CreateMaterializedPayload(idx_t end, idx_t size) {
@@ -1379,7 +1403,7 @@ unique_ptr<AsyncWritePayload> ManagedAsyncWriteStreamQueue::CreateMaterializedPa
 		return std::move(result);
 	}
 
-	auto data = BufferAllocator::Get(context).Allocate(size);
+	auto data = BufferAllocator::Get(client_context).Allocate(size);
 	idx_t data_offset = 0;
 	for (idx_t write_idx = 0; write_idx < end; write_idx++) {
 		auto &write = pending_writes[write_idx];
@@ -1603,7 +1627,7 @@ void ManagedAsyncWriteStreamQueue::Close() {
 
 void ManagedAsyncWriteStreamQueue::AbortWrites() {
 	std::exception_ptr error;
-	unique_lock<mutex> submission_guard(submission_lock);
+	lock_guard<mutex> submission_guard(submission_lock);
 	idx_t discarded_bytes;
 	shared_ptr<const ErrorData> local_error_ref;
 	{
@@ -1620,8 +1644,6 @@ void ManagedAsyncWriteStreamQueue::AbortWrites() {
 		local_error_ref = local_error;
 	}
 	write_queue->DiscardExternalPendingBytes(discarded_bytes);
-	// After closing and discarding, release the lock before draining completions that may be waiting to refill.
-	submission_guard.unlock();
 	try {
 		write_queue->AbortWrites();
 	} catch (...) {

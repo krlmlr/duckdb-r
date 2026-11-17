@@ -18,7 +18,6 @@
 namespace duckdb {
 class MultiFileList;
 class NodeStatistics;
-class Context;
 class LogicalGet;
 class TableFilterSet;
 struct MultiFileDynamicPushdownInfo;
@@ -74,6 +73,7 @@ public:
 };
 
 struct MultiFilePushdownInfo {
+	explicit MultiFilePushdownInfo(LogicalGet &get);
 	MultiFilePushdownInfo(TableIndex table_index, const vector<Identifier> &column_names,
 	                      const vector<ColumnIndex> &column_indexes, ExtraOperatorInfo &extra_info);
 
@@ -103,10 +103,6 @@ public:
 	OpenFileInfo GetFirstFile() const;
 	//! Syntactic sugar for GetExpandResult() == FileExpandResult::NO_FILES
 	bool IsEmpty() const;
-	//! The average row count of the files that are available without further I/O (FileIsAvailable), each estimated
-	//! from the "file_size" its extended info carries at bytes_per_row, and at least one row. Invalid when there is no
-	//! such file, or when one of them has no file_size
-	optional_idx EstimateRowsPerFile(idx_t bytes_per_row) const;
 
 	//! Virtual functions for subclasses
 public:
@@ -115,7 +111,7 @@ public:
 	                                                        vector<unique_ptr<Expression>> &filters) const;
 	virtual unique_ptr<MultiFileList> DynamicFilterPushdown(MultiFileDynamicPushdownInfo &dynamic_pushdown_info) const;
 
-	virtual vector<OpenFileInfo> GetAllFiles() const;
+	virtual vector<OpenFileInfo> GetAllFiles() const = 0;
 	virtual FileExpandResult GetExpandResult() const = 0;
 	//! Get the total file count - forces all files to be expanded / known so the exact count can be computed
 	virtual idx_t GetTotalFileCount() const = 0;
@@ -170,7 +166,7 @@ protected:
 //! Lazily expanded MultiFileList
 class LazyMultiFileList : public MultiFileList {
 public:
-	explicit LazyMultiFileList(optional_ptr<Context> context);
+	explicit LazyMultiFileList(optional_ptr<ClientContext> context);
 
 	vector<OpenFileInfo> GetAllFiles() const override;
 	FileExpandResult GetExpandResult() const override;
@@ -193,7 +189,7 @@ protected:
 	mutable vector<OpenFileInfo> expanded_files;
 	//! Whether or not all files have been expanded
 	mutable bool all_files_expanded = false;
-	optional_ptr<Context> services;
+	optional_ptr<ClientContext> context;
 };
 
 //! MultiFileList that takes a list of globs and resolves all of the globs lazily into files

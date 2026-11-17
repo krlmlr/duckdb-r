@@ -60,8 +60,6 @@ public:
 	inline idx_t ColumnCount() const {
 		return data.size();
 	}
-	//! The number of rows the vectors of this chunk were initialized to hold
-	DUCKDB_API idx_t GetCapacity() const;
 	//! Verify all child vectors have the expected cardinality
 	void CheckCardinality(idx_t count_p);
 	//! Sets the cardinality of all child vectors of this chunk
@@ -105,8 +103,8 @@ public:
 	//! Initializes a DataChunk with the given types and without any vector data allocation.
 	DUCKDB_API void InitializeEmpty(const vector<LogicalType> &types);
 
-	//! Initializes typed storage, allocating payloads on first mutable access.
-	//! An initialize mask can leave individual columns without storage.
+	//! Initializes a DataChunk with the given types. Then, if the corresponding boolean in the initialize-vector is
+	//! true, it initializes the vector for that data type.
 	DUCKDB_API void Initialize(ClientContext &context, const vector<LogicalType> &types,
 	                           idx_t capacity = STANDARD_VECTOR_SIZE);
 	DUCKDB_API void Initialize(Allocator &allocator, const vector<LogicalType> &types,
@@ -157,7 +155,9 @@ public:
 	//! Slice a DataChunk from "offset" to "offset + count"
 	DUCKDB_API void Slice(idx_t offset, idx_t count);
 
-	//! Clears the batch and restores owned storage, retaining reusable allocations.
+	//! Resets the DataChunk to its state right after the DataChunk::Initialize
+	//! function was called. This sets the count to 0, the capacity to initial_capacity and resets each member
+	//! Vector to point back to the data owned by this DataChunk.
 	DUCKDB_API void Reset();
 
 	DUCKDB_API void Serialize(Serializer &serializer, bool compressed_serialization = true) const;

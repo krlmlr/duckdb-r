@@ -24,24 +24,6 @@ bool TryEvaluateAtConstants(ClientContext &context, const BoundFunctionExpressio
 	return ExpressionExecutor::TryEvaluateScalar(context, *clone, result);
 }
 
-// Whether [lo, hi] holds -infinity and another value. The smallest finite DATE or TIMESTAMP sorts below -infinity.
-bool HoldsNegativeInfinity(const Value &lo, const Value &hi) {
-	switch (lo.type().id()) {
-	case LogicalTypeId::DATE:
-	case LogicalTypeId::TIMESTAMP:
-	case LogicalTypeId::TIMESTAMP_SEC:
-	case LogicalTypeId::TIMESTAMP_MS:
-	case LogicalTypeId::TIMESTAMP_NS:
-	case LogicalTypeId::TIMESTAMP_TZ:
-	case LogicalTypeId::TIMESTAMP_TZ_NS: {
-		auto ninfinity = Value::NegativeInfinity(lo.type());
-		return lo < hi && lo <= ninfinity && ninfinity <= hi;
-	}
-	default:
-		return false;
-	}
-}
-
 // Equal bounds need not imply identical inputs for certain types, so we skip this optimization for those values.
 // Floating-point bounds only lose information for the sign of zero.
 bool CanInferConstantFromNumericBounds(const Value &value) {
@@ -58,12 +40,7 @@ bool CanInferConstantFromNumericBounds(const Value &value) {
 }
 
 bool TryInferConstantBounds(const BaseStatistics &stats, Value &constant) {
-	if (stats.CanHaveNull() && !stats.CanHaveNoNull()) {
-		constant = Value(stats.GetType());
-		return true;
-	}
-	// bounds of empty stats do not describe any actual value
-	if (stats.CanHaveNull() || !stats.CanHaveNoNull()) {
+	if (stats.CanHaveNull()) {
 		return false;
 	}
 	if (stats.GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(stats)) {
@@ -89,7 +66,7 @@ bool TryInferConstantBounds(const BaseStatistics &stats, Value &constant) {
 unique_ptr<BaseStatistics> StatisticsPropagator::PropagateConstantInputs(ClientContext &context,
                                                                          const BoundFunctionExpression &func,
                                                                          const vector<BaseStatistics> &child_stats) {
-	if (func.Function().GetStability() == FunctionStability::VOLATILE || func.GetChildren().empty()) {
+	if (func.Function().GetStability() != FunctionStability::CONSISTENT || func.GetChildren().empty()) {
 		return nullptr;
 	}
 	// Lambda arguments are placeholders, not SQL values that can be evaluated independently.
@@ -126,11 +103,10 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateMonotoneBounds(ClientC
 	if (!func.Function().HasArgProperties() || func.GetChildren().empty()) {
 		return nullptr;
 	}
-	if (func.Function().GetStability() == FunctionStability::VOLATILE) {
+	if (func.Function().GetStability() != FunctionStability::CONSISTENT) {
 		return nullptr;
 	}
-	const auto result_stats_type = BaseStatistics::GetStatsType(func.GetReturnType());
-	if ((result_stats_type != StatisticsType::NUMERIC_STATS && result_stats_type != StatisticsType::BIGNUM_STATS) ||
+	if (BaseStatistics::GetStatsType(func.GetReturnType()) != StatisticsType::NUMERIC_STATS ||
 	    func.GetReturnType().InternalType() == PhysicalType::BOOL) {
 		return nullptr;
 	}
@@ -159,12 +135,11 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateMonotoneBounds(ClientC
 		if (cs.CanHaveNull()) {
 			output_can_have_null = true;
 		}
-		if ((cs.GetStatsType() != StatisticsType::NUMERIC_STATS && cs.GetStatsType() != StatisticsType::BIGNUM_STATS) ||
-		    !HasNumericMinMax(cs)) {
+		if (cs.GetStatsType() != StatisticsType::NUMERIC_STATS || !NumericStats::HasMinMax(cs)) {
 			return nullptr;
 		}
-		Value lo = NumericMin(cs);
-		Value hi = NumericMax(cs);
+		Value lo = NumericStats::Min(cs);
+		Value hi = NumericStats::Max(cs);
 
 		if (!IsKnownMonotonic(m)) {
 			return nullptr;
@@ -210,31 +185,19 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateMonotoneBounds(ClientC
 		return nullptr;
 	}
 	if (out_hi < out_lo) {
-		throw InternalException("Monotonic arg annotation violated for %s: output min exceeds output max",
+		throw InternalException("Monotonic arg annotation violated for '%s': output min exceeds output max",
 		                        func.Function().GetName());
 	}
 
-	auto result = BaseStatistics::CreateEmpty(func.GetReturnType());
-	SetNumericMin(result, out_lo);
-	SetNumericMax(result, out_hi);
+	auto result = NumericStats::CreateEmpty(func.GetReturnType());
+	NumericStats::SetMin(result, out_lo);
+	NumericStats::SetMax(result, out_hi);
 
 	result.Set(StatsInfo::CAN_HAVE_VALID_VALUES);
 	if (output_can_have_null) {
 		result.Set(StatsInfo::CAN_HAVE_NULL_VALUES);
 	}
 	return result.ToUnique();
-}
-
-unique_ptr<BaseStatistics> StatisticsPropagator::PropagateFiniteMonotoneBounds(ClientContext &context,
-                                                                               FunctionStatisticsInput &input) {
-	// -infinity gives NULL, and it can lie between the bounds of an argument
-	for (auto &stats : input.child_stats) {
-		if (stats.GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(stats) &&
-		    HoldsNegativeInfinity(NumericStats::Min(stats), NumericStats::Max(stats))) {
-			return nullptr;
-		}
-	}
-	return PropagateMonotoneBounds(context, input.expr, input.child_stats);
 }
 
 unique_ptr<BaseStatistics> StatisticsPropagator::PropagateExpression(BoundFunctionExpression &func,
@@ -246,27 +209,14 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateExpression(BoundFuncti
 		return PropagateComparison(func, expr_ptr);
 	}
 	vector<BaseStatistics> stats;
-	stats.reserve(func.GetChildren().size());
-	bool has_invalidated_parameter = false;
-	for (auto &child : func.GetChildrenMutable()) {
-		auto stat = PropagateExpression(child);
-		// an invalidated parameter has no statistics until it is rebound at execution
-		if (child->GetExpressionType() == ExpressionType::VALUE_PARAMETER &&
-		    child->GetReturnType().id() == LogicalTypeId::SQLNULL) {
-			has_invalidated_parameter = true;
-		}
-		// neither does an input whose type depends on an unresolved parameter
-		if (!child->GetReturnType().IsComplete()) {
-			has_invalidated_parameter = true;
-		}
+	stats.reserve(func.GetChildrenMutable().size());
+	for (idx_t i = 0; i < func.GetChildrenMutable().size(); i++) {
+		auto stat = PropagateExpression(func.GetChildrenMutable()[i]);
 		if (!stat) {
-			stats.push_back(BaseStatistics::CreateUnknown(child->GetReturnType()));
+			stats.push_back(BaseStatistics::CreateUnknown(func.GetChildrenMutable()[i]->GetReturnType()));
 		} else {
 			stats.push_back(stat->Copy());
 		}
-	}
-	if (has_invalidated_parameter) {
-		return nullptr;
 	}
 	auto constant_stats = PropagateConstantInputs(context, func, stats);
 	if (constant_stats) {

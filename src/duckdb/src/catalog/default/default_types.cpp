@@ -48,20 +48,15 @@ LogicalType BindDefaultDecimalType(BindLogicalTypeInput &input) {
 }
 
 LogicalType BindDecimalType(BindLogicalTypeInput &input) {
-	auto width = input.modifiers[0].GetValue().GetValue<uint32_t>();
-	auto scale = input.modifiers[1].GetValue().GetValue<uint32_t>();
+	auto width = input.modifiers[0].GetValue().GetValue<uint8_t>();
+	auto scale = input.modifiers[1].GetValue().GetValue<uint8_t>();
 
-	if (width < 1) {
-		throw BinderException(input.GetLocation(0), "DECIMAL type width must be at least 1");
+	if (width < 1 || width > Decimal::MAX_WIDTH_DECIMAL) {
+		throw BinderException(input.GetLocation(0), "DECIMAL type width must be between 1 and %d",
+		                      Decimal::MAX_WIDTH_DECIMAL);
 	}
 	if (scale > width) {
 		throw BinderException(input.GetLocation(1), "DECIMAL type scale cannot be greater than width");
-	}
-	const auto limit = input.GetDecimalWidthLimit();
-	if (width > limit.width) {
-		throw BinderException(input.GetLocation(0),
-		                      "DECIMAL type width %u exceeds the maximum DECIMAL width of %u (%s)", width, limit.width,
-		                      limit.hint);
 	}
 	return LogicalType::DECIMAL(width, scale);
 }
@@ -70,8 +65,8 @@ void RegisterDecimalConstructors(TypeConstructorSet &set) {
 	set.AddFunction(TypeConstructor(TypeConstructor::Signature(), BindDefaultDecimalType));
 
 	auto signature = TypeConstructor::Signature();
-	signature.AddParameter("width", LogicalType::UINTEGER);
-	signature.AddParameter("scale", LogicalType::UINTEGER, Value::UINTEGER(0));
+	signature.AddParameter("width", LogicalType::UTINYINT);
+	signature.AddParameter("scale", LogicalType::UTINYINT, Value::UTINYINT(0));
 	set.AddFunction(TypeConstructor(std::move(signature), BindDecimalType));
 }
 
@@ -186,7 +181,13 @@ LogicalType BindEnumType(BindLogicalTypeInput &input) {
 	Vector enum_vector(LogicalType::VARCHAR, NumericCast<idx_t>(arguments.size()));
 	auto string_data = FlatVector::Writer<string_t>(enum_vector, arguments.size());
 
-	for (auto &arg : arguments) {
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx),
+			                      "ENUM type arguments cannot have names (argument %d has name \"%s\")", arg_idx + 1,
+			                      arg.GetName());
+		}
 		string_data.WriteValue(string_t(StringValue::Get(arg.GetValue())));
 	}
 
@@ -195,7 +196,7 @@ LogicalType BindEnumType(BindLogicalTypeInput &input) {
 
 void RegisterEnumConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddArgs("args", LogicalType::VARCHAR);
+	signature.SetVarArgs(LogicalType::VARCHAR);
 	set.AddFunction(TypeConstructor(std::move(signature), BindEnumType));
 }
 
@@ -242,11 +243,24 @@ void RegisterArrayConstructors(TypeConstructorSet &set) {
 LogicalType BindStructType(BindLogicalTypeInput &input) {
 	auto &arguments = input.modifiers;
 
+	identifier_set_t name_collision_set;
 	child_list_t<LogicalType> children;
 	children.reserve(arguments.size());
 
-	for (auto &arg : arguments) {
-		children.emplace_back(Identifier(arg.GetName()), TypeValue::GetType(arg.GetValue()));
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (!arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx), "STRUCT type arguments must have names");
+		}
+
+		auto name = Identifier(arg.GetName());
+		if (name_collision_set.find(name) != name_collision_set.end()) {
+			throw BinderException(input.GetLocation(arg_idx), "Duplicate STRUCT type argument name \"%s\"",
+			                      arg.GetName());
+		}
+		name_collision_set.insert(name);
+
+		children.emplace_back(std::move(name), TypeValue::GetType(arg.GetValue()));
 	}
 
 	return LogicalType::STRUCT(std::move(children));
@@ -254,7 +268,7 @@ LogicalType BindStructType(BindLogicalTypeInput &input) {
 
 void RegisterStructConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddKwargs("kwargs", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindStructType));
 }
 
@@ -264,7 +278,12 @@ void RegisterStructConstructors(TypeConstructorSet &set) {
 LogicalType BindTupleType(BindLogicalTypeInput &input) {
 	vector<LogicalType> children;
 	children.reserve(input.modifiers.size());
-	for (auto &arg : input.modifiers) {
+	for (idx_t arg_idx = 0; arg_idx < input.modifiers.size(); arg_idx++) {
+		auto &arg = input.modifiers[arg_idx];
+		if (arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx),
+			                      "TUPLE type arguments cannot have names - use STRUCT for named fields");
+		}
 		children.push_back(TypeValue::GetType(arg.GetValue()));
 	}
 	return LogicalType::TUPLE(std::move(children));
@@ -272,7 +291,7 @@ LogicalType BindTupleType(BindLogicalTypeInput &input) {
 
 void RegisterTupleConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddArgs("args", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindTupleType));
 }
 
@@ -307,8 +326,21 @@ LogicalType BindUnionType(BindLogicalTypeInput &input) {
 	}
 
 	child_list_t<LogicalType> children;
-	for (auto &arg : arguments) {
-		children.emplace_back(arg.GetName(), TypeValue::GetType(arg.GetValue()));
+	identifier_set_t name_collision_set;
+
+	for (idx_t arg_idx = 0; arg_idx < arguments.size(); arg_idx++) {
+		auto &arg = arguments[arg_idx];
+		if (!arg.HasName()) {
+			throw BinderException(input.GetLocation(arg_idx), "UNION type modifiers must have names");
+		}
+
+		auto &entry_name = arg.GetName();
+		if (name_collision_set.find(Identifier(entry_name)) != name_collision_set.end()) {
+			throw BinderException(input.GetLocation(arg_idx), "Duplicate UNION type member name \"%s\"", entry_name);
+		}
+		name_collision_set.insert(Identifier(entry_name));
+
+		children.emplace_back(entry_name, TypeValue::GetType(arg.GetValue()));
 	}
 
 	return LogicalType::UNION(std::move(children));
@@ -316,7 +348,7 @@ LogicalType BindUnionType(BindLogicalTypeInput &input) {
 
 void RegisterUnionConstructors(TypeConstructorSet &set) {
 	auto signature = TypeConstructor::Signature();
-	signature.AddKwargs("kwargs", LogicalType::TYPE());
+	signature.SetVarArgs(LogicalType::TYPE());
 	set.AddFunction(TypeConstructor(std::move(signature), BindUnionType));
 }
 
@@ -324,7 +356,7 @@ void RegisterUnionConstructors(TypeConstructorSet &set) {
 // VARIANT Type
 //----------------------------------------------------------------------------------------------------------------------
 LogicalType BindVariantType(BindLogicalTypeInput &input) {
-	// We need this function to make sure we always create a VARIANT type with LogicalTypeInfo
+	// We need this function to make sure we always create a VARIANT type with ExtraTypeInfo
 	return LogicalType::VARIANT();
 }
 
@@ -333,76 +365,48 @@ void RegisterVariantConstructors(TypeConstructorSet &set) {
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// GEOMETRY / GEOGRAPHY Types
+// GEOMETRY Type
 //----------------------------------------------------------------------------------------------------------------------
-static LogicalType BindDefaultGeoType(bool geography) {
-	return geography ? LogicalType::GEOGRAPHY() : LogicalType::GEOMETRY();
-}
-
 LogicalType BindDefaultGeometryType(BindLogicalTypeInput &input) {
-	return BindDefaultGeoType(false);
+	return LogicalType::GEOMETRY();
 }
 
-LogicalType BindDefaultGeographyType(BindLogicalTypeInput &input) {
-	return BindDefaultGeoType(true);
-}
-
-static LogicalType BindGeoType(BindLogicalTypeInput &input, bool geography) {
-	const char *type_name = geography ? "GEOGRAPHY" : "GEOMETRY";
-
+LogicalType BindGeometryType(BindLogicalTypeInput &input) {
 	// FIXME: Use extension/ClientContext to expand incomplete/shorthand CRS definitions
 	auto &crs = StringValue::Get(input.modifiers[0].GetValue());
 
 	if (!input.context) {
-		throw BinderException(input.query_location, "Cannot create %s type with coordinate system without a connection",
-		                      type_name);
+		throw BinderException(input.query_location,
+		                      "Cannot create GEOMETRY type with coordinate system without a connection");
 	}
 
 	const auto crs_result = CoordinateReferenceSystem::TryIdentify(*input.context, crs);
 	if (!crs_result) {
 		if (Settings::Get<IgnoreUnknownCrsSetting>(*input.context)) {
-			// Ignored by user configuration - return generic GEOMETRY/GEOGRAPHY type
-			return BindDefaultGeoType(geography);
+			// Ignored by user configuration - return generic GEOMETRY type
+			return LogicalType::GEOMETRY();
 		}
 
 		throw BinderException(
 		    input.GetLocation(0),
-		    "Encountered unrecognized coordinate system '%s' when trying to create %s type\n"
+		    "Encountered unrecognized coordinate system '%s' when trying to create GEOMETRY type\n"
 		    "The coordinate system definition may be incomplete or invalid. Your options are as follows:\n"
 		    "* Load an extension that can identify this coordinate system\n"
 		    "* Provide a full coordinate system definition in e.g. \"PROJJSON\" or \"WKT2\" format\n"
 		    "* Set the 'ignore_unknown_crs' configuration option to drop the coordinate system from the resulting "
-		    "type and make this error go away",
-		    crs, type_name);
+		    "geometry type and make this error go away",
+		    crs);
 	}
 
-	return geography ? LogicalType::GEOGRAPHY(crs_result->GetDefinition())
-	                 : LogicalType::GEOMETRY(crs_result->GetDefinition());
-}
-
-LogicalType BindGeometryType(BindLogicalTypeInput &input) {
-	return BindGeoType(input, false);
-}
-
-LogicalType BindGeographyType(BindLogicalTypeInput &input) {
-	return BindGeoType(input, true);
-}
-
-static void RegisterGeoConstructors(TypeConstructorSet &set, bind_logical_type_function_t bind_default,
-                                    bind_logical_type_function_t bind_with_crs) {
-	set.AddFunction(TypeConstructor(TypeConstructor::Signature(), bind_default));
-
-	auto signature = TypeConstructor::Signature();
-	signature.AddParameter("crs", LogicalType::VARCHAR);
-	set.AddFunction(TypeConstructor(std::move(signature), bind_with_crs));
+	return LogicalType::GEOMETRY(crs_result->GetDefinition());
 }
 
 void RegisterGeometryConstructors(TypeConstructorSet &set) {
-	RegisterGeoConstructors(set, BindDefaultGeometryType, BindGeometryType);
-}
+	set.AddFunction(TypeConstructor(TypeConstructor::Signature(), BindDefaultGeometryType));
 
-void RegisterGeographyConstructors(TypeConstructorSet &set) {
-	RegisterGeoConstructors(set, BindDefaultGeographyType, BindGeographyType);
+	auto signature = TypeConstructor::Signature();
+	signature.AddParameter("crs", LogicalType::VARCHAR);
+	set.AddFunction(TypeConstructor(std::move(signature), BindGeometryType));
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -418,7 +422,7 @@ struct DefaultType {
 	constructor_registration_t register_constructors;
 };
 
-using builtin_type_array = std::array<DefaultType, 84>;
+using builtin_type_array = std::array<DefaultType, 83>;
 
 const builtin_type_array BUILTIN_TYPES = {{{"decimal", LogicalTypeId::DECIMAL, RegisterDecimalConstructors},
                                            {"dec", LogicalTypeId::DECIMAL, RegisterDecimalConstructors},
@@ -502,7 +506,6 @@ const builtin_type_array BUILTIN_TYPES = {{{"decimal", LogicalTypeId::DECIMAL, R
                                            {"double", LogicalTypeId::DOUBLE, nullptr},
                                            {"float8", LogicalTypeId::DOUBLE, nullptr},
                                            {"geometry", LogicalTypeId::GEOMETRY, RegisterGeometryConstructors},
-                                           {"geography", LogicalTypeId::GEOGRAPHY, RegisterGeographyConstructors},
                                            {"type", LogicalTypeId::TYPE, nullptr}}};
 
 TypeConstructorSet GetConstructors(const DefaultType &entry, const Identifier &name) {

@@ -4,8 +4,6 @@
 
 #include "src/catalog/default/default_generator.cpp"
 
-#include "src/catalog/default/default_macro_qualifier.cpp"
-
 #include "src/catalog/default/default_schemas.cpp"
 
 #include "src/catalog/default/default_table_functions.cpp"

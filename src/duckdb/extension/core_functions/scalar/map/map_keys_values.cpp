@@ -52,7 +52,6 @@ static unique_ptr<BaseStatistics> MapValuesStats(ClientContext &, FunctionStatis
 	}
 	auto result = ListStats::CreateEmpty(input.expr.GetReturnType());
 	result.CopyValidity(input.child_stats[0]);
-	ListStats::SetLengthData(result, ListStats::GetLengthData(input.child_stats[0]));
 	ListStats::GetChildStats(result).Copy(StructStats::GetChildStats(entry_stats, 1));
 	return result.ToUnique();
 }

@@ -184,7 +184,6 @@ AggregateFunctionSet StringAggFun::GetFunctions() {
 	string_agg_param.SetSerializeCallback(StringAggSerialize);
 	string_agg_param.SetDeserializeCallback(StringAggDeserialize);
 	string_agg_param.SetStructStateExport(StringAggStateType);
-	string_agg_param.SetFallible(); // the update callback throws when the result exceeds the maximum string size
 	string_agg.AddFunction(string_agg_param);
 	string_agg_param.GetSignature().AddParameter("arg", LogicalType::VARCHAR);
 	string_agg.AddFunction(string_agg_param);

@@ -46,18 +46,7 @@ public:
 	}
 
 public:
-	VariantAnalyzeData &GetOrCreateField(const string_t &name) {
-		auto entry = fields.find(name);
-		if (entry != fields.end()) {
-			return entry->second;
-		}
-		return fields[field_names.AddBlob(name)];
-	}
-
-public:
-	case_insensitive_string_map_t<VariantAnalyzeData> fields;
-	//! Owns the keys of 'fields'
-	StringHeap field_names;
+	case_insensitive_map_t<VariantAnalyzeData> fields;
 };
 
 struct ArrayAnalyzeData {
@@ -83,14 +72,13 @@ public:
 class VariantColumnWriter : public StructColumnWriter {
 public:
 	VariantColumnWriter(ParquetWriter &writer, ParquetColumnSchema &&column_schema, vector<Identifier> schema_path_p,
-	                    vector<unique_ptr<ColumnWriter>> child_writers_p, bool auto_shred)
-	    : StructColumnWriter(writer, std::move(column_schema), std::move(schema_path_p), std::move(child_writers_p)),
-	      is_analyzed(!auto_shred) {
+	                    vector<unique_ptr<ColumnWriter>> child_writers_p)
+	    : StructColumnWriter(writer, std::move(column_schema), std::move(schema_path_p), std::move(child_writers_p)) {
 	}
 	~VariantColumnWriter() override = default;
 
 public:
-	idx_t FinalizeSchema(duckdb_parquet::SchemaElementList &schemas) override;
+	idx_t FinalizeSchema(vector<duckdb_parquet::SchemaElement> &schemas) override;
 	unique_ptr<ParquetAnalyzeSchemaState> AnalyzeSchemaInit() override;
 	void AnalyzeSchema(ParquetAnalyzeSchemaState &state, Vector &input, idx_t count) override;
 	void AnalyzeSchemaFinalize(const ParquetAnalyzeSchemaState &state) override;
@@ -112,22 +100,18 @@ public:
 		vector<unique_ptr<Expression>> arguments;
 		arguments.push_back(unique_ptr_cast<BoundReferenceExpression, Expression>(std::move(expr)));
 
-		BoundScalarFunction bound_func(GetTransformFunction(true));
+		BoundScalarFunction bound_func(GetTransformFunction());
 		bound_func.SetReturnType(TransformedType());
 
 		return make_uniq<BoundFunctionExpression>(std::move(bound_func), std::move(arguments), nullptr);
 	}
 
 public:
-	static LogicalType GetParquetVariantType(optional_ptr<LogicalType> shredding = nullptr);
-	static ScalarFunction GetTransformFunction(bool preserve_nulls = false);
-	//! 'variant_bytes_to_variant': decode a binary Variant value (metadata followed by value)
-	//! into a VARIANT. The inverse of 'variant_to_parquet_variant'.
-	static ScalarFunction GetBytesToVariantFunction();
+	static ScalarFunction GetTransformFunction();
 	static LogicalType TransformTypedValueRecursive(const LogicalType &type);
 
 private:
-	//! Whether the schema has been analyzed or explicitly specified
+	//! Whether the schema of the variant has been analyzed already
 	bool is_analyzed = false;
 	ShreddingType analyzed_shredding_type;
 };

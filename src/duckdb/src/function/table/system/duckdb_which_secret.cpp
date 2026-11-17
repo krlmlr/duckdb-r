@@ -67,14 +67,8 @@ void DuckDBWhichSecretFunction(ClientContext &context, TableFunctionInput &data_
 }
 
 void DuckDBWhichSecretFun::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction which_secret_fun("which_secret",
-	                               FunctionSignature()
-	                                   .AddPositionalOnly("path", LogicalType::VARCHAR)
-	                                   .AddPositionalOnly("type", LogicalType::VARCHAR),
-	                               DuckDBWhichSecretFunction, DuckDBWhichSecretBind, DuckDBWhichSecretInit);
-	// resolves against the live secret registry
-	which_secret_fun.stability = FunctionStability::VOLATILE;
-	set.AddFunction(std::move(which_secret_fun));
+	set.AddFunction(TableFunction("which_secret", {duckdb::LogicalType::VARCHAR, duckdb::LogicalType::VARCHAR},
+	                              DuckDBWhichSecretFunction, DuckDBWhichSecretBind, DuckDBWhichSecretInit));
 }
 
 } // namespace duckdb

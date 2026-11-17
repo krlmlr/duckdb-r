@@ -43,26 +43,10 @@ static void WriteShreddedDecimal(UnifiedVariantVectorData &variant, Vector &resu
 	}
 }
 
-//! Decimals wider than 38 digits are BIGNUM blobs
-static void WriteShreddedWideDecimal(UnifiedVariantVectorData &variant, Vector &result, const SelectionVector &sel,
-                                     const SelectionVector &value_index_sel, const SelectionVector &result_sel,
-                                     idx_t count) {
-	auto result_data = FlatVector::ScatterWriter<string_t>(result);
-	for (idx_t i = 0; i < count; i++) {
-		auto row = sel[i];
-		auto result_row = result_sel[i];
-		auto value_index = value_index_sel[i];
-		D_ASSERT(variant.RowIsValid(row) && variant.GetTypeId(row, value_index) == VariantLogicalType::DECIMAL);
-
-		result_data[result_row] = VariantUtils::DecodeWideDecimalData(variant, row, value_index);
-	}
-}
-
 #ifdef D_ASSERT_IS_ENABLED
 static bool IsVariantStringType(VariantLogicalType type_id) {
 	switch (type_id) {
 	case VariantLogicalType::GEOMETRY:
-	case VariantLogicalType::GEOGRAPHY:
 	case VariantLogicalType::BITSTRING:
 	case VariantLogicalType::BLOB:
 	case VariantLogicalType::VARCHAR:
@@ -158,9 +142,6 @@ void VariantShredding::WriteTypedPrimitiveValues(UnifiedVariantVectorData &varia
 		case PhysicalType::INT128:
 			WriteShreddedDecimal<hugeint_t>(variant, result, sel, value_index_sel, result_sel, count);
 			break;
-		case PhysicalType::VARCHAR:
-			WriteShreddedWideDecimal(variant, result, sel, value_index_sel, result_sel, count);
-			break;
 		default:
 			throw InvalidInputException("Can't shred on column of type '%s'", type.ToString());
 		}
@@ -169,7 +150,6 @@ void VariantShredding::WriteTypedPrimitiveValues(UnifiedVariantVectorData &varia
 	case LogicalTypeId::BLOB:
 	case LogicalTypeId::BIGNUM:
 	case LogicalTypeId::GEOMETRY:
-	case LogicalTypeId::GEOGRAPHY:
 	case LogicalTypeId::BIT:
 	case LogicalTypeId::VARCHAR: {
 		WriteShreddedString(variant, result, sel, value_index_sel, result_sel, count);
@@ -355,13 +335,6 @@ void VariantShredding::WriteTypedValues(UnifiedVariantVectorData &variant, Vecto
 
 VariantShreddingState::VariantShreddingState(const LogicalType &type, idx_t total_count)
     : type(type), shredded_sel(total_count), values_index_sel(total_count), result_sel(total_count) {
-	if (type.id() != LogicalTypeId::STRUCT) {
-		return;
-	}
-	for (auto &entry : StructType::GetChildTypes(type)) {
-		auto &name = entry.first.GetIdentifierName();
-		object_fields.emplace(name.c_str(), UnsafeNumericCast<uint32_t>(name.size()));
-	}
 }
 
 bool VariantShreddingState::ValueIsShredded(UnifiedVariantVectorData &variant, idx_t row, uint32_t values_index) {
@@ -370,10 +343,10 @@ bool VariantShreddingState::ValueIsShredded(UnifiedVariantVectorData &variant, i
 		return false;
 	}
 	if (type_id == VariantLogicalType::DECIMAL) {
-		// the shredded column stores the unscaled value, so it only holds decimals of its scale that fit its width
+		auto physical_type = type.InternalType();
 		auto decimal_data = VariantUtils::DecodeDecimalData(variant, row, values_index);
-		return type.InternalType() == decimal_data.GetPhysicalType() &&
-		       decimal_data.scale == DecimalType::GetScale(type) && decimal_data.width <= DecimalType::GetWidth(type);
+		auto decimal_physical_type = decimal_data.GetPhysicalType();
+		return physical_type == decimal_physical_type;
 	}
 	return true;
 }
@@ -385,9 +358,14 @@ void VariantShreddingState::SetShredded(uint32_t row, uint32_t values_index, uin
 	count++;
 }
 
-const string_set_t &VariantShreddingState::ObjectFields() const {
+unordered_set<string> VariantShreddingState::ObjectFields() const {
 	D_ASSERT(type.id() == LogicalTypeId::STRUCT);
-	return object_fields;
+	unordered_set<string> res;
+	auto &child_types = StructType::GetChildTypes(type);
+	for (auto &entry : child_types) {
+		res.emplace(entry.first.GetIdentifierName());
+	}
+	return res;
 }
 
 } // namespace duckdb

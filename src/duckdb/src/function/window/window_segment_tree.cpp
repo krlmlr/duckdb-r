@@ -1,6 +1,5 @@
 #include "duckdb/function/window/window_segment_tree.hpp"
 
-#include "duckdb/common/error_data.hpp"
 #include "duckdb/function/window/window_aggregate_states.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
 
@@ -16,13 +15,12 @@ bool WindowSegmentTree::CanAggregate(const BoundWindowExpression &wexpr) {
 		return false;
 	}
 
-	auto &aggr = *wexpr.AggregateFunction();
-	if (!aggr.CanAggregate()) {
+	if (!wexpr.AggregateFunction()->CanAggregate()) {
 		return false;
 	}
 
-	//	Don't use segment trees for custom windowing or holistic aggregates
-	if (aggr.CanWindow() || aggr.IsHolistic()) {
+	//	Don't use segment trees for custom windowing
+	if (wexpr.AggregateFunction()->CanWindow()) {
 		return false;
 	}
 
@@ -53,11 +51,6 @@ public:
 	unique_ptr<AtomicCounters> build_started;
 	//! The number of entries completed so far at each level
 	unique_ptr<AtomicCounters> build_completed;
-	//! Whether building an entry failed - the level being built will then never be completed
-	std::atomic<bool> build_failed;
-	//! The error that made building an entry fail
-	mutex build_lock;
-	ErrorData build_error;
 	//! The tree allocators.
 	//! We need to hold onto them for the tree lifetime,
 	//! not the lifetime of the local state that constructed part of the tree
@@ -88,8 +81,6 @@ public:
 	                        data_ptr_t current_state);
 	//! Writes result and calls destructors
 	void Finalize(Vector &result, idx_t count);
-	//! Calls the destructors of the live accumulation states (statef) without finalizing
-	void Destroy();
 
 	void Combine(WindowSegmentTreePart &other, idx_t count);
 
@@ -141,8 +132,6 @@ public:
 	Vector statef;
 	//! Count of buffered values
 	idx_t flush_count;
-	//! Number of initialized accumulation states that have not been destroyed yet
-	idx_t live_count;
 	//! Cache of right side tree ranges for ordered aggregates
 	vector<RightEntry> right_stack;
 };
@@ -175,7 +164,7 @@ WindowSegmentTreePart::WindowSegmentTreePart(ArenaAllocator &allocator, const Ag
       order_insensitive(aggr.function.GetOrderDependent() == AggregateOrderDependent::NOT_ORDER_DEPENDENT),
       filter_mask(filter_mask), state_size(aggr.function.GetStateSize(aggr.GetFunctionData())),
       state(state_size * STANDARD_VECTOR_SIZE), cursor(std::move(cursor_p)), statep(LogicalType::POINTER),
-      statel(LogicalType::POINTER), statef(LogicalType::POINTER), flush_count(0), live_count(0) {
+      statel(LogicalType::POINTER), statef(LogicalType::POINTER), flush_count(0) {
 	auto &inputs = cursor->chunk;
 	if (inputs.ColumnCount() > 0) {
 		leaves.Initialize(Allocator::DefaultAllocator(), inputs.GetTypes());
@@ -195,8 +184,6 @@ WindowSegmentTreePart::WindowSegmentTreePart(ArenaAllocator &allocator, const Ag
 }
 
 WindowSegmentTreePart::~WindowSegmentTreePart() {
-	// destroy any states left live by an exception during evaluation
-	Destroy();
 }
 
 unique_ptr<GlobalSinkState> WindowSegmentTree::GetGlobalState(ClientContext &context, idx_t group_count,
@@ -241,17 +228,10 @@ void WindowSegmentTreePart::ExtractFrame(idx_t begin, idx_t end, data_ptr_t stat
 	//	Otherwise set it to the input rows that pass the filter
 	auto states = FlatVector::GetDataMutable<data_ptr_t>(statep);
 	if (filter_mask.CannotHaveNull()) {
-		auto offset = cursor->RowOffset(begin);
-		idx_t remaining = count;
-		while (remaining > 0) {
-			const auto batch_count = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - flush_count);
-			for (idx_t i = 0; i < batch_count; ++i) {
-				states[flush_count + i] = state_ptr;
-				filter_sel.set_index(flush_count + i, offset + i);
-			}
-			flush_count += batch_count;
-			offset += batch_count;
-			remaining -= batch_count;
+		const auto offset = cursor->RowOffset(begin);
+		for (idx_t i = 0; i < count; ++i) {
+			states[flush_count] = state_ptr;
+			filter_sel.set_index(flush_count++, offset + i);
 			if (flush_count >= STANDARD_VECTOR_SIZE) {
 				FlushStates(false);
 			}
@@ -314,18 +294,6 @@ void WindowSegmentTreePart::Finalize(Vector &result, idx_t count) {
 	if (aggr.function.HasStateDestructorCallback()) {
 		aggr.function.GetStateDestructorCallback()(statef, aggr_input_data, count);
 	}
-	live_count = 0;
-}
-
-void WindowSegmentTreePart::Destroy() {
-	if (!live_count) {
-		return;
-	}
-	if (aggr.function.HasStateDestructorCallback()) {
-		AggregateFinalizeInputData aggr_input_data(aggr, allocator);
-		aggr.function.GetStateDestructorCallback()(statef, aggr_input_data, live_count);
-	}
-	live_count = 0;
 }
 
 WindowSegmentTreeGlobalState::WindowSegmentTreeGlobalState(ClientContext &client, const WindowSegmentTree &aggregator,
@@ -363,7 +331,6 @@ WindowSegmentTreeGlobalState::WindowSegmentTreeGlobalState(ClientContext &client
 
 	// Start by building from the bottom level
 	build_level = 0;
-	build_failed = false;
 
 	build_started = make_uniq<AtomicCounters>(levels_flat_start.size());
 	for (auto &counter : *build_started) {
@@ -394,7 +361,7 @@ void WindowSegmentTreeLocalState::Finalize(ExecutionContext &context, WindowAggr
 	const auto &partition_offsets = gstate.partition_offsets;
 	idx_t combine_width = gstate.TREE_FANOUT;
 	idx_t combine_level = 0;
-	auto combine_begin = partition_offsets.rend();
+	auto combine_begin = partition_offsets.rbegin();
 	std::greater<idx_t> combine_cmp;
 
 	auto &levels_flat_native = gstate.levels_flat_native;
@@ -414,19 +381,13 @@ void WindowSegmentTreeLocalState::Finalize(ExecutionContext &context, WindowAggr
 		}
 		const idx_t build_count = (level_size + gstate.TREE_FANOUT - 1) / gstate.TREE_FANOUT;
 
-		// Keep adjacent leaves on the same cursor to reuse its pinned input chunk.
-		const idx_t build_batch =
-		    level_current == 0 ? MaxValue<idx_t>(1, STANDARD_VECTOR_SIZE / gstate.TREE_FANOUT) : 1;
-		const idx_t build_begin = (*gstate.build_started).at(level_current).fetch_add(build_batch);
-		if (build_begin >= build_count) {
+		// Build the next fan-in
+		const idx_t build_idx = (*gstate.build_started).at(level_current)++;
+		if (build_idx >= build_count) {
 			//	Nothing left at this level, so wait until other threads are done.
-			while (level_current == gstate.build_level.load() && !gstate.build_failed) {
+			//	Since we are only building TREE_FANOUT values at a time, this will be quick.
+			while (level_current == gstate.build_level.load()) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			}
-			if (gstate.build_failed) {
-				// another thread failed to build its part of the level, so the tree will never be complete
-				const lock_guard<mutex> guard(gstate.build_lock);
-				gstate.build_error.Throw();
 			}
 			continue;
 		}
@@ -434,46 +395,31 @@ void WindowSegmentTreeLocalState::Finalize(ExecutionContext &context, WindowAggr
 		//	Update the combine width to the current level.
 		for (; combine_level < level_current; ++combine_level) {
 			combine_width *= gstate.TREE_FANOUT;
-			combine_begin = partition_offsets.rend();
+			combine_begin = partition_offsets.rbegin();
 		}
 
-		const idx_t build_end = MinValue(build_begin + build_batch, build_count);
-		for (idx_t build_idx = build_begin; build_idx < build_end; ++build_idx) {
-			//	Check for crossing a partition boundary
-			//	Note that it is OK for a state to _start_ on a partition boundary
-			//	- it just shouldn't _contain_ one.
-			const idx_t combine_left = build_idx * combine_width;
-			const idx_t combine_right = MinValue(combine_left + combine_width, leaf_count);
-			combine_begin = std::lower_bound(partition_offsets.rbegin(), combine_begin, combine_left, combine_cmp);
-			auto combine_end =
-			    std::lower_bound(partition_offsets.rbegin(), combine_begin, combine_right - 1, combine_cmp);
-			const bool has_boundary = (combine_begin != combine_end);
-			combine_begin = combine_end;
+		//	Check for crossing a partition boundary
+		//	Note that it is OK for a state to _start_ on a partition boundary
+		//	- it just shouldn't _contain_ one.
+		const idx_t combine_left = build_idx * combine_width;
+		const idx_t combine_right = MinValue(combine_left + combine_width, leaf_count);
+		combine_begin = std::lower_bound(partition_offsets.rbegin(), combine_begin, combine_left, combine_cmp);
+		auto combine_end = std::lower_bound(partition_offsets.rbegin(), combine_begin, combine_right - 1, combine_cmp);
+		const bool has_boundary = (combine_begin != combine_end);
+		combine_begin = combine_end;
 
-			// compute the aggregate for this entry in the segment tree
-			if (!has_boundary) {
-				const idx_t pos = build_idx * gstate.TREE_FANOUT;
-				const idx_t levels_flat_offset = levels_flat_start[level_current] + build_idx;
-				auto state_ptr = levels_flat_native.GetStatePtr(levels_flat_offset);
-				try {
-					gtstate.WindowSegmentValue(gstate, level_current, pos,
-					                           MinValue(level_size, pos + gstate.TREE_FANOUT), state_ptr);
-					gtstate.FlushStates(level_current > 0);
-				} catch (std::exception &ex) {
-					// wake up the threads waiting for this level to be completed
-					{
-						const lock_guard<mutex> guard(gstate.build_lock);
-						gstate.build_error = ErrorData(ex);
-					}
-					gstate.build_failed = true;
-					throw;
-				}
-			}
+		// compute the aggregate for this entry in the segment tree
+		if (!has_boundary) {
+			const idx_t pos = build_idx * gstate.TREE_FANOUT;
+			const idx_t levels_flat_offset = levels_flat_start[level_current] + build_idx;
+			auto state_ptr = levels_flat_native.GetStatePtr(levels_flat_offset);
+			gtstate.WindowSegmentValue(gstate, level_current, pos, MinValue(level_size, pos + gstate.TREE_FANOUT),
+			                           state_ptr);
+			gtstate.FlushStates(level_current > 0);
 		}
 
 		//	If that was the last one, mark the level as complete.
-		const idx_t completed = build_end - build_begin;
-		const idx_t build_complete = (*gstate.build_completed).at(level_current).fetch_add(completed) + completed;
+		const idx_t build_complete = ++(*gstate.build_completed).at(level_current);
 		if (build_complete == build_count) {
 			gstate.build_level++;
 			continue;
@@ -519,10 +465,6 @@ void WindowSegmentTreeLocalState::Evaluate(ExecutionContext &context, const Wind
 
 		// 4. combine the buffer state into the Segment Tree State
 		part->Combine(*right_part, count);
-
-		// right_part's states are re-initialized on every chunk, so destroy them after combining to avoid leaking
-		// aggregate states that own heap memory (e.g. histogram, reservoir_quantile)
-		right_part->Destroy();
 	} else {
 		part->Evaluate(gtstate, window_begin, window_end, nullptr, result, count, row_idx, WindowSegmentTreePart::FULL);
 	}
@@ -550,11 +492,9 @@ void WindowSegmentTreePart::Evaluate(const WindowSegmentTreeGlobalState &tree, c
 }
 
 void WindowSegmentTreePart::Initialize(idx_t count) {
-	D_ASSERT(live_count == 0);
 	auto fdata = FlatVector::GetDataMutable<data_ptr_t>(statef);
 	AggregateStateInput state_input(aggr.function, aggr.GetFunctionData());
 	aggr.function.GetStateInitCallback()(state_input, fdata, count);
-	live_count = count;
 }
 
 void WindowSegmentTreePart::EvaluateUpperLevels(const WindowSegmentTreeGlobalState &tree, const idx_t *begins,

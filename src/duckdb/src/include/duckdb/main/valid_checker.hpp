@@ -14,7 +14,6 @@
 
 namespace duckdb {
 class AttachedDatabase;
-class ErrorData;
 class DatabaseInstance;
 class MetaTransaction;
 
@@ -27,8 +26,6 @@ public:
 	DUCKDB_API static ValidChecker &Get(MetaTransaction &transaction);
 
 	DUCKDB_API void Invalidate(string error);
-	//! Invalidate unless already invalidated, keeping the original error
-	DUCKDB_API void InvalidateIfValid(string error);
 	DUCKDB_API bool IsInvalidated();
 	DUCKDB_API string InvalidatedMessage();
 
@@ -36,8 +33,6 @@ public:
 	static bool IsInvalidated(T &o) {
 		return Get(o).IsInvalidated();
 	}
-	//! Invalidate the instance after a fatal error, unless an attached database already handled it (ScopeFatalError)
-	DUCKDB_API static void Invalidate(DatabaseInstance &db, const ErrorData &error);
 	template <class T>
 	static void Invalidate(T &o, string error) {
 		Get(o).Invalidate(std::move(error));

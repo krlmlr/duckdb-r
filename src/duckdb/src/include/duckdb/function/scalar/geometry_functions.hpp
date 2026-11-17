@@ -25,16 +25,6 @@ struct StGeomfromwkbFun {
 	static ScalarFunction GetFunction();
 };
 
-struct StGeogfromwkbFun {
-	static constexpr const char *Name = "st_geogfromwkb";
-	static constexpr const char *Parameters = "wkb";
-	static constexpr const char *Description = "Creates a geography from Well-Known Binary (WKB) representation, validating the canonical coordinate ranges";
-	static constexpr const char *Example = "ST_GeogFromWKB(X'01010000000000000000000000000000000000000000000000')";
-	static constexpr const char *Categories = "geometry";
-
-	static ScalarFunction GetFunction();
-};
-
 struct StAswkbFun {
 	static constexpr const char *Name = "st_aswkb";
 	static constexpr const char *Parameters = "geom";
@@ -42,7 +32,7 @@ struct StAswkbFun {
 	static constexpr const char *Example = "st_aswkb(ST_GeomFromWKB(X'01010000000000000000000000000000000000000000000000000'))";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 struct StAsbinaryFun {
@@ -58,7 +48,7 @@ struct StAstextFun {
 	static constexpr const char *Example = "ST_AsText(ST_GeomFromWKB(X'01010000000000000000000000000000000000000000000000'))";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 struct StAswktFun {
@@ -74,7 +64,7 @@ struct StIntersectsExtentFun {
 	static constexpr const char *Example = "'POINT(5 5)'::GEOMETRY && 'LINESTRING(0 0, 10 20)'::GEOMETRY;";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 struct StIntersectsExtentFunAlias {
@@ -90,7 +80,7 @@ struct StCrsFun {
 	static constexpr const char *Example = "";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 struct StSetcrsFun {
@@ -100,7 +90,7 @@ struct StSetcrsFun {
 	static constexpr const char *Example = "";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 struct VertexExtractFun {
@@ -110,7 +100,7 @@ struct VertexExtractFun {
 	static constexpr const char *Example = "vertex_extract('POINT(1 2 3)', 'Z')";
 	static constexpr const char *Categories = "geometry";
 
-	static ScalarFunctionSet GetFunctions();
+	static ScalarFunction GetFunction();
 };
 
 } // namespace duckdb

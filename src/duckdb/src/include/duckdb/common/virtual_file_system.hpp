@@ -37,8 +37,6 @@ public:
 	string GetVersionTag(FileHandle &handle) override;
 	FileType GetFileType(FileHandle &handle) override;
 	FileMetadata Stats(FileHandle &handle) override;
-	optional<FileMetadata> GetStatsIfExists(const OpenFileInfo &file,
-	                                        optional_ptr<FileOpener> opener = nullptr) override;
 
 	void Truncate(FileHandle &handle, int64_t new_size) override;
 
@@ -76,7 +74,6 @@ public:
 	std::string GetName() const override;
 
 	void SetDisabledFileSystems(const vector<string> &names) override;
-	vector<string> GetDisabledFileSystems() override;
 	bool SubSystemIsDisabled(const string &name) override;
 	bool IsDisabledForPath(const string &path) override;
 
@@ -112,8 +109,7 @@ private:
 	// Return nullptr if compression is not involved, throw exception if compression is requested but no usable
 	// filesystem gets registered.
 	optional_ptr<FileSystem> FindCompressionFileSystem(FileSystemRegistry &registry,
-	                                                   const FileCompressionType &compression, const string &path,
-	                                                   bool for_writing);
+	                                                   const FileCompressionType &compression, const string &path);
 
 private:
 	mutex registry_lock;

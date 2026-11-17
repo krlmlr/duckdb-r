@@ -12,7 +12,7 @@ TransformStep TransformStep::Child(TransformInput input) {
 	return TransformStep(input, nullptr);
 }
 
-TransformStep TransformStep::Complete(arena_ptr<TransformResultValue> result) {
+TransformStep TransformStep::Complete(unique_ptr<TransformResultValue> result) {
 	D_ASSERT(result);
 	return TransformStep(nullopt, std::move(result));
 }
@@ -21,71 +21,26 @@ optional<TransformInput> TransformStep::GetChild() {
 	return child;
 }
 
-arena_ptr<TransformResultValue> TransformStep::TakeResult() {
+unique_ptr<TransformResultValue> TransformStep::TakeResult() {
 	D_ASSERT(!child);
 	D_ASSERT(result);
 	return std::move(result);
 }
 
-TransformInput TransformInput::Unwrap() const {
-	if (GetRule()) {
-		return *this;
-	}
-	// choices, present optionals and unnamed single-child groups carry no rule: unwrap to the rule-boundary node
-	reference<ParseResult> target(parse_result);
-	while (!target.get().GetRule()) {
-		auto &node = target.get();
-		if (node.type == ParseResultType::CHOICE) {
-			target = node.Cast<ChoiceParseResult>().GetResult();
-		} else if (node.type == ParseResultType::OPTIONAL && node.Cast<OptionalParseResult>().HasResult()) {
-			target = node.Cast<OptionalParseResult>().GetResult();
-		} else if (node.type == ParseResultType::LIST && node.Name().empty() &&
-		           node.Cast<ListParseResult>().GetChildren().size() == 1) {
-			target = node.Cast<ListParseResult>().GetChild(0);
-		} else {
-			break;
-		}
-	}
-	auto &node = target.get();
-	if (!node.GetRule()) {
-		string description = ParseResultToString(node.type);
-		if (node.type == ParseResultType::OPTIONAL) {
-			description = "empty " + description;
-		}
-		if (!node.Name().empty()) {
-			description += " '" + node.Name() + "'";
-		}
-		throw NotImplementedException("Cannot transform %s parse node: no grammar rule is associated with it",
-		                              description);
-	}
-	return TransformInput(node);
-}
-
 GeneratedTransformProcess::GeneratedTransformProcess(PEGTransformer &transformer_p, TransformInput input,
                                                      const TransformFrameOps &info_p)
-    : parse_result(input.parse_result), info(info_p), child_results(transformer_p.process_allocator),
-      transformer(transformer_p), pending_children(transformer_p.process_allocator) {
+    : parse_result(input.parse_result), info(info_p), transformer(transformer_p) {
 	if (!info.initialize || !info.finalize) {
 		throw InternalException("Incomplete transformer process for rule '%s'", info.name);
 	}
 	info.initialize(transformer, *this);
 }
 
-void GeneratedTransformProcess::ThrowMissingResult(idx_t slot) const {
-	throw InternalException("Missing transformer result for slot %llu in rule '%s'", slot, info.name);
-}
-
-void GeneratedTransformProcess::ThrowUnexpectedResultType(idx_t slot) const {
-	throw InternalException("Unexpected transformer result type for slot %llu in rule '%s'", slot, info.name);
-}
-
 void GeneratedTransformProcess::ReserveChildSlots(idx_t count) {
 	child_results.resize(count);
-	// a rule pushes at most one child per slot, so the pending list never has to grow either
-	pending_children.reserve(count);
 }
 
-void GeneratedTransformProcess::SetChildResult(idx_t slot, arena_ptr<TransformResultValue> result) {
+void GeneratedTransformProcess::SetChildResult(idx_t slot, unique_ptr<TransformResultValue> result) {
 	if (slot >= child_results.size()) {
 		throw InternalException("Invalid transformer result slot %llu for rule '%s'", slot, info.name);
 	}
@@ -129,30 +84,30 @@ FinalizeTransformProcess::FinalizeTransformProcess(PEGTransformer &transformer_p
     : transformer(transformer_p), parse_result(parse_result_p), finalize(std::move(finalize_p)) {
 }
 
-TransformStep FinalizeTransformProcess::Resume(arena_ptr<TransformResultValue> child_result) {
+TransformStep FinalizeTransformProcess::Resume(unique_ptr<TransformResultValue> child_result) {
 	D_ASSERT(!completed);
 	D_ASSERT(!child_result);
 	auto result = finalize(transformer, parse_result);
 	if (!result) {
-		throw InternalException("Transformer for rule '%s' returned a nullptr", parse_result.Name());
+		throw InternalException("Transformer for rule '%s' returned a nullptr", parse_result.name);
 	}
 	completed = true;
 	return TransformStep::Complete(std::move(result));
 }
 
-arena_ptr<TransformProcess> CompiledGrammarRule::StartTransform(PEGTransformer &transformer,
-                                                                ParseResult &parse_result) const {
+unique_ptr<TransformProcess> CompiledGrammarRule::StartTransform(PEGTransformer &transformer,
+                                                                 ParseResult &parse_result) const {
 	if (!transform_process) {
-		throw NotImplementedException("No transform process found for rule '%s'", parse_result.Name());
+		throw NotImplementedException("No transform process found for rule '%s'", parse_result.name);
 	}
 	auto result = transform_process(transformer, parse_result);
 	if (!result) {
-		throw InternalException("Transform process factory for rule '%s' returned a nullptr", parse_result.Name());
+		throw InternalException("Transform process factory for rule '%s' returned a nullptr", parse_result.name);
 	}
 	return result;
 }
 
-TransformStep GeneratedTransformProcess::Resume(arena_ptr<TransformResultValue> child_result) {
+TransformStep GeneratedTransformProcess::Resume(unique_ptr<TransformResultValue> child_result) {
 	D_ASSERT(!completed);
 	D_ASSERT(child_result_slot.IsValid() == bool(child_result));
 	if (child_result) {
@@ -167,45 +122,20 @@ TransformStackFrame::TransformStackFrame(TransformInput input)
 }
 
 TransformStack::TransformStack(PEGTransformer &transformer_p) : transformer(transformer_p) {
-	frames.reserve(32);
-}
-
-TransformStack::~TransformStack() {
-	// release the expression depth of frames that remain after an exception
-	while (!frames.empty()) {
-		PopFrame();
-	}
 }
 
 void TransformStack::PushFrame(TransformInput input) {
-	// inline fast path: in-tree frames always carry a rule
-	frames.emplace_back(input.GetRule() ? input : input.Unwrap());
-	auto &frame = frames.back();
-	frame.process_arena_position = transformer.process_allocator.GetPosition();
-	auto weight = transformer.ExpressionDepthWeight(frame.rule, frame.parse_result);
-	if (weight) {
-		// recorded first: the frame is released (and the weight subtracted) when entering throws
-		frame.expression_depth_weight = weight;
-		transformer.EnterExpression(weight);
-	}
-}
-
-void TransformStack::PopFrame() {
-	const auto process_arena_position = frames.back().process_arena_position;
-	if (frames.back().expression_depth_weight) {
-		transformer.ExitExpression(frames.back().expression_depth_weight);
-	}
-	frames.pop_back();
-	transformer.process_allocator.Rewind(process_arena_position);
+	frames.emplace(input);
 }
 
 void TransformStack::InitializeFrame(TransformStackFrame &frame) {
-	// PushFrame unwraps every input to a rule-bearing node or throws
-	D_ASSERT(frame.rule);
+	if (!frame.rule) {
+		throw InternalException("No registered data exists for rule '%s'", frame.parse_result.name);
+	}
 	frame.process = frame.rule->StartTransform(transformer, frame.parse_result);
 }
 
-arena_ptr<TransformResultValue> TransformStack::ExecuteFrame(TransformStackFrame &frame) {
+unique_ptr<TransformResultValue> TransformStack::ExecuteFrame(TransformStackFrame &frame) {
 	if (!frame.process) {
 		InitializeFrame(frame);
 	}
@@ -219,20 +149,24 @@ arena_ptr<TransformResultValue> TransformStack::ExecuteFrame(TransformStackFrame
 	return nullptr;
 }
 
-arena_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
+unique_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
 	D_ASSERT(frames.empty());
+	if (!input.GetRule()) {
+		throw InternalException("No registered data exists for rule '%s'", input.parse_result.name);
+	}
 	PushFrame(input);
 	while (!frames.empty()) {
-		auto result = ExecuteFrame(frames.back());
+		auto &frame = frames.top();
+		auto result = ExecuteFrame(frame);
 		if (!result) {
 			continue;
 		}
-		transformer.SetResultLocation(frames.back().parse_result, *result);
-		PopFrame();
+		transformer.SetResultLocation(frame.parse_result, *result);
+		frames.pop();
 		if (frames.empty()) {
 			return result;
 		}
-		auto &parent = frames.back();
+		auto &parent = frames.top();
 		D_ASSERT(!parent.child_result);
 		parent.child_result = std::move(result);
 	}
@@ -247,81 +181,45 @@ string TransformStack::FormatStack() const {
 			result << "\n";
 		}
 		auto &parse_result = frames[i].parse_result;
-		result << "#" << i << " " << parse_result.Name();
-		auto offset = parse_result.GetOffset();
-		if (offset.IsValid()) {
-			result << " offset=" << offset.GetIndex();
+		result << "#" << i << " " << parse_result.name;
+		if (parse_result.offset.IsValid()) {
+			result << " offset=" << parse_result.offset.GetIndex();
 		}
 	}
 	return result.str();
 }
 #endif
 
-arena_ptr<TransformResultValue> PEGTransformer::TransformInternal(ParseResult &parse_result) {
-	TransformStack stack(*this);
-	return stack.Execute(TransformInput(parse_result));
-}
-
-//! The number of repeated elements directly in a rule's match: the links of an operator chain
-static idx_t CountChainLinks(ParseResult &parse_result) {
-	switch (parse_result.type) {
-	case ParseResultType::REPEAT:
-		return parse_result.Cast<RepeatParseResult>().GetChildren().size();
-	case ParseResultType::OPTIONAL: {
-		auto &optional = parse_result.Cast<OptionalParseResult>();
-		return optional.HasResult() ? CountChainLinks(optional.GetResultUnsafe()) : 0;
+unique_ptr<TransformResultValue> PEGTransformer::ExecuteRecursive(TransformInput input) {
+	auto rule = input.GetRule();
+	if (!rule) {
+		throw InternalException("No registered data exists for rule '%s'", input.parse_result.name);
 	}
-	case ParseResultType::LIST: {
-		idx_t links = 0;
-		for (auto &child : parse_result.Cast<ListParseResult>().GetChildren()) {
-			auto type = child.get().type;
-			if (type == ParseResultType::REPEAT || type == ParseResultType::OPTIONAL) {
-				links += CountChainLinks(child.get());
-			}
+	auto process = rule->StartTransform(*this, input.parse_result);
+	unique_ptr<TransformResultValue> child_result;
+	while (true) {
+		auto step = process->Resume(std::move(child_result));
+		auto child = step.GetChild();
+		if (!child) {
+			auto result = step.TakeResult();
+			SetResultLocation(input.parse_result, *result);
+			return result;
 		}
-		return links;
-	}
-	default:
-		return 0;
+		child_result = ExecuteRecursive(*child);
 	}
 }
 
-idx_t PEGTransformer::ExpressionDepthWeight(optional_ptr<const CompiledGrammarRule> rule, ParseResult &parse_result) {
+unique_ptr<TransformResultValue> PEGTransformer::TransformInternal(ParseResult &parse_result) {
+	auto rule = parse_result.GetRule();
 	if (!rule) {
-		return 0;
+		throw InternalException("No registered data exists for rule '%s'", parse_result.name);
 	}
-	switch (rule->expression_depth) {
-	case ExpressionDepthKind::NESTING:
-		return 1;
-	case ExpressionDepthKind::CHAIN:
-		return CountChainLinks(parse_result);
-	default:
-		return 0;
+	TransformInput input {*rule, parse_result};
+	if (options.heap_based_parser) {
+		TransformStack stack(*this);
+		return stack.Execute(input);
 	}
-}
-
-void PEGTransformer::EnterExpression(idx_t weight) {
-	// the transformer does not recurse, but binding the resulting expressions does - reject them early
-	expression_depth += weight;
-	if (expression_depth > options.max_expression_depth) {
-		throw ParserException("Max expression depth limit of %lld exceeded. Use \"SET max_expression_depth TO x\" to "
-		                      "increase the maximum expression depth.",
-		                      options.max_expression_depth);
-	}
-}
-
-void PEGTransformer::ExitExpression(idx_t weight) {
-	D_ASSERT(expression_depth >= weight);
-	expression_depth -= weight;
-}
-
-const CompiledGrammarRule &PEGTransformer::GetRule(PEGRuleId rule_id) const {
-	auto rule = grammar.GetRule(rule_id);
-	if (!rule) {
-		auto rule_name = PEGRuleIdToString(rule_id);
-		throw InternalException("No registered data exists for rule '%s'", rule_name ? rule_name : "<runtime rule>");
-	}
-	return *rule;
+	return ExecuteRecursive(input);
 }
 
 const CompiledGrammarRule &PEGTransformer::GetRule(const string &rule_name) const {
@@ -333,7 +231,7 @@ const CompiledGrammarRule &PEGTransformer::GetRule(const string &rule_name) cons
 }
 
 void PEGTransformer::SetResultLocation(ParseResult &parse_result, TransformResultValue &result) {
-	if (!parse_result.GetOffset().IsValid()) {
+	if (!parse_result.offset.IsValid()) {
 		return;
 	}
 	auto expression_result = TryGetTransformResult<unique_ptr<ParsedExpression>>(result);
@@ -392,7 +290,6 @@ void PEGTransformer::Clear() {
 	ClearParameters();
 	pivot_entries.clear();
 	stored_cte_map.clear();
-	window_clauses.clear();
 }
 
 idx_t PEGTransformer::ParamCount() const {
@@ -493,13 +390,9 @@ bool PEGTransformer::IsWindowFrameDefault(WindowBoundary start, WindowBoundary e
 }
 
 unique_ptr<WindowExpression> PEGTransformer::GetWindowClause(const Identifier &window_name) {
-	if (window_clauses.empty()) {
-		throw ParserException("window %s does not exist", window_name);
-	}
-	auto &current_windows = window_clauses.back();
-	auto it = current_windows.find(window_name);
-	if (it == current_windows.end()) {
-		throw ParserException("window %s does not exist", window_name);
+	auto it = window_clauses.find(window_name);
+	if (it == window_clauses.end()) {
+		throw ParserException("window \"%s\" does not exist", window_name);
 	}
 	return unique_ptr_cast<ParsedExpression, WindowExpression>(it->second->Copy());
 }

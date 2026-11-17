@@ -52,9 +52,6 @@ public:
 	void CommitAlter(string &column_name, CommitDropState &drop_state);
 	void CommitDrop(CommitDropState &drop_state);
 
-	//! Returns the backing index OIDs of UNIQUE constraints that are not in prev_table.
-	vector<idx_t> GetAddedUniqueIndexOids(const DuckTableEntry &prev_table) const;
-
 	TableFunction GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) override;
 
 	vector<ColumnSegmentInfo>
@@ -68,9 +65,6 @@ public:
 
 	bool IsDuckTable() const override {
 		return true;
-	}
-	optional_ptr<DuckTableEntry> TryGetDuckTableEntry() override {
-		return this;
 	}
 
 	//! Returns the virtual columns for this table

@@ -65,7 +65,6 @@ public:
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParsedExpression> Deserialize(Deserializer &deserializer);
-	void FinalizeDeserialization(Deserializer &deserializer);
 
 private:
 	//! The syntax type.

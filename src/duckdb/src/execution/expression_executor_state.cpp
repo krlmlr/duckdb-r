@@ -4,7 +4,6 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
-#include "duckdb/storage/standard_buffer_manager.hpp"
 
 namespace duckdb {
 
@@ -23,28 +22,23 @@ void ExpressionState::Finalize() {
 	if (types.empty()) {
 		return;
 	}
-	auto &allocator = BufferAllocator::Get(GetContext());
-	intermediate_chunk.Initialize(allocator, types, initialize);
+	intermediate_chunk.Initialize(GetAllocator(), types, initialize);
 }
 
 Allocator &ExpressionState::GetAllocator() {
 	return root.executor->GetAllocator();
 }
 
-Context &ExpressionState::GetContext() {
-	return root.executor->GetContext();
+bool ExpressionState::HasContext() {
+	return root.executor->HasContext();
 }
 
-bool ExpressionState::HasClientContext() {
-	return root.executor->HasClientContext();
-}
-
-ClientContext &ExpressionState::GetClientContext() {
-	if (!HasClientContext()) {
+ClientContext &ExpressionState::GetContext() {
+	if (!HasContext()) {
 		throw BinderException("Cannot use %s in this context",
 		                      (expr.Cast<BoundFunctionExpression>()).Function().GetName());
 	}
-	return root.executor->GetClientContext();
+	return root.executor->GetContext();
 }
 
 ExpressionState::ExpressionState(const Expression &expr, ExpressionExecutorState &root) : expr(expr), root(root) {

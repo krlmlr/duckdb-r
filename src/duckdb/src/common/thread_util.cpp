@@ -5,18 +5,17 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/time_point.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/context.hpp"
 
 namespace duckdb {
 
 #ifndef DUCKDB_NO_THREADS
-void ThreadUtil::SleepMs(idx_t sleep_ms, optional_ptr<Context> context) {
+void ThreadUtil::SleepMs(idx_t sleep_ms, optional_ptr<ClientContext> context) {
 	auto start_time = TimePoint::Tick();
 	static constexpr idx_t DEFAULT_SLEEP_INTERVAL_MS = 100;
 
 	while (true) {
-		if (context) {
-			context->InterruptCheck();
+		if (context && context->IsInterrupted()) {
+			throw InterruptException();
 		}
 		auto elapsed_ms = static_cast<idx_t>(start_time.ElapsedMillis());
 		if (elapsed_ms >= sleep_ms) {
@@ -43,7 +42,7 @@ string ThreadUtil::GetThreadIdString() {
 
 #else
 
-void ThreadUtil::SleepMs(idx_t sleep_ms, optional_ptr<Context>) {
+void ThreadUtil::SleepMs(idx_t sleep_ms, optional_ptr<ClientContext>) {
 	throw InvalidInputException("ThreadUtil::SleepMs requires DuckDB to be compiled with thread support");
 }
 

@@ -6,24 +6,12 @@
 #include "rapi.hpp"
 #include "typesr.hpp"
 
-// Handbook: handbook/architecture/glue/threading/README.md
-
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
 #undef FALSE
 
 using namespace duckdb;
 using namespace cpp11;
-
-// R hands out a read-only view of a vector's payload (DATAPTR_RO()), and the
-// scan only ever reads through it -- but the pointer travels on as a
-// data_ptr_t, because that is what AppendAnyColumnSegment() takes and what
-// DataFrameScanBindData stores. Drop the qualifier once, here, rather than
-// with a C-style cast at every call site: -Wcast-qual then still catches an
-// unintended const removal anywhere else in the glue.
-static data_ptr_t ReadOnlyDataPtr(const void *ptr) {
-	return const_cast<data_ptr_t>(static_cast<const_data_ptr_t>(ptr));
-}
 
 static data_ptr_t GetColDataPtr(const RType &rtype, SEXP coldata) {
 	switch (rtype.id()) {
@@ -39,7 +27,7 @@ static data_ptr_t GetColDataPtr(const RType &rtype, SEXP coldata) {
 		// TODO What about factors that use numeric?
 		return (data_ptr_t)INTEGER_POINTER(coldata);
 	case RType::STRING:
-		return ReadOnlyDataPtr(DATAPTR_RO(coldata));
+		return (data_ptr_t)DATAPTR_RO(coldata);
 	case RType::TIMESTAMP:
 		return (data_ptr_t)NUMERIC_POINTER(coldata);
 	case RType::INTERVAL_SECONDS:
@@ -66,118 +54,15 @@ static data_ptr_t GetColDataPtr(const RType &rtype, SEXP coldata) {
 		return (data_ptr_t)INTEGER_POINTER(coldata);
 	case RType::LIST_OF_NULLS:
 	case RType::BLOB:
-		return ReadOnlyDataPtr(DATAPTR_RO(coldata));
+		return (data_ptr_t)DATAPTR_RO(coldata);
 	case RTypeId::LIST:
-		return ReadOnlyDataPtr(DATAPTR_RO(coldata));
+		return (data_ptr_t)DATAPTR_RO(coldata);
 	case RTypeId::MATRIX:
 	case RTypeId::STRUCT:
 		// Will bind child columns dynamically. Could also optimize by descending early and recording.
 		return (data_ptr_t)coldata;
 	default:
 		rapi_error_with_context("GetColDataPtr", "Unsupported column type for bind");
-	}
-}
-
-// Visit `coldata` and every vector the scan can reach through it, so that bind
-// can make sure the scan dereferences plain memory. GetColDataPtr() stops at the
-// packed types -- a struct column, a matrix, the cells of a list -- and what
-// reaches inside those runs on a task thread, where the R API is out of bounds.
-// Deliberately covers more than the scan reads; the leaf says why.
-// Stops at the first vector `visit` returns false for, and returns false then.
-static bool WalkColumn(SEXP coldata, bool (*visit)(SEXP)) {
-	switch (TYPEOF(coldata)) {
-	case LGLSXP:
-	case INTSXP:
-	case REALSXP:
-	case CPLXSXP:
-	case RAWSXP:
-	case STRSXP:
-	case VECSXP:
-		break;
-	default:
-		// Not a vector the scan reads; it reports that where it meets it
-		return true;
-	}
-
-	if (!visit(coldata)) {
-		return false;
-	}
-	if (TYPEOF(coldata) == VECSXP) {
-		auto cell_count = Rf_xlength(coldata);
-		for (R_xlen_t cell_idx = 0; cell_idx < cell_count; cell_idx++) {
-			if (!WalkColumn(VECTOR_ELT(coldata, cell_idx), visit)) {
-				return false;
-			}
-		}
-	}
-
-	// The `map_list_of` shape reads the names of a cell with STRING_ELT()
-	return WalkColumn(Rf_getAttrib(coldata, R_NamesSymbol), visit);
-}
-
-// Materialize `x` through the accessor GetColDataPtr() takes it with. Runs an ALTREP class's code.
-static bool TouchVector(SEXP x) {
-	switch (TYPEOF(x)) {
-	case LGLSXP:
-		(void)LOGICAL_POINTER(x);
-		break;
-	case INTSXP:
-		(void)INTEGER_POINTER(x);
-		break;
-	case REALSXP:
-		(void)NUMERIC_POINTER(x);
-		break;
-	default:
-		(void)DATAPTR_RO(x);
-		break;
-	}
-	return true;
-}
-
-// Whether `x` holds its payload in memory without an ALTREP class's code materializing it:
-// a plain vector does, an ALTREP vector when DATAPTR_OR_NULL() returns that payload,
-// which it tells without allocating, and an ALTREP list never, since VECTOR_ELT() runs its class's code.
-static bool IsInMemory(SEXP x) {
-	return !ALTREP(x) || (TYPEOF(x) != VECSXP && DATAPTR_OR_NULL(x));
-}
-
-struct TouchColumnsData {
-	SEXP df;
-	string error;
-};
-
-static SEXP TouchColumns(void *data_p) {
-	auto df = static_cast<TouchColumnsData *>(data_p)->df;
-	for (R_xlen_t col_idx = 0; col_idx < Rf_xlength(df); col_idx++) {
-		WalkColumn(VECTOR_ELT(df, col_idx), TouchVector);
-	}
-	return R_NilValue;
-}
-
-static SEXP TouchColumnsError(SEXP cond, void *data_p) {
-	auto &error = static_cast<TouchColumnsData *>(data_p)->error;
-	SEXP message = TYPEOF(cond) == VECSXP && Rf_xlength(cond) > 0 ? VECTOR_ELT(cond, 0) : R_NilValue;
-	if (TYPEOF(message) == STRSXP && Rf_xlength(message) > 0) {
-		error = CHAR(STRING_ELT(message, 0));
-	} else {
-		error = "Reading a column of the data frame failed with an R error";
-	}
-	return R_NilValue;
-}
-
-// Touching an ALTREP column runs its class's code, which reports a failure as an R error.
-// That error must not long-jump across the binder's frames: their destructors would not run,
-// and the client context lock and the interrupt handler would stay held for the rest of the session.
-// So it is caught here and rethrown as an exception, and so is any other jump, which is dropped.
-static void TouchColumnsOrThrow(SEXP df) {
-	TouchColumnsData data {df, string()};
-	try {
-		cpp11::unwind_protect([&]() { R_tryCatchError(TouchColumns, &data, TouchColumnsError, &data); });
-	} catch (cpp11::unwind_exception &) {
-		throw InvalidInputException("Reading a column of the data frame was interrupted");
-	}
-	if (!data.error.empty()) {
-		throw InvalidInputException(data.error);
 	}
 }
 
@@ -265,8 +150,8 @@ static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_d
 				SEXP value_sexp = VECTOR_ELT(val, j);
 				child_list_t<Value> kv;
 				kv.push_back({"key", Value(string(CHAR(nm)))});
-				if (value_sexp == R_NilValue || RApiTypes::GetVecSize(value_sexp, true) == 0) {
-					// A NULL or empty value writes a SQL NULL of the value type (handbook/usage/types/README.md)
+				if (value_sexp == R_NilValue) {
+					// Treat element NULL as a SQL NULL of the column's value type
 					kv.push_back({"value", Value()});
 				} else {
 					kv.push_back({"value", RApiTypes::SexpToValue(value_sexp, 0)});
@@ -279,7 +164,7 @@ static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_d
 }
 
 template <class SRC, class DST, class RTYPE>
-static inline void AppendMatrixSegmentAtomic(const SRC *src_ptr, int nrows, int ncols, idx_t sexp_offset,
+static inline void AppendMatrixSegmentAtomic(SRC *src_ptr, int nrows, int ncols, idx_t sexp_offset,
                                              Vector &child_vector, idx_t count) {
 	auto child_data = FlatVector::GetDataMutable<DST>(child_vector);
 	auto &child_mask = FlatVector::ValidityMutable(child_vector);
@@ -333,11 +218,11 @@ static void AppendMatrixColumnSegment(const RType &rtype, bool experimental, SEX
 	case RType::STRING: // STRSXP
 		if (experimental) {
 			D_ASSERT(result.GetType().id() == LogicalTypeId::POINTER);
-			AppendMatrixSegmentAtomic<SEXP, uintptr_t, DedupPointerEnumType>(
-			    (const SEXP *)DATAPTR_RO(source_data), nrows, ncols, sexp_offset, child_vector, count);
+			AppendMatrixSegmentAtomic<SEXP, uintptr_t, DedupPointerEnumType>((SEXP *)DATAPTR_RO(source_data), nrows,
+			                                                                 ncols, sexp_offset, child_vector, count);
 		} else {
-			AppendMatrixSegmentAtomic<SEXP, string_t, RStringSexpType>((const SEXP *)DATAPTR_RO(source_data), nrows,
-			                                                           ncols, sexp_offset, child_vector, count);
+			AppendMatrixSegmentAtomic<SEXP, string_t, RStringSexpType>((SEXP *)DATAPTR_RO(source_data), nrows, ncols,
+			                                                           sexp_offset, child_vector, count);
 		}
 		break;
 
@@ -451,32 +336,27 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 	case RType::INTERVAL_SECONDS_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, interval_t, RIntegerBackedType<RIntervalSecondsType>>(data_ptr, sexp_offset, v,
-		                                                                               this_count);
+		AppendColumnSegment<int, interval_t, RIntervalSecondsType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::INTERVAL_MINUTES_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, interval_t, RIntegerBackedType<RIntervalMinutesType>>(data_ptr, sexp_offset, v,
-		                                                                               this_count);
+		AppendColumnSegment<int, interval_t, RIntervalMinutesType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::INTERVAL_HOURS_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, interval_t, RIntegerBackedType<RIntervalHoursType>>(data_ptr, sexp_offset, v,
-		                                                                             this_count);
+		AppendColumnSegment<int, interval_t, RIntervalHoursType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::INTERVAL_DAYS_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, interval_t, RIntegerBackedType<RIntervalDaysType>>(data_ptr, sexp_offset, v,
-		                                                                            this_count);
+		AppendColumnSegment<int, interval_t, RIntervalDaysType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::INTERVAL_WEEKS_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, interval_t, RIntegerBackedType<RIntervalWeeksType>>(data_ptr, sexp_offset, v,
-		                                                                             this_count);
+		AppendColumnSegment<int, interval_t, RIntervalWeeksType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::DATE: {
@@ -486,7 +366,7 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 	case RType::DATE_INTEGER: {
 		auto data_ptr = (int *)coldata_ptr;
-		AppendColumnSegment<int, date_t, RIntegerBackedType<RDateType>>(data_ptr, sexp_offset, v, this_count);
+		AppendColumnSegment<int, date_t, RDateType>(data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RType::LIST_OF_NULLS:
@@ -544,7 +424,7 @@ identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 	return output;
 }
 
-static bool get_integer64_param(named_argument_map_t &named_parameters) {
+static bool get_integer64_param(named_parameter_map_t &named_parameters) {
 	auto entry = named_parameters.find("integer64");
 	if (entry != named_parameters.end()) {
 		return BooleanValue::Get(entry->second);
@@ -552,7 +432,7 @@ static bool get_integer64_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
-static bool get_experimental_param(named_argument_map_t &named_parameters) {
+static bool get_experimental_param(named_parameter_map_t &named_parameters) {
 	auto entry = named_parameters.find("experimental");
 	if (entry != named_parameters.end()) {
 		return BooleanValue::Get(entry->second);
@@ -560,7 +440,7 @@ static bool get_experimental_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
-static bool get_map_list_of_param(named_argument_map_t &named_parameters) {
+static bool get_map_list_of_param(named_parameter_map_t &named_parameters) {
 	auto entry = named_parameters.find("map_list_of");
 	if (entry != named_parameters.end()) {
 		return BooleanValue::Get(entry->second);
@@ -633,7 +513,7 @@ static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, RType &value_
 
 struct DataFrameScanBindData : public TableFunctionData {
 	DataFrameScanBindData(SEXP df_p, idx_t row_count_p, vector<RType> &rtypes_p, vector<data_ptr_t> &dataptrs_p,
-	                      vector<bool> &named_list_map_p, named_argument_map_t &named_parameters)
+	                      vector<bool> &named_list_map_p, named_parameter_map_t &named_parameters)
 	    : df(df_p), row_count(row_count_p), rtypes(rtypes_p), data_ptrs(dataptrs_p), named_list_map(named_list_map_p) {
 		integer64 = get_integer64_param(named_parameters);
 		experimental = get_experimental_param(named_parameters);
@@ -649,7 +529,7 @@ struct DataFrameScanBindData : public TableFunctionData {
 };
 
 struct DataFrameGlobalState : public GlobalTableFunctionState {
-	DataFrameGlobalState(idx_t max_threads_) : max_threads(max_threads_) {
+	DataFrameGlobalState(idx_t max_threads) : max_threads(max_threads) {
 	}
 
 	mutex lock;
@@ -671,11 +551,6 @@ struct DataFrameLocalState : public LocalTableFunctionState {
 static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context, TableFunctionBindInput &input,
                                                           vector<LogicalType> &return_types,
                                                           vector<Identifier> &names) {
-	// The binder holds the client context lock across this, and touching an ALTREP column
-	// runs its class's code: a duckdb relation materializes, after evaluating
-	// `duckdb.materialize_callback` -- arbitrary R code, and with it pending finalizers.
-	RCallbackScope callback_scope;
-
 	data_frame df((SEXP)input.inputs[0].GetPointer());
 
 	auto integer64 = get_integer64_param(input.named_parameters);
@@ -686,22 +561,6 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
-
-	// Touch the columns on R's thread only, the one thread that may run R code.
-	// A task binds on any thread, and there reads only what is in memory already.
-	if (OnRThread()) {
-		TouchColumnsOrThrow(df);
-	} else {
-		for (R_xlen_t col_idx = 0; col_idx < df.size(); col_idx++) {
-			if (!WalkColumn(VECTOR_ELT(df, col_idx), IsInMemory)) {
-				throw InvalidInputException("Cannot read column \"%s\" of the data frame off R's thread, "
-				                            "where this query binds its scan: it holds an ALTREP vector that only R "
-				                            "can read. Replace the column with a plain R vector, "
-				                            "or SET threads = 1 so that R's thread runs every task.",
-				                            CHAR(STRING_ELT(df_names, col_idx)));
-			}
-		}
-	}
 
 	for (R_xlen_t col_idx = 0; col_idx < df.size(); col_idx++) {
 		names.push_back(Identifier(string(df_names[col_idx])));
@@ -829,10 +688,9 @@ DataFrameScanFunction::DataFrameScanFunction()
                     DataFrameScanInitGlobal, DataFrameScanInitLocal) {
 	cardinality = DataFrameScanCardinality;
 	to_string = DataFrameScanToString;
-	GetSignature()
-	    .AddKeywordOnly("integer64", LogicalType::BOOLEAN, Value::BOOLEAN(false))
-	    .AddKeywordOnly("experimental", LogicalType::BOOLEAN, Value::BOOLEAN(false))
-	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	named_parameters["integer64"] = LogicalType::BOOLEAN;
+	named_parameters["experimental"] = LogicalType::BOOLEAN;
+	named_parameters["map_list_of"] = LogicalType::BOOLEAN;
 	projection_pushdown = true;
 	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }

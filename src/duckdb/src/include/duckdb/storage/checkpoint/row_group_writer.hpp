@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/storage/checkpoint_manager.hpp"
+#include "duckdb/common/serializer/memory_stream.hpp"
 
 namespace duckdb {
 struct ColumnCheckpointState;

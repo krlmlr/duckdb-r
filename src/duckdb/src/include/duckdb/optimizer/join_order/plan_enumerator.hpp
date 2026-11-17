@@ -54,9 +54,6 @@ private:
 	const vector<reference<NeighborInfo>> &GetConnections(JoinRelationSet &left, JoinRelationSet &right);
 	const vector<reference<JoinRelationSet>> &GetAllNeighborRelationSets(vector<RelationIndex> neighbors);
 
-	//! Estimated cardinality of the recursive frontier when planning inside a recursive member
-	double recursive_frontier_estimate = 0;
-
 	bool EnumerateCmpRecursive(JoinRelationSet &left, JoinRelationSet &right,
 	                           unordered_set<RelationIndex> &exclusion_set);
 	//! Emit a relation set node

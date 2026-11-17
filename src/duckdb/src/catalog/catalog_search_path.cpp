@@ -11,7 +11,6 @@
 #include "duckdb/main/extension_callback_manager.hpp"
 
 #include "duckdb/common/exception/parser_exception.hpp"
-#include "duckdb/parser/qualified_name.hpp"
 
 namespace duckdb {
 
@@ -20,35 +19,12 @@ CatalogSearchEntry::CatalogSearchEntry(Identifier catalog_p, Identifier schema_p
       default_schema_precedence(default_schema_precedence_p) {
 }
 
-CatalogSearchEntry CatalogSearchEntry::FromSchemaPath(Identifier catalog, vector<Identifier> schema_path,
-                                                      bool default_schema_precedence) {
-	D_ASSERT(!schema_path.empty());
-	auto schema = std::move(schema_path.back());
-	schema_path.pop_back();
-	CatalogSearchEntry result(std::move(catalog), std::move(schema), default_schema_precedence);
-	result.parent_schemas = std::move(schema_path);
-	return result;
-}
-
-vector<Identifier> CatalogSearchEntry::GetSchemaPath() const {
-	auto result = parent_schemas;
-	result.push_back(schema);
-	return result;
-}
-
-string CatalogSearchEntry::GetSchemaName() const {
-	return IsNested() ? QualifiedName::FromPath(GetSchemaPath()).ToString() : schema.GetIdentifierName();
-}
-
 string CatalogSearchEntry::ToString() const {
-	string result;
-	if (!catalog.empty()) {
-		result = WriteOptionallyQuoted(catalog) + ".";
+	if (catalog.empty()) {
+		return WriteOptionallyQuoted(schema);
+	} else {
+		return WriteOptionallyQuoted(catalog) + "." + WriteOptionallyQuoted(schema);
 	}
-	for (auto &parent : parent_schemas) {
-		result += WriteOptionallyQuoted(parent) + ".";
-	}
-	return result + WriteOptionallyQuoted(schema);
 }
 
 string CatalogSearchEntry::WriteOptionallyQuoted(const Identifier &input) {
@@ -73,33 +49,55 @@ string CatalogSearchEntry::ListToString(const vector<CatalogSearchEntry> &input)
 }
 
 CatalogSearchEntry CatalogSearchEntry::ParseInternal(const string &input, idx_t &idx) {
-	vector<Identifier> components;
+	string catalog;
+	string schema;
 	string entry;
 	bool finished = false;
 normal:
-	for (; idx < input.size();) {
+	for (; idx < input.size(); idx++) {
 		if (input[idx] == '"') {
-			string quoted;
-			if (!StringUtil::TryParseQuotedString(input, idx, quoted)) {
-				throw ParserException("Unterminated quote in qualified name!");
-			}
-			entry += quoted;
+			idx++;
+			goto quoted;
 		} else if (input[idx] == '.') {
 			goto separator;
 		} else if (input[idx] == ',') {
 			finished = true;
 			goto separator;
-		} else {
-			entry += input[idx++];
 		}
+		entry += input[idx];
 	}
 	finished = true;
 	goto separator;
+quoted:
+	//! look for another quote
+	for (; idx < input.size(); idx++) {
+		if (input[idx] == '"') {
+			//! unquote
+			idx++;
+			if (idx < input.size() && input[idx] == '"') {
+				// escaped quote
+				entry += input[idx];
+				continue;
+			}
+			goto normal;
+		}
+		entry += input[idx];
+	}
+	throw ParserException("Unterminated quote in qualified name!");
 separator:
 	if (entry.empty()) {
 		throw ParserException("Unexpected dot - empty CatalogSearchEntry");
 	}
-	components.emplace_back(std::move(entry));
+	if (schema.empty()) {
+		// if we parse one entry it is the schema
+		schema = std::move(entry);
+	} else if (catalog.empty()) {
+		// if we parse two entries it is [catalog.schema]
+		catalog = std::move(schema);
+		schema = std::move(entry);
+	} else {
+		throw ParserException("Too many dots - expected [schema] or [catalog.schema] for CatalogSearchEntry");
+	}
 	entry = "";
 	idx++;
 	if (finished) {
@@ -107,12 +105,10 @@ separator:
 	}
 	goto normal;
 final:
-	if (components.size() == 1) {
-		return CatalogSearchEntry(Identifier(), std::move(components[0]));
+	if (schema.empty()) {
+		throw ParserException("Unexpected end of entry - empty CatalogSearchEntry");
 	}
-	auto catalog = std::move(components[0]);
-	components.erase(components.begin());
-	return FromSchemaPath(std::move(catalog), std::move(components));
+	return CatalogSearchEntry(Identifier(std::move(catalog)), Identifier(std::move(schema)));
 }
 
 CatalogSearchEntry CatalogSearchEntry::Parse(const string &input) {
@@ -166,43 +162,20 @@ void CatalogSearchPath::Set(vector<CatalogSearchEntry> new_paths, CatalogSetPath
 	if (set_type == CatalogSetPathType::SET_SCHEMA && new_paths.size() != 1) {
 		throw CatalogException("%s can set only 1 schema. This has %d", GetSetName(set_type), new_paths.size());
 	}
-	for (idx_t path_idx = 0; path_idx < new_paths.size(); path_idx++) {
-		auto &path = new_paths[path_idx];
+	for (auto &path : new_paths) {
 		if (set_type == CatalogSetPathType::SET_DIRECTLY) {
 			if (path.GetCatalog().empty() || path.GetSchema().empty()) {
 				throw InternalException("SET_WITHOUT_VERIFICATION requires a fully qualified set path");
 			}
 			continue;
 		}
-		auto catalog_name = path.GetCatalog();
-		auto schema_path = path.GetSchemaPath();
-		if (!catalog_name.empty() && !Catalog::GetCatalogEntry(context, catalog_name)) {
-			schema_path.insert(schema_path.begin(), catalog_name);
-			catalog_name = Identifier();
-		}
-		auto lookup_catalog = catalog_name.empty() ? GetDefaultCatalog(schema_path[0]) : catalog_name;
-		if (lookup_catalog.empty()) {
-			lookup_catalog = DatabaseManager::TryGetDefaultDatabase(context);
-		}
-		optional_ptr<SchemaCatalogEntry> schema_entry;
-		if (!lookup_catalog.empty()) {
-			schema_entry = Catalog::GetSchema(context, lookup_catalog, schema_path, OnEntryNotFound::RETURN_NULL);
-		}
+		auto schema_entry =
+		    Catalog::GetSchema(context, path.GetCatalog(), path.GetSchema(), OnEntryNotFound::RETURN_NULL);
 		if (schema_entry) {
-			if (catalog_name.empty()) {
-				catalog_name = GetDefault().GetCatalog();
-				// Keep shorthand only when the new default catalog still resolves it to the same schema.
-				auto default_catalog = path_idx == 0 || new_paths[0].GetCatalog().empty()
-				                           ? DatabaseManager::TryGetDefaultDatabase(context)
-				                           : new_paths[0].GetCatalog();
-				auto &resolved_catalog = schema_entry->ParentCatalog();
-				if (!resolved_catalog.IsSystemCatalog() &&
-				    (!catalog_name.empty() || resolved_catalog.GetName() != default_catalog)) {
-					catalog_name = resolved_catalog.GetName();
-				}
+			// we are setting a schema - update the catalog and schema
+			if (path.GetCatalog().empty()) {
+				path.SetCatalog(GetDefault().GetCatalog());
 			}
-			path = CatalogSearchEntry::FromSchemaPath(std::move(catalog_name), std::move(schema_path),
-			                                          path.DefaultSchemaPrecedence());
 			continue;
 		}
 		// only schema supplied - check if this is a catalog instead
@@ -218,6 +191,15 @@ void CatalogSearchPath::Set(vector<CatalogSearchEntry> new_paths, CatalogSetPath
 						continue;
 					}
 				}
+			}
+		}
+		if (!path.GetCatalog().empty()) {
+			// "a.b" can also name a nested schema - give a clearer error in that case
+			vector<Identifier> nested_path {path.GetCatalog(), path.GetSchema()};
+			if (Catalog::GetSchema(context, Identifier(), nested_path, OnEntryNotFound::RETURN_NULL)) {
+				throw NotImplementedException("%s: \"%s\" is a nested schema - nested schemas cannot be used in the "
+				                              "search path",
+				                              GetSetName(set_type), path.ToString());
 			}
 		}
 		throw CatalogException("%s: No catalog + schema named \"%s\" found.", GetSetName(set_type), path.ToString());
@@ -249,7 +231,7 @@ vector<CatalogSearchEntry> CatalogSearchPath::Get() const {
 
 Identifier CatalogSearchPath::GetDefaultSchema(const Identifier &catalog) const {
 	for (auto &path : paths) {
-		if (path.GetCatalog() == TEMP_CATALOG || path.IsNested()) {
+		if (path.GetCatalog() == TEMP_CATALOG) {
 			continue;
 		}
 		if (path.GetCatalog() == catalog) {
@@ -261,7 +243,7 @@ Identifier CatalogSearchPath::GetDefaultSchema(const Identifier &catalog) const 
 
 optional<Identifier> CatalogSearchPath::GetDefaultSchema(ClientContext &context, const Identifier &catalog) const {
 	for (auto &path : paths) {
-		if (path.GetCatalog() == TEMP_CATALOG || path.IsNested()) {
+		if (path.GetCatalog() == TEMP_CATALOG) {
 			continue;
 		}
 		if (path.GetCatalog() == catalog) {
@@ -280,7 +262,7 @@ Identifier CatalogSearchPath::GetDefaultCatalog(const Identifier &schema) const 
 		return Identifier::SystemCatalog();
 	}
 	for (auto &path : paths) {
-		if (path.GetCatalog() == TEMP_CATALOG || path.IsNested()) {
+		if (path.GetCatalog() == TEMP_CATALOG) {
 			continue;
 		}
 		if (path.GetSchema() == schema) {
@@ -290,26 +272,12 @@ Identifier CatalogSearchPath::GetDefaultCatalog(const Identifier &schema) const 
 	return Identifier::InvalidCatalog();
 }
 
-Identifier CatalogSearchPath::ResolveCatalog(const Identifier &schema) const {
-	auto catalog = schema.empty() ? Identifier::InvalidCatalog() : GetDefaultCatalog(schema);
-	if (IsInvalidCatalog(catalog)) {
-		catalog = GetDefault().GetCatalog();
-	}
-	if (IsInvalidCatalog(catalog)) {
-		catalog = DatabaseManager::GetDefaultDatabase(context);
-	}
-	return catalog;
-}
-
 vector<Identifier> CatalogSearchPath::GetCatalogsForSchema(const Identifier &schema) const {
 	vector<Identifier> catalogs;
 	if (DefaultSchemaGenerator::IsDefaultSchema(schema)) {
 		catalogs.push_back(Identifier::SystemCatalog());
 	} else {
 		for (auto &path : paths) {
-			if (path.IsNested()) {
-				continue;
-			}
 			if (path.GetSchema() == schema || path.GetSchema().empty()) {
 				catalogs.emplace_back(path.GetCatalog());
 			}
@@ -321,21 +289,11 @@ vector<Identifier> CatalogSearchPath::GetCatalogsForSchema(const Identifier &sch
 vector<Identifier> CatalogSearchPath::GetSchemasForCatalog(const Identifier &catalog) const {
 	vector<Identifier> schemas;
 	for (auto &path : paths) {
-		if (!path.GetSchema().empty() && !path.IsNested() && path.GetCatalog() == catalog) {
+		if (!path.GetSchema().empty() && path.GetCatalog() == catalog) {
 			schemas.emplace_back(path.GetSchema());
 		}
 	}
 	return schemas;
-}
-
-vector<CatalogSearchEntry> CatalogSearchPath::GetEntriesForCatalog(const Identifier &catalog) const {
-	vector<CatalogSearchEntry> entries;
-	for (auto &path : paths) {
-		if (!path.GetSchema().empty() && path.GetCatalog() == catalog) {
-			entries.push_back(path);
-		}
-	}
-	return entries;
 }
 
 vector<CatalogSearchEntry> CatalogSearchPath::GetImplicitSearchCatalogs() const {
@@ -400,13 +358,13 @@ void CatalogSearchPath::SetPathsInternal(vector<CatalogSearchEntry> new_paths) {
 bool CatalogSearchPath::SchemaInSearchPath(ClientContext &context, const Identifier &catalog_name,
                                            const Identifier &schema_name) const {
 	for (auto &path : paths) {
-		if (Identifier(path.GetSchemaName()) != schema_name) {
+		if (path.GetSchema() != schema_name) {
 			continue;
 		}
 		if (path.GetCatalog() == catalog_name) {
 			return true;
 		}
-		if (IsInvalidCatalog(path.GetCatalog()) && catalog_name == DatabaseManager::TryGetDefaultDatabase(context)) {
+		if (IsInvalidCatalog(path.GetCatalog()) && catalog_name == DatabaseManager::GetDefaultDatabase(context)) {
 			return true;
 		}
 	}

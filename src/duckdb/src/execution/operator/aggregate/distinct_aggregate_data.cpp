@@ -126,7 +126,7 @@ struct FindMatchingAggregate {
 		if (other.GetChildren().size() != aggr.GetChildren().size()) {
 			return false;
 		}
-		if (!Expression::Equals(aggr.GetFilter(), other.GetFilter())) {
+		if (!Expression::Equals(aggr.GetFilterMutable(), other.GetFilterMutable())) {
 			return false;
 		}
 		for (idx_t i = 0; i < aggr.GetChildren().size(); i++) {

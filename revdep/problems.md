@@ -1,38 +1,38 @@
-# datacaged (0.2.1)
+# GeoTox (1.0.0)
 
-* GitHub: <https://github.com/gecomt/datacaged>
-* Email: <mailto:alexsandro.prado@ufersa.edu.br>
-* GitHub mirror: <https://github.com/cran/datacaged>
+* GitHub: <https://github.com/NIEHS/GeoTox>
+* Email: <mailto:skylar.marvel@nih.gov>
+* GitHub mirror: <https://github.com/cran/GeoTox>
 
-Run `revdepcheck::revdep_details(, "datacaged")` for more info
+Run `revdepcheck::cloud_details(, "GeoTox")` for more info
 
 ## Newly broken
 
 *   checking tests ... ERROR
      ```
      ...
-        5.     └─datacaged::caged_connect(db_path, read_only = TRUE, quiet = TRUE)
-        6.       └─duckdb::duckdb(dbdir = db_path, read_only = read_only)
-        7.         └─duckdb:::duckdb_impl(...)
-        8.           └─duckdb:::warn_instance_settings_ignored(...)
-        9.             └─rlang::abort(...)
-       ── Error ('test-pipelines.R:216:3'): caged_adjustments_load() cria banco com tabela caged_ajustes ──
-       Error in `duckdb::duckdb(dbdir = db_path, read_only = read_only)`: `read_only` can't be applied to the database instance for `/tmp/RtmpBX0UhV/working_dir/RtmpzpfYP3/caged_adj_mock_31177c2796b.duckdb`, which already exists.
-       * These settings take effect only when the instance is created.
-       * Release it with `duckdb_shutdown()` first, or pass them to the `duckdb()` call that creates it.
-       Backtrace:
-           ▆
-        1. ├─base::suppressMessages(...) at test-pipelines.R:216:3
-        2. │ └─base::withCallingHandlers(...)
-        3. └─datacaged::caged_adjustments_load(...)
-        4.   └─datacaged::caged_info(db_path)
-        5.     └─datacaged::caged_connect(db_path, read_only = TRUE, quiet = TRUE)
-        6.       └─duckdb::duckdb(dbdir = db_path, read_only = read_only)
-        7.         └─duckdb:::duckdb_impl(...)
-        8.           └─duckdb:::warn_instance_settings_ignored(...)
-        9.             └─rlang::abort(...)
+       i Run duckdb(shared_home = TRUE) (or create ~/.duckdb) to keep them (suitable for most users).
+       i Run duckdb(shared_home = FALSE) to accept the temporary directory (and silence this message).
+       i See ?duckdb_storage for details and alternatives.
+       Saving _problems/test-calc_sensitivity-84.R
+       The duckplyr package is configured to fall back to dplyr when it encounters an incompatibility. Fallback events can be collected and uploaded for analysis to guide future development. By default, data will be collected but no data will be uploaded.
+       i Automatic fallback uploading is not controlled and therefore disabled, see `?duckplyr::fallback()`.
+       v Number of reports ready for upload: 3.
+       > Review with `duckplyr::fallback_review()`, upload with `duckplyr::fallback_upload()`.
+       i Configure automatic uploading with `duckplyr::fallback_config()`.
+       [ FAIL 1 | WARN 0 | SKIP 6 | PASS 224 ]
        
-       [ FAIL 2 | WARN 0 | SKIP 5 | PASS 187 ]
+       ══ Skipped tests (6) ═══════════════════════════════════════════════════════════
+       • On CRAN (6): 'test-calc_response.R:1:1', 'test-calc_response.R:61:1',
+         'test-calc_risk.R:125:1', 'test-calc_sensitivity.R:26:1',
+         'test-calc_sensitivity.R:102:1', 'test-sensitivity_analysis.R:1:1'
+       
+       ══ Failed tests ════════════════════════════════════════════════════════════════
+       ── Failure ('test-calc_sensitivity.R:82:3'): calc sensitivity ──────────────────
+       Expected `calc_sensitivity(GT)` to run silently.
+       Actual noise: messages.
+       
+       [ FAIL 1 | WARN 0 | SKIP 6 | PASS 224 ]
        Error:
        ! Test failures.
        Execution halted

@@ -61,11 +61,6 @@ InsertDatabasePathResult DatabaseFilePathManager::InsertDatabasePath(DatabaseMan
 	return InsertDatabasePathResult::SUCCESS;
 }
 
-bool DatabaseFilePathManager::IsDatabasePath(const string &path) const {
-	lock_guard<mutex> path_lock(db_paths_lock);
-	return db_paths.find(path) != db_paths.end();
-}
-
 void DatabaseFilePathManager::EraseDatabasePath(const string &path) {
 	if (path.empty() || path == IN_MEMORY_PATH) {
 		return;

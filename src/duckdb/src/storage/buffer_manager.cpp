@@ -23,11 +23,13 @@ const BufferManager &BufferManager::GetBufferManager(const DatabaseInstance &db)
 }
 
 BufferManager &BufferManager::GetBufferManager(ClientContext &context) {
-	return context.GetContext().GetBufferManager();
+	auto &client_data = ClientData::Get(context);
+	return *client_data.client_buffer_manager;
 }
 
 const BufferManager &BufferManager::GetBufferManager(const ClientContext &context) {
-	return context.GetContext().GetBufferManager();
+	auto &client_data = ClientData::Get(context);
+	return *client_data.client_buffer_manager;
 }
 
 BufferManager &BufferManager::GetBufferManager(AttachedDatabase &db) {
@@ -52,7 +54,7 @@ shared_ptr<BlockHandle> BufferManager::RegisterSmallMemory(MemoryTag tag, const 
 	throw NotImplementedException("This type of BufferManager can not create 'small-memory' blocks");
 }
 
-BufferAllocator &BufferManager::GetBufferAllocator() {
+Allocator &BufferManager::GetBufferAllocator() {
 	throw NotImplementedException("This type of BufferManager does not have an Allocator");
 }
 

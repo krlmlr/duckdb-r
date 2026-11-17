@@ -16,7 +16,6 @@ namespace duckdb {
 class StandardVectorBuffer : public VectorBuffer {
 public:
 	StandardVectorBuffer(Allocator &allocator, capacity_t capacity, idx_t type_size);
-	StandardVectorBuffer(AllocatedData allocation, capacity_t capacity, idx_t type_size);
 	explicit StandardVectorBuffer(capacity_t capacity, idx_t type_size);
 	explicit StandardVectorBuffer(data_ptr_t data_ptr_p, count_t count, idx_t type_size);
 	explicit StandardVectorBuffer(AllocatedData &&data_p, count_t count, idx_t type_size);
@@ -25,13 +24,11 @@ public:
 	data_ptr_t GetData() override {
 		return data_ptr;
 	}
-	data_ptr_t GetDataMutable() override;
 	idx_t Capacity() const override {
 		return capacity;
 	}
 	void ResetCapacity(idx_t capacity) override;
 	ValidityMask &GetValidityMask() override {
-		EnsureDataAllocated();
 		return validity;
 	}
 	const ValidityMask &GetValidityMask() const override {
@@ -51,13 +48,9 @@ public:
 	void SetValue(const LogicalType &type, idx_t index, const Value &val) override;
 
 protected:
-	DUCKDB_API void EnsureDataAllocated();
-
 	buffer_ptr<VectorBuffer> SliceInternal(const LogicalType &type, idx_t offset, idx_t end) override;
 	buffer_ptr<VectorBuffer> SliceInternal(const LogicalType &type, const SelectionVector &sel, idx_t count) override;
 	buffer_ptr<VectorBuffer> ConstantSliceInternal(const LogicalType &type, count_t count) override;
-	buffer_ptr<VectorBuffer> ConstantReferenceInternal(const LogicalType &type, idx_t index,
-	                                                   count_t count) const override;
 	void CopyInternal(const Vector &source, const SelectionVector &source_sel, idx_t source_count, idx_t source_offset,
 	                  idx_t target_offset, idx_t copy_count) override;
 	buffer_ptr<VectorBuffer> FlattenSliceInternal(const LogicalType &type, const SelectionVector &sel,
@@ -68,8 +61,6 @@ protected:
 	void ReserveInternal(idx_t new_size) override;
 
 protected:
-	friend struct FlatVector;
-
 	ValidityMask validity;
 	data_ptr_t data_ptr;
 	idx_t type_size;
@@ -120,7 +111,7 @@ struct FlatVector {
 		return vector.GetBufferRef() ? vector.GetBufferRef()->GetData() : nullptr;
 	}
 	static inline data_ptr_t GetDataMutableUnsafe(Vector &vector) {
-		return vector.GetBufferRef() ? vector.BufferMutable().GetDataMutable() : nullptr;
+		return vector.GetBufferRef() ? vector.BufferMutable().GetData() : nullptr;
 	}
 	template <class T>
 	static inline const T *GetData(const Vector &vector) {
@@ -191,7 +182,7 @@ struct FlatVector {
 
 	template <class T>
 	static VectorWriter<T> Writer(Vector &vector, idx_t count, idx_t offset) {
-		PrepareForWrite(vector, offset + count);
+		SetSize(vector, offset + count);
 		return VectorWriter<T>(vector, count, offset);
 	}
 	template <class T>
@@ -202,9 +193,6 @@ struct FlatVector {
 	static VectorScatterWriter<T> ScatterWriter(Vector &vector) {
 		return VectorScatterWriter<T>(vector);
 	}
-
-private:
-	DUCKDB_API static void PrepareForWrite(Vector &vector, idx_t size);
 };
 
 } // namespace duckdb

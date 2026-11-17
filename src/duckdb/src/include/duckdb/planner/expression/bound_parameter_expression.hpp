@@ -18,8 +18,7 @@ public:
 	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_PARAMETER;
 
 public:
-	explicit BoundParameterExpression(const duckdb::Identifier &identifier,
-	                                  duckdb::Identifier alias = duckdb::Identifier());
+	explicit BoundParameterExpression(const duckdb::Identifier &identifier);
 
 public:
 	const duckdb::Identifier &Identifier() const {

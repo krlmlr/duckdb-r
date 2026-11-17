@@ -31,14 +31,12 @@
 # shared contract in handbook/operations/vendoring/series-loop/README.md.
 
 set -euo pipefail
-# shellcheck source=series-lib.sh
-. "$(dirname "$0")/series-lib.sh"
 
 usage='usage: series-cut.sh <series> [--parent <series>] [--remote <name>] [--upstream <path>] [--flavor <name>] [--check] [--next]'
 argerr() { echo "$usage" >&2; exit 2; }
 
 remote=${SERIES_REMOTE:-origin}
-upstream=${UPSTREAM_CLONE:-../../../${series_upstream_repo##*/}}
+upstream=${UPSTREAM_CLONE:-../../../duckdb}
 parent=main
 flavor=
 check=
@@ -66,7 +64,7 @@ cd "$toplevel"
 
 # `-e` rather than `-d`: in a linked worktree `.git` is a file naming the real one.
 [ -e "$upstream/.git" ] ||
-  { echo "Error: $upstream is not a $series_upstream_repo checkout (--upstream)" >&2; exit 1; }
+  { echo "Error: $upstream is not a duckdb/duckdb checkout (--upstream)" >&2; exit 1; }
 
 # The new series is named for the branch it tracks, and so is its parent.
 U=$S
@@ -111,7 +109,7 @@ fork=$(awk 'NR==FNR{a[$0];next} $0 in a{print; exit}' "$work/pu" "$work/u")
   { echo "Error: $U and $PU share no first-parent commit" >&2; exit 1; }
 
 # --- each strand's cut -------------------------------------------------------
-# A strand's cut is its newest commit whose `<owner>/<repo>@<sha>` subject names a
+# A strand's cut is its newest commit whose `duckdb/duckdb@<sha>` subject names a
 # commit on the new branch's first-parent chain. Below it the two lines are one
 # history, so everything there is already vendored, glued and judged.
 cut_of() { # <strand ref> -> sha
@@ -120,7 +118,7 @@ cut_of() { # <strand ref> -> sha
   # commit reads `vendor: Update vendored sources (tag v1.5.5) to duckdb/duckdb@`,
   # and a release branch is cut precisely around a tag. `main-dev` carries 19 of
   # them; anchoring on `to ` would step the cut silently past one.
-  awk -F'|' -v re="^vendor: Update vendored sources .*$series_upstream_repo@" '$2 ~ re {
+  awk -F'|' '$2 ~ /^vendor: Update vendored sources .*duckdb\/duckdb@/ {
     n = split($2, a, "@"); print $1, a[n] }' "$work/strand" > "$work/vendored"
   awk 'NR==FNR{c[$0];next} ($2 in c){print $1; exit}' "$chain" "$work/vendored"
 }
@@ -132,21 +130,13 @@ done
 
 cut_build=$(cut_of "$remote/$parent-build")
 cut_dev=$(cut_of "$remote/$parent-dev")
-# The vendor strand is cut with the buffer where the parent has one
-# (handbook/branches/model/README.md); a parent without derives one later.
-cut_vendor=''
-strands=(build dev)
-if git rev-parse -q --verify "refs/remotes/$remote/$parent-vendor" >/dev/null; then
-  cut_vendor=$(cut_of "$remote/$parent-vendor")
-  strands+=(vendor)
-fi
-for c in "$cut_build" "$cut_dev" ${cut_vendor:+"$cut_vendor"}; do
+for c in "$cut_build" "$cut_dev"; do
   [ -n "$c" ] ||
     { echo "Error: $parent has no vendor commit on $U's chain" >&2; exit 1; }
 done
 
 printf 'fork point    %s\n' "$(ups log -1 --format='%h %ad %s' --date=short "$fork" | cut -c1-70)"
-for r in "${strands[@]}"; do
+for r in build dev; do
   eval "c=\$cut_$r"
   printf '%-20s %s  %s above it\n' "$parent-$r cut" \
     "$(git log -1 --format='%h %ad' --date=short "$c")" \
@@ -160,14 +150,13 @@ declare -A want=(
   ["$S-build"]=$cut_build ["$S-build-base"]=$cut_build
   ["$S-dev"]=$cut_dev     ["$S-green"]=$cut_dev
 )
-[ -z "$cut_vendor" ] || want["$S-vendor"]=$cut_vendor
 
 # In ref order rather than hash order, so the report reads the same every run and
 # a refusal leaves the same refs behind on any machine.
-order=("$S-build" "$S-build-base" "$S-dev" "$S-green" ${cut_vendor:+"$S-vendor"})
+order=("$S-build" "$S-build-base" "$S-dev" "$S-green")
 
 # Both sides are read: `refs/heads/` is what this writes, and `$remote/` is what
-# step 4 of series-open/SKILL.md pushes and the loop serves. A fresh clone has no local branches at all,
+# step 3 pushes and the loop serves. A fresh clone has no local branches at all,
 # so checking only the former gives an unconditional all-clear on a series that
 # is already open.
 status=0
@@ -234,8 +223,7 @@ Next, in order -- the cut is not complete until the rename is in:
   #    has to move together or the merge driver sees prefixes that differ.
   git push --atomic $remote \\
     $S-build:refs/heads/$S-build $S-build-base:refs/heads/$S-build-base \\
-    $S-dev:refs/heads/$S-dev     $S-green:refs/heads/$S-green \\${cut_vendor:+
-    $S-vendor:refs/heads/$S-vendor \\}
+    $S-dev:refs/heads/$S-dev     $S-green:refs/heads/$S-green \\
     $parent-build:refs/heads/$parent-build $parent-dev:refs/heads/$parent-dev
 
   # 3. Open both forwards -- series-forward/SKILL.md, twice, neither waiting

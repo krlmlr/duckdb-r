@@ -161,19 +161,9 @@ public:
 		}
 	}
 
-	//! Slot indexes in the order the heap would sort to, leaving the heap intact for later reads and inserts. The
-	//! indexes in heap order form the same heap, so sorting them as a heap yields the same order, ties included.
-	void SortedSlots(vector<idx_t> &order) const {
-		order.resize(size);
-		for (idx_t slot = 0; slot < size; slot++) {
-			order[slot] = slot;
-		}
-		std::sort_heap(order.begin(), order.end(),
-		               [this](idx_t left, idx_t right) { return Compare(heap[left], heap[right]); });
-	}
-
-	const HeapEntry<T> &GetSlot(idx_t slot) const {
-		return heap[slot];
+	HeapEntry<T> *SortAndGetHeap() {
+		std::sort_heap(heap, heap + size, Compare);
+		return heap;
 	}
 
 	static const T &GetValue(const HeapEntry<T> &slot) {
@@ -254,19 +244,9 @@ public:
 		}
 	}
 
-	//! Slot indexes in the order the heap would sort to, leaving the heap intact for later reads and inserts. The
-	//! indexes in heap order form the same heap, so sorting them as a heap yields the same order, ties included.
-	void SortedSlots(vector<idx_t> &order) const {
-		order.resize(size);
-		for (idx_t slot = 0; slot < size; slot++) {
-			order[slot] = slot;
-		}
-		std::sort_heap(order.begin(), order.end(),
-		               [this](idx_t left, idx_t right) { return Compare(heap[left], heap[right]); });
-	}
-
-	const STORAGE_TYPE &GetSlot(idx_t slot) const {
-		return heap[slot];
+	STORAGE_TYPE *SortAndGetHeap() {
+		std::sort_heap(heap, heap + size, Compare);
+		return heap;
 	}
 
 	static const V &GetValue(const STORAGE_TYPE &slot) {
@@ -504,7 +484,6 @@ struct MinMaxNOperation {
 		auto &child_data = ListVector::GetChildMutable(result);
 
 		idx_t current_offset = old_len;
-		vector<idx_t> sorted_slots;
 		for (idx_t i = 0; i < count; i++) {
 			const auto state_idx = state_format.sel->get_index(i);
 			auto &state = *states[state_idx];
@@ -520,11 +499,11 @@ struct MinMaxNOperation {
 			list_entry.length = state.heap.Size();
 			result_data.WriteValue(list_entry);
 
-			// Read the heap in sorted order without disturbing it: a state can be read again and updated afterwards
-			state.heap.SortedSlots(sorted_slots);
-			for (const auto slot : sorted_slots) {
-				STATE::VAL_TYPE::Assign(child_data, current_offset++, state.heap.GetValue(state.heap.GetSlot(slot)),
-				                        nulls_last);
+			// Turn the heap into a sorted list, invalidating the heap property
+			auto heap = state.heap.SortAndGetHeap();
+
+			for (idx_t slot = 0; slot < state.heap.Size(); slot++) {
+				STATE::VAL_TYPE::Assign(child_data, current_offset++, state.heap.GetValue(heap[slot]), nulls_last);
 			}
 		}
 

@@ -26,7 +26,6 @@ class AsyncResult;
 class DataChunk;
 struct GlobalTableFunctionState;
 struct LocalTableFunctionState;
-class ReadAheadOpenFile;
 
 struct BaseFileReaderExpression {
 public:
@@ -70,8 +69,6 @@ public:
 	unique_ptr<DeleteFilter> deletion_filter;
 	//! Global identifiers (which column position of the projected output this filter operates) for the filters
 	vector<MultiFileGlobalIndex> filter_global_indices;
-	//! Counts the file against the open file budget of read-ahead until the reader closes it
-	shared_ptr<ReadAheadOpenFile> read_ahead_open_file;
 
 public:
 	const vector<MultiFileColumnDefinition> &GetColumns() const {
@@ -93,9 +90,6 @@ public:
 	DUCKDB_API virtual shared_ptr<BaseUnionData> GetUnionData(idx_t file_idx);
 	//! Get statistics for a specific column
 	DUCKDB_API virtual unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const Identifier &name);
-	//! Get statistics for a virtual column the reader produces (e.g. the row number of every row within the file)
-	DUCKDB_API virtual unique_ptr<BaseStatistics> GetVirtualColumnStatistics(ClientContext &context,
-	                                                                         column_t virtual_column_id);
 	//! Prepare reader for scanning
 	DUCKDB_API virtual void PrepareReader(ClientContext &context, GlobalTableFunctionState &);
 	//! Called after opening when the scan is driven by read-ahead, lets the reader pre-open scan resources
@@ -173,8 +167,6 @@ public:
 		return optional_idx();
 	}
 	virtual unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const Identifier &name);
-	DUCKDB_API virtual unique_ptr<BaseStatistics> GetVirtualColumnStatistics(ClientContext &context,
-	                                                                         column_t virtual_column_id);
 
 public:
 	template <class TARGET>

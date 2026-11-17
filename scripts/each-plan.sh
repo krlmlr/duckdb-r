@@ -42,11 +42,6 @@
 #   FORCE               - if non-empty, ignore existing verdicts and replan all
 #                         (a `retry-<S>-dev` branch replans its tip that way
 #                         without this, which is the whole point of it)
-#   FOLLOW_UP_OF        - the run that dispatched this one to finish what it
-#                         left undecided (scripts/each-follow-up.sh); logged
-#   FOLLOW_UP_HEAD      - the commit that run planned from, sent only once
-#                         that run has judged its `retry-<S>-dev` tip again; a
-#                         tip equal to it is not replanned a second time
 #   SHARD_BUDGET_MINUTES- build-time target per leg, excluding job setup
 #                         (default: 300; the GitHub job limit is 360, and
 #                         scripts/each-shard.sh stops at its own deadline rather
@@ -78,8 +73,6 @@ set -euo pipefail
 SINCE="${SINCE:-2026-01-01}"
 OUT="${OUT:-plan.json}"
 FORCE="${FORCE:-}"
-FOLLOW_UP_OF="${FOLLOW_UP_OF:-}"
-FOLLOW_UP_HEAD="${FOLLOW_UP_HEAD:-}"
 SHARD_BUDGET_MINUTES="${SHARD_BUDGET_MINUTES:-300}"
 MAX_SHARDS="${MAX_SHARDS:-250}"
 MAX_PARALLEL="${MAX_PARALLEL:-8}"
@@ -91,16 +84,11 @@ FLOOR_MINUTES="${FLOOR_MINUTES:-6}"
 OBJECT_SECONDS="${OBJECT_SECONDS:-9.7}"
 
 here="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=series-lib.sh
-. "${here}/series-lib.sh"
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
 
 branch="$(git symbolic-ref --short -q HEAD || git rev-parse --short HEAD)"
 echo "Branch: ${branch}"
-if [ -n "${FOLLOW_UP_OF}" ]; then
-  echo "Follow-up of run ${FOLLOW_UP_OF}${FOLLOW_UP_HEAD:+, which planned from ${FOLLOW_UP_HEAD}}"
-fi
 echo "Considering commits on or after ${SINCE}"
 
 # ---------------------------------------------------------------- enumerate --
@@ -149,7 +137,8 @@ case "${branch}" in
     # commit (.claude/skills/series-rc/SKILL.md), so its world is everything above
     # its own seed, and without that bound the scan would reach into `main`.
     if [ -z "${retry}" ] && [ "${series%-rc}" != "${series}" ]; then
-      rc_seed="$(series_seed_of HEAD)"
+      rc_seed="$(git log --first-parent --format=%H \
+        --grep='^chore: Add fifth version component$' -1 HEAD)"
       if [ -z "${rc_seed}" ]; then
         echo "RC branch ${branch} has no seed -- planning nothing"
         plan_nothing
@@ -247,15 +236,8 @@ echo "Verdicts on the rcc2 branch: $(wc -l < "${workdir}/decided" | tr -d ' ')"
 # Driven by the enumeration, not by the record list, so a commit the store does
 # not mention is replanned rather than silently dropped. Order stays
 # oldest-first, which is what the partitioner and the shard driver rely on.
-#
-# A follow-up leaves the tip to the ordinary rule when FOLLOW_UP_HEAD is the tip:
-# the run before judged that very commit again already, and the follow-up
-# (scripts/each-follow-up.sh) sends the head only then. A tip that moved since,
-# or one the run before deferred, is forced as on any push.
 retry_tip=""
-if [ -n "${retry}" ] && [ "${FOLLOW_UP_HEAD}" != "$(git rev-parse HEAD)" ]; then
-  retry_tip="$(git rev-parse HEAD)"
-fi
+[ -n "${retry}" ] && retry_tip="$(git rev-parse HEAD)"
 awk -v force="${FORCE}" -v retry_tip="${retry_tip}" '
   # The FILENAME guard matters: with an empty record list, FNR == NR is still
   # true for the first record of the second file.
@@ -287,19 +269,18 @@ echo "To build: ${todo}"
 
 # ------------------------------------------------------------------ weigh ----
 # Cost per commit = fixed floor (link + install + R CMD check) plus the unity
-# objects the commit invalidates, which the estimator scripts/series-config.sh
-# names (scripts/each-cost.py here) derives from the include graph without
-# building anything.
+# objects the commit invalidates, which scripts/each-cost.py derives from the
+# include graph without building anything.
 if [ "${todo}" -gt 0 ]; then
   echo "Building the unity-object reach map..."
-  "${series_cost_estimator[@]}" map . > "${workdir}/cost-map.json"
+  python3 "${here}/each-cost.py" map . > "${workdir}/cost-map.json"
 
   while IFS= read -r sha; do
     files="$(git diff --name-only "${sha}^" "${sha}" -- 2>/dev/null | tr '\n' ' ' || true)"
     printf '%s %s\n' "${sha}" "${files}"
   done < "${workdir}/todo" > "${workdir}/changed"
 
-  "${series_cost_estimator[@]}" batch "${workdir}/cost-map.json" \
+  python3 "${here}/each-cost.py" batch "${workdir}/cost-map.json" \
     < "${workdir}/changed" > "${workdir}/objects"
 else
   : > "${workdir}/objects"
@@ -358,38 +339,13 @@ if [ "${parallel}" -gt "${shards}" ] && [ "${shards}" -gt 0 ]; then
   parallel="${shards}"
 fi
 
-# The planned commits the store had no record for when the plan was made, which
-# leaves out the ones replanned despite a verdict. It is what the run set out to
-# decide, and scripts/each-follow-up.sh measures the run's progress against it
-# from the same store, together with `head`, the commit the plan was made from.
-jq -r '.[].commits[].sha' "${workdir}/shards.final.json" > "${workdir}/planned"
-without_verdict="$(grep -cvxF -f "${workdir}/decided" "${workdir}/planned" || true)"
-
-# What the follow-up needs besides that count: the commits deferred past
-# MAX_SHARDS, the oldest of the to-do list, so that it can ask the store about
-# them rather than trust a count made at plan time; and the retry tip, when it
-# is in the plan despite its verdict, so that it can tell whether this run judged
-# it again. The `grep` reads an empty plan as "no patterns" and keeps every line,
-# which is right: with no shard, every commit to build was deferred.
-grep -vxF -f "${workdir}/planned" "${workdir}/todo" \
-  | jq -Rsc 'split("\n") | map(select(length > 0))' > "${workdir}/deferred.json" || true
-planned_retry_tip=""
-if [ -n "${retry_tip}" ] && grep -qxF "${retry_tip}" "${workdir}/decided" \
-    && grep -qxF "${retry_tip}" "${workdir}/planned"; then
-  planned_retry_tip="${retry_tip}"
-fi
-
 jq -n \
   --arg branch "${branch}" \
-  --arg head "$(git rev-parse HEAD)" \
   --arg since "${SINCE}" \
   --argjson replanned "${replanned}" \
   --argjson total "${total}" \
   --argjson skipped "${skipped}" \
   --argjson dropped "${dropped}" \
-  --argjson without_verdict "${without_verdict}" \
-  --slurpfile deferred_shas "${workdir}/deferred.json" \
-  --arg retry_tip "${planned_retry_tip}" \
   --argjson budget "${SHARD_BUDGET_MINUTES}" \
   --argjson setup "${SETUP_MINUTES}" \
   --argjson full "${FULL_BUILD_MINUTES}" \
@@ -399,15 +355,11 @@ jq -n \
   --slurpfile shards "${workdir}/shards.final.json" \
   '{
      branch: $branch,
-     head: $head,
      since: $since,
      commits_in_range: $total,
      commits_already_decided: $skipped,
      commits_deferred: $dropped,
-     deferred_shas: $deferred_shas[0],
      replanned_despite_verdict: $replanned,
-     retry_tip: $retry_tip,
-     planned_without_verdict: $without_verdict,
      cost_model: {
        setup_minutes: $setup,
        full_build_minutes: $full,

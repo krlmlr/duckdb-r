@@ -2,8 +2,6 @@
 
 #include "src/parser/peg/compiled_grammar.cpp"
 
-#include "src/parser/peg/dialect_extension.cpp"
-
 #include "src/parser/peg/grammar_change.cpp"
 
 #include "src/parser/peg/keyword_map.cpp"
@@ -12,25 +10,15 @@
 
 #include "src/parser/peg/matcher_factory.cpp"
 
-#include "src/parser/peg/matcher_first_set.cpp"
-
 #include "src/parser/peg/matcher_process.cpp"
 
 #include "src/parser/peg/matcher_stack.cpp"
-
-#include "src/parser/peg/operator_matcher.cpp"
 
 #include "src/parser/peg/parsed_grammar.cpp"
 
 #include "src/parser/peg/parser_packrat.cpp"
 
-#include "src/parser/peg/passthrough_dialect.cpp"
-
 #include "src/parser/peg/peg_parser.cpp"
 
-#include "src/parser/peg/peg_rule_id.cpp"
-
 #include "src/parser/peg/sql_formatter.cpp"
-
-#include "src/parser/peg/syntax_error.cpp"
 

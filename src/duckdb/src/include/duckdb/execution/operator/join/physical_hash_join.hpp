@@ -87,7 +87,6 @@ public:
 	PipelineExternalInputCost GetExternalInputCost() const override {
 		return PipelineExternalInputCost::SERIALIZED_FANOUT;
 	}
-	void InitializeOutputChunk(Allocator &allocator, DataChunk &chunk) const override;
 
 protected:
 	// CachingOperator Interface

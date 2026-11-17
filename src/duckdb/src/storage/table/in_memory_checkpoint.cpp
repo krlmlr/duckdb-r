@@ -8,7 +8,6 @@
 #include "duckdb/common/serializer/binary_serializer.hpp"
 #include "duckdb/main/settings.hpp"
 #include "duckdb/storage/data_table.hpp"
-#include "duckdb/storage/partial_block_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
 #include "duckdb/storage/table/table_index_list.hpp"
@@ -20,17 +19,16 @@ namespace duckdb {
 // In-Memory Checkpoint Writer
 //===--------------------------------------------------------------------===//
 InMemoryCheckpointer::InMemoryCheckpointer(QueryContext context, AttachedDatabase &db, BlockManager &block_manager,
-                                           StorageManager &storage_manager, CheckpointOptions options_p,
-                                           optional_ptr<ClientContext> checkpoint_context)
-    : CheckpointWriter(db, context, checkpoint_context),
-      partial_block_manager(GetContext(), block_manager, PartialBlockType::IN_MEMORY_CHECKPOINT),
+                                           StorageManager &storage_manager, CheckpointOptions options_p)
+    : CheckpointWriter(db), context(context.GetClientContext()),
+      partial_block_manager(context, block_manager, PartialBlockType::IN_MEMORY_CHECKPOINT),
       storage_manager(storage_manager), options(options_p) {
 }
 
 void InMemoryCheckpointer::CreateCheckpoint() {
 	auto &transaction_manager = DuckTransactionManager::Get(db);
 	// appends that run alongside the checkpoint start new row groups, index changes go to the checkpoint deltas
-	ActiveCheckpointWrapper active_checkpoint(checkpoint_context, db, transaction_manager);
+	ActiveCheckpointWrapper active_checkpoint(context, db, transaction_manager);
 	{
 		unique_lock<mutex> commit_lock;
 		if (!options.commit_lock) {
@@ -94,6 +92,7 @@ void InMemoryCheckpointer::WriteTable(TableCatalogEntry &table, Serializer &seri
 
 	// Write the table data
 	table.GetStorage().Checkpoint(data_writer, serializer);
+	partial_block_manager.FlushPartialBlocks();
 }
 
 InMemoryRowGroupWriter::InMemoryRowGroupWriter(TableDataWriter &writer, TableCatalogEntry &table,
@@ -119,7 +118,7 @@ optional_ptr<MetadataManager> InMemoryRowGroupWriter::GetMetadataManager() {
 }
 
 InMemoryTableDataWriter::InMemoryTableDataWriter(InMemoryCheckpointer &checkpoint_manager, TableCatalogEntry &table)
-    : TableDataWriter(table, checkpoint_manager.GetContext()), checkpoint_manager(checkpoint_manager) {
+    : TableDataWriter(table, checkpoint_manager.GetClientContext()), checkpoint_manager(checkpoint_manager) {
 }
 
 void InMemoryTableDataWriter::WriteUnchangedTable(MetaBlockPointer pointer,
@@ -134,7 +133,7 @@ void InMemoryTableDataWriter::FinalizeTable(const TableStatistics &global_stats,
 	// nop: no need to write anything
 }
 
-unique_ptr<RowGroupWriter> InMemoryTableDataWriter::GetRowGroupWriter() {
+unique_ptr<RowGroupWriter> InMemoryTableDataWriter::GetRowGroupWriter(RowGroup &row_group) {
 	return make_uniq<InMemoryRowGroupWriter>(*this, table, checkpoint_manager.GetPartialBlockManager(),
 	                                         checkpoint_manager);
 }
@@ -144,8 +143,6 @@ unique_ptr<TableIndexWriter> InMemoryTableDataWriter::GetTableIndexWriter(Storag
 };
 
 void InMemoryTableDataWriter::FlushPartialBlocks() {
-	// Finalize packed buffers before the checkpoint row groups become visible.
-	checkpoint_manager.GetPartialBlockManager().FlushPartialBlocks();
 }
 
 CheckpointOptions InMemoryTableDataWriter::GetCheckpointOptions() const {
@@ -154,6 +151,33 @@ CheckpointOptions InMemoryTableDataWriter::GetCheckpointOptions() const {
 
 MetadataManager &InMemoryTableDataWriter::GetMetadataManager() {
 	return checkpoint_manager.GetMetadataManager();
+}
+
+InMemoryPartialBlock::InMemoryPartialBlock(ColumnData &data, ColumnSegment &segment, PartialBlockState state,
+                                           BlockManager &block_manager)
+    : PartialBlock(state, block_manager, segment.GetBlockHandle()) {
+	InMemoryPartialBlock::AddSegmentToTail(data, segment, 0);
+}
+
+InMemoryPartialBlock::~InMemoryPartialBlock() {
+}
+
+void InMemoryPartialBlock::Flush(QueryContext context, const idx_t free_space_left) {
+	Clear();
+}
+
+void InMemoryPartialBlock::Merge(PartialBlock &other_p, idx_t offset, idx_t other_size) {
+	auto &other = other_p.Cast<InMemoryPartialBlock>();
+	other.Clear();
+}
+
+void InMemoryPartialBlock::AddSegmentToTail(ColumnData &data, ColumnSegment &segment, uint32_t offset_in_block) {
+	segment.SetBlock(block_handle, offset_in_block);
+}
+
+void InMemoryPartialBlock::Clear() {
+	uninitialized_regions.clear();
+	block_handle.reset();
 }
 
 } // namespace duckdb

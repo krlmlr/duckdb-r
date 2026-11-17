@@ -66,12 +66,15 @@ unique_ptr<Expression> RewriteCorrelatedExpressions::VisitReplace(BoundColumnRef
 	D_ASSERT(current_entry != current_binding_map.end());
 	auto original_binding = expr.Binding();
 	if (original_binding == current_entry->second) {
-		return expr.WithDepth(0);
+		expr.DepthMutable() = 0;
+		return nullptr;
 	}
-	RegisterCorrelatedBinding(original_binding, current_entry->second);
+	expr.BindingMutable() = current_entry->second;
+	RegisterCorrelatedBinding(original_binding, expr.Binding());
 	// The current representative is produced inside the converted algebra. Once a
 	// reference points at it, it is local regardless of the original binder depth.
-	return expr.WithBinding(current_entry->second, 0);
+	expr.DepthMutable() = 0;
+	return nullptr;
 }
 
 RewriteCorrelatedAggregates::RewriteCorrelatedAggregates(
@@ -90,8 +93,8 @@ unique_ptr<Expression> RewriteCorrelatedAggregates::VisitReplace(BoundColumnRefE
 	auto entry = replacement_map.find(expr.Binding());
 	if (entry != replacement_map.end()) {
 		// Replace this with CASE WHEN the aggregate group is missing THEN EMPTY_RESULT ELSE AGGREGATE END.
-		auto is_null = make_uniq<BoundOperatorExpression>(
-		    ExpressionType::OPERATOR_IS_NULL, LogicalType::BOOLEAN,
+		auto is_null = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NULL, LogicalType::BOOLEAN);
+		is_null->GetChildrenMutable().push_back(
 		    make_uniq<BoundColumnRefExpression>(LogicalType::BIGINT, entry->second.marker));
 		auto check = std::move(is_null);
 		auto result_if_true = make_uniq<BoundColumnRefExpression>(expr.GetReturnType(), entry->second.empty_result);

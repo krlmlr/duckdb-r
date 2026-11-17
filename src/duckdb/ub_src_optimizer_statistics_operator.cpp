@@ -20,7 +20,5 @@
 
 #include "src/optimizer/statistics/operator/propagate_set_operation.cpp"
 
-#include "src/optimizer/statistics/operator/propagate_unnest.cpp"
-
 #include "src/optimizer/statistics/operator/propagate_window.cpp"
 

@@ -4,7 +4,6 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/context.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/main/http/http_util.hpp"
 
@@ -15,7 +14,7 @@ SettingLookupResult ClientContextFileOpener::TryGetCurrentSetting(const Identifi
 }
 
 Logger &ClientContextFileOpener::GetLogger() const {
-	return context.GetLogger();
+	return Logger::Get(context);
 }
 
 // LCOV_EXCL_START
@@ -25,7 +24,7 @@ SettingLookupResult ClientContextFileOpener::TryGetCurrentSetting(const Identifi
 }
 
 optional_ptr<DatabaseInstance> ClientContextFileOpener::TryGetDatabase() {
-	return &context.GetDatabase();
+	return context.db.get();
 }
 
 HTTPUtil &ClientContextFileOpener::GetHTTPUtil() {
@@ -36,14 +35,23 @@ unique_ptr<CatalogTransaction> FileOpener::TryGetCatalogTransaction(optional_ptr
 	if (!opener) {
 		return nullptr;
 	}
-	return make_uniq<CatalogTransaction>(CatalogTransaction::GetSystemCatalogTransaction(opener->TryGetContext()));
+	auto context = opener->TryGetClientContext();
+	if (context) {
+		return make_uniq<CatalogTransaction>(CatalogTransaction::GetSystemCatalogTransaction(*context));
+	}
+
+	auto db = opener->TryGetDatabase();
+	if (db) {
+		return make_uniq<CatalogTransaction>(CatalogTransaction::GetSystemTransaction(*db));
+	}
+	return nullptr;
 }
 
-optional_ptr<Context> FileOpener::TryGetContext(optional_ptr<FileOpener> opener) {
+optional_ptr<ClientContext> FileOpener::TryGetClientContext(optional_ptr<FileOpener> opener) {
 	if (!opener) {
 		return nullptr;
 	}
-	return &opener->TryGetContext();
+	return opener->TryGetClientContext();
 }
 
 optional_ptr<DatabaseInstance> FileOpener::TryGetDatabase(optional_ptr<FileOpener> opener) {

@@ -6,7 +6,7 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/function/scalar/generic_common.hpp"
 #include "duckdb/optimizer/aggregate_rewrite_helper.hpp"
-#include "duckdb/function/builtin_function_lookup.hpp"
+#include "duckdb/optimizer/builtin_function_lookup.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -49,9 +49,6 @@ struct GroupingSetLevel {
 };
 
 } // namespace
-
-//! The maximum number of grouping sets that are rewritten into separate aggregates
-static constexpr idx_t MAX_REWRITE_GROUPING_SETS = 1024;
 
 static bool CanRewriteAggregate(const BoundAggregateExpression &aggregate) {
 	if (aggregate.IsDistinct() || aggregate.GetOrderBys()) {
@@ -100,13 +97,8 @@ static bool FindCascade(const vector<GroupingSet> &grouping_sets, vector<Groupin
 		for (idx_t source_idx = level_idx; source_idx > 0; source_idx--) {
 			auto &source_set = grouping_sets[levels[source_idx - 1].grouping_set_idx];
 			if (std::includes(source_set.begin(), source_set.end(), grouping_set.begin(), grouping_set.end())) {
-				auto source_level = source_idx - 1;
-				if (source_set.size() == grouping_set.size() && levels[source_level].source_level.IsValid()) {
-					// identical grouping set: share the source instead of chaining, to keep the cascade shallow
-					source_level = levels[source_level].source_level.GetIndex();
-				}
-				levels[level_idx].source_level = source_level;
-				levels[source_level].materialized = true;
+				levels[level_idx].source_level = source_idx - 1;
+				levels[source_idx - 1].materialized = true;
 				break;
 			}
 		}
@@ -200,9 +192,9 @@ bool GroupingSetsOptimizer::TryExpandGroupingSets(unique_ptr<LogicalOperator> &o
 	}
 
 	auto cte_name = Identifier(StringUtil::Format("__grouping_sets_input_cte_%llu", cte_index.index));
-	auto input = LogicalProjection::CreateIdentity(optimizer.binder.GenerateTableIndex(), std::move(op->children[0]));
-	result = make_uniq<LogicalMaterializedCTE>(std::move(cte_name), cte_index, input_types.size(), std::move(input),
-	                                           std::move(result), CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
+	result = make_uniq<LogicalMaterializedCTE>(std::move(cte_name), cte_index, input_types.size(),
+	                                           std::move(op->children[0]), std::move(result),
+	                                           CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
 	if (aggr.has_estimated_cardinality) {
 		result->SetEstimatedCardinality(aggr.estimated_cardinality);
 	}
@@ -256,10 +248,6 @@ bool GroupingSetsOptimizer::TryRewriteGroupingSets(unique_ptr<LogicalOperator> &
 		if (!CanRewriteAggregate(expr->Cast<BoundAggregateExpression>())) {
 			can_cascade = false;
 		}
-	}
-	if (aggr.grouping_sets.size() > MAX_REWRITE_GROUPING_SETS) {
-		// the rewritten plan nests a materialized CTE per grouping set - leave large grouping sets to the aggregate
-		return false;
 	}
 	vector<GroupingSetLevel> levels;
 	if (!can_cascade || !FindCascade(aggr.grouping_sets, levels)) {
@@ -315,7 +303,8 @@ bool GroupingSetsOptimizer::TryRewriteGroupingSets(unique_ptr<LogicalOperator> &
 				    state_types[aggr_idx], ColumnBinding(cte_ref_index, ProjectionIndex(state_pos))));
 				auto combine_function =
 				    GetBuiltinAggregateFunction(optimizer.context, CombineAggrFun::Name, {state_types[aggr_idx]});
-				auto combine_aggregate = function_binder.BindAggregateFunction(combine_function, std::move(arguments));
+				auto combine_aggregate =
+				    function_binder.BindAggregateFunction(std::move(combine_function), std::move(arguments));
 				if (combine_aggregate->GetReturnType() != state_types[aggr_idx]) {
 					return false;
 				}
@@ -432,11 +421,8 @@ bool GroupingSetsOptimizer::TryRewriteGroupingSets(unique_ptr<LogicalOperator> &
 			continue;
 		}
 		auto cte_name = Identifier(StringUtil::Format("__grouping_sets_cte_%llu", level.cte_index.index));
-		// cap the aggregate with a projection so later binding remaps cannot change the CTE's column layout
-		auto cte_definition =
-		    LogicalProjection::CreateIdentity(optimizer.binder.GenerateTableIndex(), std::move(level.aggregate));
 		auto cte = make_uniq<LogicalMaterializedCTE>(std::move(cte_name), level.cte_index, level.output_types.size(),
-		                                             std::move(cte_definition), std::move(result),
+		                                             std::move(level.aggregate), std::move(result),
 		                                             CTEMaterialize::CTE_MATERIALIZE_DEFAULT);
 		if (aggr.has_estimated_cardinality) {
 			cte->SetEstimatedCardinality(aggr.estimated_cardinality);
@@ -472,7 +458,7 @@ unique_ptr<Expression> GroupingSetsOptimizer::VisitReplace(BoundColumnRefExpress
                                                            unique_ptr<Expression> *expr_ptr) {
 	auto entry = replacement_map.find(expr.Binding());
 	if (entry != replacement_map.end()) {
-		return expr.WithBinding(entry->second);
+		expr.BindingMutable() = entry->second;
 	}
 	return nullptr;
 }

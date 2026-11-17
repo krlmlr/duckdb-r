@@ -72,9 +72,6 @@ get_duckdb_version <- function() {{
 # The horizontal pair keeps its upstream name; the stacked pair is the package
 # logo, and pkgdown finds that one by the name man/figures/logo.svg rather than
 # by configuration, so the rename is not ours to choose.
-#
-# The content of the horizontal pair is then patched by
-# patch/0100-Use-the-updated-horizontal-logos.patch.
 logo_files = [
     ('DuckDB_Logo-horizontal.svg', 'DuckDB_Logo-horizontal.svg'),
     ('DuckDB_Logo-horizontal-dark-mode.svg', 'DuckDB_Logo-horizontal-dark-mode.svg'),
@@ -195,18 +192,14 @@ linenr = bool(os.getenv("DUCKDB_R_LINENR", ""))
 
 (source_list, include_list, original_sources) = package_build.build_package(target_dir, extensions, linenr)
 
-# Do not vendor jemalloc at all: drop its tree, its sources and its include
-# path. The R package never enables it (DUCKDB_ENABLE_JEMALLOC is never
-# defined), so duckdb's allocator uses the standard implementation. Upstream's
-# packaging emits the jemalloc tree (duckdb/duckdb#22811), which without that
-# define both fails to compile (jemalloc_cpp.cpp requires
-# DUCKDB_OVERRIDE_NEW_DELETE) and fails to link (jemalloc's constructor
-# references duckdb_malloc_ncpus(), defined only under DUCKDB_ENABLE_JEMALLOC).
-# Shipping the tree uncompiled only adds size. Enabling jemalloc is
-# duckdb/duckdb-r#2365.
-shutil.rmtree(os.path.join(target_dir, 'third_party', 'jemalloc'), ignore_errors=True)
+# Drop the bundled jemalloc sources. The R package does not enable jemalloc
+# (DUCKDB_ENABLE_JEMALLOC is never defined), so duckdb's allocator uses the
+# standard implementation. Upstream's packaging started emitting the jemalloc
+# tree into the source list (duckdb/duckdb#22811), which both fails to compile
+# (jemalloc_cpp.cpp requires DUCKDB_OVERRIDE_NEW_DELETE) and fails to link
+# (jemalloc's constructor references duckdb_malloc_ncpus(), defined only under
+# DUCKDB_ENABLE_JEMALLOC). Excluding the tree restores the previous behaviour.
 source_list = [x for x in source_list if 'third_party/jemalloc' not in x.replace('\\', '/')]
-include_list = [x for x in include_list if 'third_party/jemalloc' not in x.replace('\\', '/')]
 
 # Walk target_dir, find all source and include files, and terminate with newline,
 # if not already present. Before the restore below, so what it compares against

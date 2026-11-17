@@ -14,8 +14,8 @@
 
 namespace duckdb {
 
-IndexEntry::IndexEntry(unique_ptr<Index> index_p, idx_t index_oid_p, const ConstraintCheckMode check_mode_p)
-    : index_oid(index_oid_p), owned_index(std::move(index_p)), check_mode(check_mode_p) {
+IndexEntry::IndexEntry(unique_ptr<Index> index_p, const ConstraintCheckMode check_mode_p)
+    : owned_index(std::move(index_p)), check_mode(check_mode_p) {
 	if (owned_index->IsBound()) {
 		bind_state = IndexBindState::BOUND;
 	} else {
@@ -31,10 +31,7 @@ void IndexEntry::Append(DataChunk &chunk, Vector &row_ids) {
 		return;
 	}
 	auto &bound_index = owned_index->Cast<BoundIndex>();
-	auto error = bound_index.Append(chunk, row_ids);
-	if (error.HasError()) {
-		error.Throw();
-	}
+	bound_index.Append(chunk, row_ids);
 }
 
 ErrorData IndexEntry::Append(DataChunk &chunk, Vector &row_ids, const shared_ptr<IndexEntry> &delete_entry,
@@ -64,6 +61,7 @@ ErrorData IndexEntry::Append(DataChunk &chunk, Vector &row_ids, const shared_ptr
 		}
 	}
 
+	ErrorData error;
 	try {
 		if (lookup_main_index) {
 			IndexAppendInfo lookup_append_info;
@@ -75,19 +73,20 @@ ErrorData IndexEntry::Append(DataChunk &chunk, Vector &row_ids, const shared_ptr
 			}
 			bound_index.VerifyAppend(chunk, lookup_append_info, optional_ptr<ConflictManager>());
 		}
-	} catch (std::exception &ex) {
-		// the lookup is read-only: nothing was inserted yet
-		return ErrorData(ex);
-	}
 
-	IndexAppendInfo index_append_info(append_mode, nullptr);
-	if (delete_index) {
-		index_append_info.delete_indexes.push_back(*delete_index);
+		IndexAppendInfo index_append_info(append_mode, nullptr);
+		if (delete_index) {
+			index_append_info.delete_indexes.push_back(*delete_index);
+		}
+		if (append_index) {
+			error = append_index->Append(chunk, row_ids, index_append_info);
+		} else {
+			error = bound_index.Append(chunk, row_ids, index_append_info);
+		}
+	} catch (std::exception &ex) {
+		error = ErrorData(ex);
 	}
-	if (append_index) {
-		return append_index->Append(chunk, row_ids, index_append_info);
-	}
-	return bound_index.Append(chunk, row_ids, index_append_info);
+	return error;
 }
 
 void IndexEntry::RevertAppend(DataChunk &chunk, Vector &row_ids) {
@@ -121,10 +120,10 @@ void IndexEntry::InitializeLocalIndexesInternal(TableIndexList &delete_indexes,
 	}
 
 	auto constraint_type = bound_index.GetConstraintType();
-	delete_indexes.AddIndex(bound_index.CreateEmptyCopy(constraint_type), index_oid, ConstraintCheckMode::DEFAULT);
+	delete_indexes.AddIndex(bound_index.CreateEmptyCopy(constraint_type), ConstraintCheckMode::DEFAULT);
 	// Deferred constraints have no append index: transaction-local rows are verified when committing.
 	if (append_indexes && !IsDeferred()) {
-		append_indexes->AddIndex(bound_index.CreateEmptyCopy(constraint_type), index_oid, ConstraintCheckMode::DEFAULT);
+		append_indexes->AddIndex(bound_index.CreateEmptyCopy(constraint_type), ConstraintCheckMode::DEFAULT);
 	}
 }
 
@@ -138,9 +137,6 @@ void IndexEntry::AppendToDeleteIndexes(DataChunk &chunk, Vector &row_ids) {
 	IndexAppendInfo index_append_info(IndexAppendMode::IGNORE_DUPLICATES, nullptr);
 	auto result = bound_index.Append(chunk, row_ids, index_append_info);
 	if (result.HasError()) {
-		if (result.Type() != ExceptionType::CONSTRAINT) {
-			result.Throw();
-		}
 		throw InternalException("unexpected constraint violation on delete ART: ", result.Message());
 	}
 }
@@ -149,9 +145,6 @@ static void AppendIndexEntries(BoundIndex &index, DataChunk &chunk, Vector &row_
 	IndexAppendInfo append_info;
 	const auto error = index.Append(chunk, row_ids, append_info);
 	if (error.HasError()) {
-		if (error.Type() != ExceptionType::CONSTRAINT) {
-			error.Throw();
-		}
 		throw InternalException("Failed to append to %s: %s", index.GetIndexName(), error.Message());
 	}
 }
@@ -340,14 +333,6 @@ string IndexEntry::GetIndexType() const {
 	return owned_index->GetIndexType();
 }
 
-bool IndexEntry::HasBufferedReplays() const {
-	auto entry_lock = lock.GetSharedLock();
-	if (!owned_index || owned_index->IsBound()) {
-		return false;
-	}
-	return owned_index->Cast<UnboundIndex>().HasBufferedReplays();
-}
-
 void IndexEntry::Retire() {
 	auto entry_lock = lock.GetExclusiveLock();
 	deltas.Reset();
@@ -356,10 +341,9 @@ void IndexEntry::Retire() {
 	bind_state = IndexBindState::RETIRED;
 }
 
-unique_ptr<BoundIndex> IndexEntry::Bind(IndexBinder &binder, const vector<LogicalType> &table_types,
-                                        bool skip_mismatched_keys) {
+unique_ptr<BoundIndex> IndexEntry::Bind(IndexBinder &binder, const vector<LogicalType> &table_types) {
 	auto entry_lock = lock.GetExclusiveLock();
-	return owned_index->Cast<UnboundIndex>().Bind(binder, table_types, skip_mismatched_keys);
+	return owned_index->Cast<UnboundIndex>().Bind(binder, table_types);
 }
 
 void IndexEntry::CommitBind(unique_ptr<BoundIndex> bound_index) {
@@ -387,10 +371,6 @@ void IndexEntry::VerifyAppend(const shared_ptr<IndexEntry> &delete_entry, DataCh
 		}
 	}
 	bound_index.VerifyAppend(chunk, index_append_info, manager);
-	if (auto delta = deltas.Find(IndexDeltaType::ADDED_DATA_DURING_CHECKPOINT)) {
-		// rows committed while a checkpoint runs are only in this delta
-		delta->VerifyAppend(chunk, index_append_info, manager);
-	}
 }
 
 void IndexEntry::VerifyForeignKey(const shared_ptr<IndexEntry> &delete_entry, DataChunk &chunk,
@@ -453,10 +433,7 @@ void IndexEntry::Rebuild(const IndexRebuildScan &scan) {
 	IndexRebuildAppend append = [&](DataChunk &chunk, Vector &row_ids) {
 		auto error = bound_index.Append(chunk, row_ids);
 		if (error.HasError()) {
-			if (error.Type() != ExceptionType::CONSTRAINT) {
-				error.Throw();
-			}
-			throw InternalException("Failed to rebuild index %s after vacuum: %s", bound_index.GetIndexName(),
+			throw InternalException("Failed to rebuild index '%s' after vacuum: %s", bound_index.GetIndexName(),
 			                        error.Message());
 		}
 	};

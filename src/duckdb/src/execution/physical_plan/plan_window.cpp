@@ -5,9 +5,6 @@
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/function/window_function.hpp"
-#include "duckdb/optimizer/apply_functional_dependencies.hpp"
-#include "duckdb/planner/expression/bound_columnref_expression.hpp"
-#include "duckdb/planner/expression_binder/base_select_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
@@ -17,24 +14,7 @@ namespace duckdb {
 
 namespace {
 
-using ucc_set_t = vector<column_binding_set_t>;
-using bindings_t = vector<ColumnBinding>;
-
-// §4.2: Ranking functions require UCC partitions
-bool IsRankingFunction(BoundWindowExpression &wexpr) {
-	//	Aggregates are not ranking
-	if (wexpr.AggregateFunction()) {
-		return false;
-	}
-
-	return wexpr.WindowFunction()->IsRanking();
-}
-
 bool HasDegenerateFrameCase1(ClientContext &client, BoundWindowExpression &wexpr) {
-	if (IsRankingFunction(wexpr)) {
-		return false;
-	}
-
 	const auto start_boundary = wexpr.WindowStart();
 	const auto end_boundary = wexpr.WindowEnd();
 	if (start_boundary == WindowBoundary::CURRENT_ROW_ROWS && end_boundary == WindowBoundary::CURRENT_ROW_ROWS) {
@@ -67,10 +47,6 @@ bool HasDegenerateFrameCase1(ClientContext &client, BoundWindowExpression &wexpr
 }
 
 bool HasDegenerateFrameCase2(BoundWindowExpression &wexpr) {
-	if (IsRankingFunction(wexpr)) {
-		return false;
-	}
-
 	switch (wexpr.WindowStart()) {
 	case WindowBoundary::CURRENT_ROW_RANGE:
 	case WindowBoundary::CURRENT_ROW_GROUPS:
@@ -88,25 +64,7 @@ bool HasDegenerateFrameCase2(BoundWindowExpression &wexpr) {
 	return wexpr.WindowExclude() == WindowExcludeMode::TIES;
 }
 
-ColumnBinding GetColumnBinding(const Expression &expr, const bindings_t &bindings) {
-	switch (expr.GetExpressionType()) {
-	case ExpressionType::BOUND_COLUMN_REF:
-		return expr.Cast<BoundColumnRefExpression>().Binding();
-	case ExpressionType::BOUND_REF:
-		return bindings.at(expr.Cast<BoundReferenceExpression>().Index());
-	default:
-		break;
-	}
-
-	//	Return invalid binding, which will not be in the UCCs
-	return ColumnBinding();
-}
-
-bool HasDegenerateFrameCase3(BoundWindowExpression &wexpr, const ucc_set_t &uccs, const bindings_t &bindings) {
-	if (IsRankingFunction(wexpr)) {
-		return false;
-	}
-
+bool HasDegenerateFrameCase3(BoundWindowExpression &wexpr) {
 	switch (wexpr.WindowStart()) {
 	case WindowBoundary::CURRENT_ROW_RANGE:
 	case WindowBoundary::CURRENT_ROW_GROUPS:
@@ -122,49 +80,20 @@ bool HasDegenerateFrameCase3(BoundWindowExpression &wexpr, const ucc_set_t &uccs
 		return false;
 	}
 
-	auto &order_bys = wexpr.OrderBy();
-	if (order_bys.empty()) {
-		return false;
-	}
-
-	for (const auto &ucc : uccs) {
-		auto fds = ucc;
-		for (const auto &order : order_bys) {
-			fds.erase(GetColumnBinding(*order.expression, bindings));
-		}
-		if (fds.empty()) {
-			return true;
-		}
-	}
-
+	//	TODO: Model UCC for ordering
 	return false;
 }
 
-bool HasDegenerateFrameCase4(BoundWindowExpression &wexpr, const ucc_set_t &uccs, const bindings_t &bindings) {
-	auto &partition_bys = wexpr.Partitions();
-	if (partition_bys.empty()) {
-		return false;
-	}
-
-	for (const auto &ucc : uccs) {
-		auto fds = ucc;
-		for (const auto &expr : partition_bys) {
-			fds.erase(GetColumnBinding(*expr, bindings));
-		}
-		if (fds.empty()) {
-			return true;
-		}
-	}
-
+bool HasDegenerateFrameCase4(BoundWindowExpression &wexpr) {
+	//	TODO: Model UCC for partitioning
 	return false;
 }
 
-bool HasDegenerateFrame(ClientContext &client, BoundWindowExpression &wexpr, const ucc_set_t &uccs,
-                        const bindings_t &bindings) {
+bool HasDegenerateFrame(ClientContext &client, BoundWindowExpression &wexpr) {
 	//	From https://www.vldb.org/pvldb/vol19/p3525-lindner.pdf §4 Frame Analysis
-	const bool case_iv = HasDegenerateFrameCase4(wexpr, uccs, bindings);
+	const bool case_iv = HasDegenerateFrameCase4(wexpr);
 	const bool case_i_iv = case_iv || HasDegenerateFrameCase1(client, wexpr) || HasDegenerateFrameCase2(wexpr) ||
-	                       HasDegenerateFrameCase3(wexpr, uccs, bindings);
+	                       HasDegenerateFrameCase3(wexpr);
 	if (!case_i_iv) {
 		return false;
 	}
@@ -198,13 +127,8 @@ bool HasDegenerateFrame(ClientContext &client, BoundWindowExpression &wexpr, con
 PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	D_ASSERT(op.children.size() == 1);
 
-	//	Extract the UCCs for simplifications
-	auto &child = *op.children[0];
-	const auto uccs = ApplyFunctionalDependencies::GetUniqueColumnCombinations(child);
-	const auto bindings = child.GetColumnBindings();
-
 	op.estimated_cardinality = op.EstimateCardinality(context);
-	reference<PhysicalOperator> plan = CreatePlan(child);
+	reference<PhysicalOperator> plan = CreatePlan(*op.children[0]);
 #ifdef DEBUG
 	for (auto &expr : op.expressions) {
 		D_ASSERT(expr->IsWindow());
@@ -221,7 +145,6 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	// Identify streaming windows, partitioned windows and degenerate frames (0,1)
 	using Columns = vector<column_t>;
 	const bool enable_optimizer = Settings::Get<EnableOptimizerSetting>(context);
-	const bool can_stream = enable_optimizer && (plan.get().GetSources().size() == 1);
 	vector<idx_t> blocking_windows;
 	vector<idx_t> streaming_windows;
 	vector<idx_t> partitioned_windows;
@@ -230,9 +153,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	for (idx_t expr_idx = 0; expr_idx < op.expressions.size(); expr_idx++) {
 		auto &wexpr = op.expressions[expr_idx]->Cast<BoundWindowExpression>();
 		Columns partition_columns;
-		if (HasDegenerateFrame(context, wexpr, uccs, bindings)) {
+		if (HasDegenerateFrame(context, wexpr)) {
 			degenerate_frames.emplace_back(expr_idx);
-		} else if (can_stream && PhysicalStreamingWindow::IsStreamingFunction(context, wexpr)) {
+		} else if (enable_optimizer && PhysicalStreamingWindow::IsStreamingFunction(context, wexpr)) {
 			streaming_windows.push_back(expr_idx);
 		} else if (!wexpr.Partitions().empty() &&
 		           HasSingleValuePartitions(context, wexpr.Partitions(), plan, partition_columns)) {
@@ -387,10 +310,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
 	}
 	// Evaluate the degenerate functions as scalar window functions
 	FunctionBinder binder(context);
-	const vector<LogicalType> input_types(op.types.begin(), op.types.begin() + NumericCast<int64_t>(input_width));
 	for (const auto &expr_idx : degenerate_frames) {
 		auto &wexpr = op.expressions[expr_idx]->Cast<BoundWindowExpression>();
-		select_list[input_width + expr_idx] = binder.BindScalarWindowFunction(wexpr, input_types);
+		select_list[input_width + expr_idx] = binder.BindScalarWindowFunction(wexpr);
 	}
 
 	auto &proj = Make<PhysicalProjection>(op.types, std::move(select_list), op.estimated_cardinality);

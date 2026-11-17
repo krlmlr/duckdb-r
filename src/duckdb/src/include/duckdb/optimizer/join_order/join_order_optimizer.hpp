@@ -16,19 +16,11 @@
 
 namespace duckdb {
 
-class JoinOrderSourceStats;
-
 class JoinOrderOptimizer {
 public:
 	explicit JoinOrderOptimizer(ClientContext &context);
 
 public:
-	//! Deepest nesting of child optimizers (one per non-reorderable operator, projection, aggregate, ...) that is still
-	//! join-order optimized. Every level recurses through Optimize/Build/ExtractJoinRelations, so a very deep plan
-	//! (e.g. a long chain of EXCEPT/INTERSECT) would otherwise overflow the stack long before the plan depth limit is
-	//! hit; subplans below this depth keep their original join order, which is always a valid plan.
-	static constexpr idx_t MAX_RECURSION_DEPTH = 128;
-
 	JoinOrderOptimizer CreateChildOptimizer();
 	//! Perform join reordering inside a plan
 	unique_ptr<LogicalOperator> Optimize(unique_ptr<LogicalOperator> plan, optional_ptr<RelationStats> stats = nullptr);
@@ -38,7 +30,6 @@ public:
 	//! Adds/gets delim scan stats
 	void AddDelimScanStats(RelationStats &stats);
 	RelationStats GetDelimScanStats();
-	const shared_ptr<const JoinOrderSourceStats> &GetSourceStats() const;
 
 private:
 	ClientContext &context;
@@ -61,7 +52,6 @@ private:
 	//! Stats of Delim Scans of the Delim Join that is currently being optimized
 	optional_ptr<RelationStats> delim_scan_stats;
 	idx_t depth;
-	shared_ptr<const JoinOrderSourceStats> source_stats;
 
 public:
 	unordered_set<TableIndex> recursive_cte_indexes;

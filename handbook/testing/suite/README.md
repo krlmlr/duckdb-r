@@ -36,16 +36,12 @@ and `_snaps/`
 **The helpers.**
 Every `helper-*.R` is sourced before the first test,
 and that set is the list.
-Each opens with a header saying why it exists.
-Three constraints are not obvious from reading one:
+Each should open with a header saying why it exists;
+`helper-DBItest.R` and `helper-skip.R` do not yet.
+Two constraints are not obvious from reading one:
 `helper-DBItest.R`'s `make_context()` call must stay in the helper,
-any expectation whose output can carry the package name goes
-through `transform_package_name` from `helper-snapshot.R`,
-and two paths that should name the same directory are compared
-with `expect_same_path` from `helper-storage.R` —
-on Windows `dirname()` returns `/` separators while `file.path()`
-and `tempdir()` keep the `\` they were handed,
-so `expect_equal()` reports a difference that is not there.
+and any expectation whose output can carry the package name goes
+through `transform_package_name` from `helper-snapshot.R`.
 `local_con()`, the self-disconnecting connection fixture,
 is package code (`R/test-fixtures.R`);
 the suite runs with the namespace loaded,
@@ -66,11 +62,3 @@ the test asserts the download error rather than skipping,
 so the day the gap closes it is the assertion that fails,
 on the platform itself.
 A skip would have gone on passing silently.
-
-**The re2 tests are skipped in R-hub's runs only.**
-Tests that reach DuckDB's re2 call `skip_if_not(TEST_RE2)`,
-and [`helper-skip.R`](/tests/testthat/helper-skip.R) sets the flag for every run but the R-hub workflow,
-whose CRAN check flavours re2 once tripped ([#121](https://github.com/duckdb/duckdb-r/issues/121)).
-`DUCKDB_R_TEST_RE2` overrides that for a run, either way.
-A test fails if the `rcc` workflow runs without them,
-because a skip that no run lifts lets its tests rot unseen.

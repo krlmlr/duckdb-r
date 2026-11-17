@@ -39,10 +39,6 @@ public:
 		return count;
 	}
 
-	idx_t GetCapacity() const {
-		return capacity;
-	}
-
 	void resize(idx_t capacity_p) { // NOLINT: match stl case
 		capacity = capacity_p;
 		occupied = occupied_mask(capacity);

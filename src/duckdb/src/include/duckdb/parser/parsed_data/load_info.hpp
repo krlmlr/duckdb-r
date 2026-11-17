@@ -32,8 +32,7 @@ public:
 	//! Whether to load the extension immediately after installing it (INSTALL AND LOAD)
 	bool load_after_install = false;
 	Identifier alias;
-	//! The url prefix of the repository (CREATE_REPOSITORY only). Empty when none was given: the name is then the host
-	//! of the publisher, which names the prefix in its .well-known metadata file
+	//! The url prefix of the repository (CREATE_REPOSITORY only)
 	string repository_url;
 	//! The public keys that are trusted to sign the extensions of the repository (CREATE_REPOSITORY only)
 	vector<string> public_keys;

@@ -20,10 +20,7 @@ public:
 	}
 
 	string ToString() const override {
-		return element.GetPrintName() + "*";
-	}
-	Matcher &GetChildMatcher() {
-		return element;
+		return element.GetName() + "*";
 	}
 	const Matcher &GetChildMatcher() const {
 		return element;

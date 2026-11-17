@@ -1,14 +1,19 @@
 #include "duckdb/common/assert.hpp"
+#include "duckdb/catalog/catalog_search_path.hpp"
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/pragma/pragma_functions.hpp"
+#include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/parser/parser.hpp"
+#include "duckdb/parser/qualified_name.hpp"
 #include "duckdb/parser/statement/copy_statement.hpp"
 #include "duckdb/parser/statement/export_statement.hpp"
 #include "duckdb/parser/keyword_helper.hpp"
+#include "duckdb/common/enums/on_entry_not_found.hpp"
 
 namespace duckdb {
 
@@ -16,8 +21,24 @@ static string PragmaTableInfo(ClientContext &context, const FunctionParameters &
 	return StringUtil::Format("SELECT * FROM pragma_table_info(%s);", SQLString(parameters.values[0].ToString()));
 }
 
-string PragmaShowTables(const string &filter) {
-	auto where_clause = "WHERE " + filter;
+string PragmaShowTables(const string &database, const string &schema, optional_idx schema_oid) {
+	string where_clause = "";
+	vector<string> where_conditions;
+	if (schema_oid.IsValid()) {
+		// the schema was resolved to a (possibly nested) schema entry - filter on its oid
+		where_conditions.push_back(StringUtil::Format("schema_oid = %llu", schema_oid.GetIndex()));
+	} else {
+		if (!database.empty()) {
+			where_conditions.push_back(StringUtil::Format("lower(database_name) = lower(%s)", SQLString(database)));
+		}
+		if (!schema.empty()) {
+			where_conditions.push_back(StringUtil::Format("lower(schema_name) = lower(%s)", SQLString(schema)));
+		}
+	}
+	if (where_conditions.empty()) {
+		where_conditions.push_back("in_search_path(database_name, schema_name)");
+	}
+	where_clause = "WHERE " + StringUtil::Join(where_conditions, " AND ");
 
 	// clang-format off
 	string query = R"EOF(
@@ -46,7 +67,7 @@ string PragmaShowTables(const string &filter) {
 }
 
 static string PragmaShowTables(ClientContext &context, const FunctionParameters &parameters) {
-	return "SHOW TABLES";
+	return PragmaShowTables();
 }
 
 string PragmaShowTablesExpanded() {
@@ -61,7 +82,7 @@ string PragmaShowTablesExpanded() {
 	FROM duckdb_tables t
 	JOIN duckdb_columns c
 	USING (table_oid)
-	GROUP BY database, schema, name, t.table_oid
+	GROUP BY database, schema, name
 
 	UNION ALL
 
@@ -75,7 +96,7 @@ string PragmaShowTablesExpanded() {
 	FROM duckdb_views v
 	JOIN duckdb_columns c
 	ON (v.view_oid=c.table_oid)
-	GROUP BY database, schema, name, v.view_oid
+	GROUP BY database, schema, name
 
 	ORDER BY database, schema, name
 	)";
@@ -149,15 +170,12 @@ static string PragmaImportDatabase(ClientContext &context, const FunctionParamet
 		auto query = string(buffer.get(), UnsafeNumericCast<uint32_t>(fsize));
 		// Replace the placeholder with the path provided to IMPORT
 		if (file == "load.sql") {
-			auto parser = Parser::GetBuiltinParser();
+			Parser parser;
 			parser.ParseQuery(query);
 			auto copy_statements = std::move(parser.statements);
 			query.clear();
 			for (auto &statement_p : copy_statements) {
-				if (statement_p->type != StatementType::COPY_STATEMENT) {
-					throw InvalidInputException("IMPORT DATABASE: load.sql may only contain COPY statements, found: %s",
-					                            statement_p->ToString());
-				}
+				D_ASSERT(statement_p->type == StatementType::COPY_STATEMENT);
 				auto &statement = statement_p->Cast<CopyStatement>();
 				auto &info = *statement.info;
 				auto file_name = fs.ExtractName(info.file_path);
@@ -198,29 +216,23 @@ static string PragmaUserAgent(ClientContext &context, const FunctionParameters &
 }
 
 void PragmaQueries::RegisterFunction(BuiltinFunctions &set) {
-	set.AddFunction(PragmaFunction::PragmaCall(
-	    "table_info", PragmaTableInfo, FunctionSignature().AddPositionalOnly("table_name", LogicalType::VARCHAR)));
-	set.AddFunction(PragmaFunction::PragmaCall(
-	    "storage_info", PragmaStorageInfo, FunctionSignature().AddPositionalOnly("table_name", LogicalType::VARCHAR)));
+	set.AddFunction(PragmaFunction::PragmaCall("table_info", PragmaTableInfo, {LogicalType::VARCHAR}));
+	set.AddFunction(PragmaFunction::PragmaCall("storage_info", PragmaStorageInfo, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaCall("metadata_info", PragmaMetadataInfo, {}));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_tables", PragmaShowTables));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_tables_expanded", PragmaShowTablesExpanded));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_databases", PragmaShowDatabases));
 	set.AddFunction(PragmaFunction::PragmaStatement("database_list", PragmaDatabaseList));
 	set.AddFunction(PragmaFunction::PragmaStatement("collations", PragmaCollations));
-	set.AddFunction(PragmaFunction::PragmaCall(
-	    "show", PragmaShow, FunctionSignature().AddPositionalOnly("table_name", LogicalType::VARCHAR)));
+	set.AddFunction(PragmaFunction::PragmaCall("show", PragmaShow, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaStatement("version", PragmaVersion));
 	set.AddFunction(PragmaFunction::PragmaStatement("extension_versions", PragmaExtensionVersions));
 	set.AddFunction(PragmaFunction::PragmaStatement("platform", PragmaPlatform));
 	set.AddFunction(PragmaFunction::PragmaStatement("database_size", PragmaDatabaseSize));
 	set.AddFunction(PragmaFunction::PragmaStatement("functions", PragmaFunctionsQuery));
-	set.AddFunction(PragmaFunction::PragmaCall("import_database", PragmaImportDatabase,
-	                                           FunctionSignature().AddPositionalOnly("path", LogicalType::VARCHAR)));
-	set.AddFunction(PragmaFunction::PragmaCall("copy_database", PragmaCopyDatabase,
-	                                           FunctionSignature()
-	                                               .AddPositionalOnly("from_database", LogicalType::VARCHAR)
-	                                               .AddPositionalOnly("to_database", LogicalType::VARCHAR)));
+	set.AddFunction(PragmaFunction::PragmaCall("import_database", PragmaImportDatabase, {LogicalType::VARCHAR}));
+	set.AddFunction(
+	    PragmaFunction::PragmaCall("copy_database", PragmaCopyDatabase, {LogicalType::VARCHAR, LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaStatement("user_agent", PragmaUserAgent));
 }
 

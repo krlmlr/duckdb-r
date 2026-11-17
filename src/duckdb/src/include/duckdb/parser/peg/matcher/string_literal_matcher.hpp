@@ -55,7 +55,7 @@ public:
 		auto result = state.AllocateParseResult<StringLiteralParseResult>(stripped_string, string_info.type,
 		                                                                  start_offset, token_length);
 		if (result.HasParseResult()) {
-			result.GetParseResult()->SetNameFrom(*this);
+			result.GetParseResult()->name = name;
 		}
 		return result;
 	}
@@ -66,10 +66,6 @@ public:
 
 	string ToString() const override {
 		return "STRING_LITERAL";
-	}
-
-	void InitializeFirstSet(MatcherFirstSet &first_set, const GrammarLiteralTable &table) const override {
-		first_set.class_mask = MatcherTokenClass::STRING;
 	}
 
 private:

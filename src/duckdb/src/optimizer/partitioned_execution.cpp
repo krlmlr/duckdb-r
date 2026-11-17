@@ -165,8 +165,6 @@ static bool PartitionedExecutionCanUseStats(const unique_ptr<BaseStatistics> &st
 	switch (stats->GetStatsType()) {
 	case StatisticsType::NUMERIC_STATS:
 		return NumericStats::HasMinMax(*stats);
-	case StatisticsType::BIGNUM_STATS:
-		return BignumStats::HasMinMax(*stats);
 	case StatisticsType::STRING_STATS:
 		// Let's not mess with BLOB for now
 		if (stats->GetType() != LogicalType::VARCHAR) {
@@ -189,10 +187,6 @@ static bool PartitionedExecutionMinMaxEqual(const BaseStatistics &stats) {
 	case StatisticsType::NUMERIC_STATS:
 		min = NumericStats::Min(stats);
 		max = NumericStats::Max(stats);
-		break;
-	case StatisticsType::BIGNUM_STATS:
-		min = BignumStats::Min(stats);
-		max = BignumStats::Max(stats);
 		break;
 	case StatisticsType::STRING_STATS:
 		min = Value::BLOB_RAW(StringStats::Min(stats));
@@ -248,10 +242,6 @@ static void PartitionedExecutionAddStatsNodes(const BaseStatistics &stats, const
 	case StatisticsType::NUMERIC_STATS:
 		min = NumericStats::Min(stats);
 		max = NumericStats::Max(stats);
-		break;
-	case StatisticsType::BIGNUM_STATS:
-		min = BignumStats::Min(stats);
-		max = BignumStats::Max(stats);
 		break;
 	case StatisticsType::STRING_STATS:
 		min = StringStats::Min(stats);

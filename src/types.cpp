@@ -6,8 +6,6 @@
 #include "rapi.hpp"
 #include "typesr.hpp"
 
-#include <cmath>
-
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
 #undef FALSE
@@ -33,27 +31,14 @@ RTypeId RType::id() const {
 	return id_;
 }
 
-// Field names and factor levels are R's, so they compare exactly:
-// an Identifier compares case-insensitively, as SQL names do.
 bool RType::operator==(const RType &rhs) const {
-	if (id_ != rhs.id_ || size_ != rhs.size_ || aux_.size() != rhs.aux_.size()) {
-		return false;
-	}
-	for (idx_t i = 0; i < aux_.size(); i++) {
-		if (aux_[i].first.GetIdentifierName() != rhs.aux_[i].first.GetIdentifierName() ||
-		    !(aux_[i].second == rhs.aux_[i].second)) {
-			return false;
-		}
-	}
-	return true;
+	return id_ == rhs.id_ && size_ == rhs.size_ && aux_ == rhs.aux_;
 }
 
-// Reads the levels in place, as DetectRType() does a data frame's names
-RType RType::FACTOR(SEXP levels) {
-	D_ASSERT(TYPEOF(levels) == STRSXP);
+RType RType::FACTOR(cpp11::strings levels) {
 	RType out = RType(RTypeId::FACTOR);
-	for (R_xlen_t level_idx = 0; level_idx < Rf_xlength(levels); level_idx++) {
-		out.aux_.push_back(std::make_pair(Rf_translateCharUTF8(STRING_ELT(levels, level_idx)), RType()));
+	for (R_xlen_t level_idx = 0; level_idx < levels.size(); level_idx++) {
+		out.aux_.push_back(std::make_pair(Identifier(std::string(levels[level_idx])), RType()));
 	}
 	return out;
 }
@@ -168,11 +153,7 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64) {
 			return RType::UNKNOWN;
 		}
 	} else if (Rf_isFactor(v) && TYPEOF(v) == INTSXP) {
-		SEXP levels = GET_LEVELS(v);
-		if (TYPEOF(levels) != STRSXP) {
-			return RType::UNKNOWN;
-		}
-		return RType::FACTOR(levels);
+		return RType::FACTOR(GET_LEVELS(v));
 	} else if (Rf_isMatrix(v)) {
 		if (TYPEOF(v) == LGLSXP) {
 			return RType::MATRIX(RType::LOGICAL, Rf_ncols(v));
@@ -210,19 +191,14 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64) {
 			child_list_t<RType> child_types;
 			R_xlen_t ncol = Rf_length(v);
 
-			// Read in place: the scan detects a list cell's type on a task thread,
-			// where no cpp11 vector may be built (handbook/architecture/glue/threading/)
-			SEXP names = GET_NAMES(v);
-			if (TYPEOF(names) != STRSXP || Rf_xlength(names) != ncol) {
-				return RType::UNKNOWN;
-			}
+			cpp11::strings names = GET_NAMES(v);
 			for (R_xlen_t i = 0; i < ncol; ++i) {
 				RType child = DetectRType(VECTOR_ELT(v, i), integer64);
 				if (child == RType::UNKNOWN) {
 					return (RType::UNKNOWN);
 				}
 
-				child_types.push_back(std::make_pair(CHAR(STRING_ELT(names, i)), child));
+				child_types.push_back(std::make_pair(CHAR(names[i]), child));
 			}
 
 			return RType::STRUCT(std::move(child_types));
@@ -325,13 +301,6 @@ LogicalType RApiTypes::LogicalTypeFromRType(const RType &rtype, bool experimenta
 	}
 }
 
-child_list_t<LogicalType> RApiTypes::StructLikeChildTypes(const LogicalType &type) {
-	if (type.id() == LogicalTypeId::TUPLE) {
-		return TupleType::NamedChildren(type);
-	}
-	return StructType::GetChildTypes(type);
-}
-
 string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller) {
 
 	if (stype.GetAlias() == R_STRING_TYPE_NAME) {
@@ -345,7 +314,6 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::SMALLINT:
-	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::INTEGER:
 		return "integer";
 	case LogicalTypeId::TIMESTAMP_SEC:
@@ -382,19 +350,12 @@ string RApiTypes::DetectLogicalType(const LogicalType &stype, const char *caller
 	case LogicalTypeId::ARRAY:
 		return "matrix";
 	case LogicalTypeId::STRUCT:
-	case LogicalTypeId::TUPLE:
 	case LogicalTypeId::MAP:
 		return "data.frame";
 	case LogicalTypeId::ENUM:
 		return "factor";
 	case LogicalTypeId::UNKNOWN:
-	// No R vector holds these: the route to R vectors refuses them by column before
-	// the statement runs, in rapi_execute_impl(), while an Arrow result carries them
-	// unconverted (handbook/usage/types/README.md).
-	case LogicalTypeId::BIT:
-	case LogicalTypeId::BIGNUM:
-	case LogicalTypeId::TIME_NS:
-	case LogicalTypeId::UNION:
+	case LogicalTypeId::SQLNULL:
 		return "unknown";
 
 	default: {
@@ -417,36 +378,28 @@ date_t RDateType::Convert(double val) {
 	return date_t((int32_t)std::floor(val));
 }
 
-// A value halfway between two microseconds rounds to the even one, as R's
-// round() in dbQuoteLiteral() and the engine's own to_timestamp() do; C's
-// round() would take it away from zero. R leaves the rounding mode at its
-// default, round to nearest, which is the mode std::nearbyint() follows.
-static int64_t RoundMicros(double micros) {
-	return int64_t(std::nearbyint(micros));
-}
-
 timestamp_t RTimestampType::Convert(double val) {
-	return Timestamp::FromEpochMicroSeconds(RoundMicros(val * Interval::MICROS_PER_SEC));
+	return Timestamp::FromEpochMicroSeconds(round(val * Interval::MICROS_PER_SEC));
 }
 
 interval_t RIntervalSecondsType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_SEC));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_SEC)));
 }
 
 interval_t RIntervalMinutesType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_MINUTE));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_MINUTE)));
 }
 
 interval_t RIntervalHoursType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_HOUR));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_HOUR)));
 }
 
 interval_t RIntervalDaysType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_DAY));
+	return Interval::FromMicro(int64_t(round(val * Interval::MICROS_PER_DAY)));
 }
 
 interval_t RIntervalWeeksType::Convert(double val) {
-	return Interval::FromMicro(RoundMicros(val * (Interval::MICROS_PER_DAY * Interval::DAYS_PER_WEEK)));
+	return Interval::FromMicro(int64_t(round(val * (Interval::MICROS_PER_DAY * Interval::DAYS_PER_WEEK))));
 }
 
 bool RIntegerType::IsNull(int val) {
@@ -479,7 +432,7 @@ double RIntegralType::DoubleCast<>(hugeint_t val) {
 }
 
 string_t RStringSexpType::Convert(SEXP val) {
-	return string_t(CHAR(val));
+	return string_t((char *)CHAR(val));
 }
 
 bool RStringSexpType::IsNull(SEXP val) {

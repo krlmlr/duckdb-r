@@ -48,31 +48,11 @@ bool BaseSelectBinder::ClaimsAlias(ColumnRefExpression &colref) {
 	return alias_map.find(colref.ColumnNames().back()) != alias_map.end();
 }
 
-bool BaseSelectBinder::HasCompoundGroups() {
-	return node.bind_state.has_compound_groups;
-}
-
-ProjectionIndex BaseSelectBinder::FindGroup(ParsedExpression &expr) {
-	if (node.bind_state.group_map.empty() && node.bind_state.group_alias_map.empty()) {
-		return ProjectionIndex();
-	}
+bool BaseSelectBinder::MatchesGroup(ParsedExpression &expr) {
 	// the groups are keyed by the qualified form, so qualify against this scope before matching
 	auto qualified = expr.Copy();
 	ExpressionBinder::QualifyColumnNames(binder, qualified);
-	return TryBindGroup(*qualified);
-}
-
-bool BaseSelectBinder::MatchesGroup(ParsedExpression &expr) {
-	return FindGroup(expr).IsValid();
-}
-
-bool BaseSelectBinder::MatchesGroupWithoutSubquery(ParsedExpression &expr) {
-	auto group_index = FindGroup(expr);
-	auto &groups = node.groups.group_expressions;
-	if (!group_index.IsValid() || group_index.GetIndex() >= groups.size()) {
-		return false;
-	}
-	return !groups[group_index]->HasSubquery();
+	return TryBindGroup(*qualified).IsValid();
 }
 
 ProjectionIndex BaseSelectBinder::TryBindGroup(ParsedExpression &expr) {
@@ -126,7 +106,8 @@ BindResult BaseSelectBinder::BindGroupingFunction(OperatorExpression &op, idx_t 
 			ExpressionBinder::QualifyColumnNames(binder, child);
 			auto idx = TryBindGroup(*child);
 			if (!idx.IsValid()) {
-				return BindResult(BinderException(op, "GROUPING child %s must be a grouping column", child->GetName()));
+				return BindResult(
+				    BinderException(op, "GROUPING child \"%s\" must be a grouping column", child->GetName()));
 			}
 			group_indexes.push_back(idx);
 		}
@@ -163,8 +144,8 @@ BindResult BaseSelectBinder::BindGroup(ParsedExpression &expr, idx_t depth, Proj
 		    Identifier(expr.GetName()), group->GetReturnType(), ColumnBinding(node.group_index, group_index), depth);
 
 		auto sql_null = make_uniq<BoundConstantExpression>(Value(return_type));
-		auto when_expr = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NULL, LogicalType::BOOLEAN,
-		                                                    std::move(collated_group_expression));
+		auto when_expr = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NULL, LogicalType::BOOLEAN);
+		when_expr->GetChildrenMutable().push_back(std::move(collated_group_expression));
 		auto then_expr = make_uniq<BoundConstantExpression>(Value(return_type));
 		auto else_expr = std::move(uncollated_first_expression);
 		auto case_expr =

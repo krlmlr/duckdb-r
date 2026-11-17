@@ -1,5 +1,4 @@
 #include "column_writer.hpp"
-#include "duckdb/common/types/decimal.hpp"
 
 #include <cmath>
 #include <limits>
@@ -7,7 +6,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include "duckdb/common/types/interval_no_normalize.hpp"
 #include "parquet_writer.hpp"
 #include "writer/array_column_writer.hpp"
 #include "writer/boolean_column_writer.hpp"
@@ -96,10 +94,6 @@ bool ColumnWriterStatistics::HasNaN() {
 	return false;
 }
 
-idx_t ColumnWriterStatistics::GetNaNCount() {
-	return 0;
-}
-
 bool ColumnWriterStatistics::MinIsExact() {
 	return true;
 }
@@ -120,19 +114,6 @@ void ColumnWriterStatistics::WriteGeoStats(duckdb_parquet::GeospatialStatistics 
 	D_ASSERT(false); // this should never be called
 }
 
-void ColumnWriterStatistics::Merge(const ColumnWriterStatistics &other) {
-	// an accumulator that tracks statistics must fold them in, or the column chunk statistics would be lost
-	D_ASSERT(!HasStats());
-}
-
-int ColumnWriterStatistics::CompareMin(const ColumnWriterStatistics &other) const {
-	return 0;
-}
-
-int ColumnWriterStatistics::CompareMax(const ColumnWriterStatistics &other) const {
-	return 0;
-}
-
 //===--------------------------------------------------------------------===//
 // ColumnWriter
 //===--------------------------------------------------------------------===//
@@ -142,25 +123,6 @@ ColumnWriter::ColumnWriter(ParquetWriter &writer, ParquetColumnSchema &&column_s
 	can_have_nulls = column_schema.repetition_type == duckdb_parquet::FieldRepetitionType::OPTIONAL;
 }
 ColumnWriter::~ColumnWriter() {
-}
-
-void ColumnWriter::MarkRepetitionRequired() {
-	if (column_schema.repetition_type == duckdb_parquet::FieldRepetitionType::REQUIRED) {
-		return;
-	}
-	D_ASSERT(column_schema.repetition_type == duckdb_parquet::FieldRepetitionType::OPTIONAL);
-	D_ASSERT(can_have_nulls);
-	column_schema.repetition_type = duckdb_parquet::FieldRepetitionType::REQUIRED;
-	can_have_nulls = false;
-	DecrementMaxDefineRecursive();
-}
-
-void ColumnWriter::DecrementMaxDefineRecursive() {
-	D_ASSERT(column_schema.max_define > 0);
-	column_schema.max_define--;
-	for (auto &child : child_writers) {
-		child->DecrementMaxDefineRecursive();
-	}
 }
 
 bool ColumnWriter::TryExportPreparedShreddingType(ShreddingType &result) const {
@@ -338,8 +300,7 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 	}
 
 	if (type.id() == LogicalTypeId::VARIANT) {
-		const bool is_shredded = shredding_type && shredding_type->type.id() != LogicalTypeId::SQLNULL &&
-		                         shredding_type->type.id() != LogicalTypeId::ANY;
+		const bool is_shredded = shredding_type != nullptr;
 
 		//! Build the child types for the Parquet VARIANT
 		child_list_t<LogicalType> child_types;
@@ -347,8 +308,10 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 		child_types.emplace_back("value", LogicalType::BLOB);
 		if (is_shredded) {
 			auto &typed_value_type = shredding_type->type;
-			child_types.emplace_back("typed_value",
-			                         VariantColumnWriter::TransformTypedValueRecursive(typed_value_type));
+			if (typed_value_type.id() != LogicalTypeId::SQLNULL) {
+				child_types.emplace_back("typed_value",
+				                         VariantColumnWriter::TransformTypedValueRecursive(typed_value_type));
+			}
 		}
 
 		//! Construct the column schema
@@ -388,7 +351,7 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 			                                              max_define + 1, is_optional));
 		}
 		return make_uniq<VariantColumnWriter>(writer, std::move(variant_column), path_in_schema,
-		                                      std::move(child_writers), !shredding_type);
+		                                      std::move(child_writers));
 	}
 
 	if (StructType::IsStruct(type.id()) || type.id() == LogicalTypeId::UNION) {
@@ -444,7 +407,10 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 		path_in_schema.push_back("key_value");
 
 		// construct the child types recursively
-		auto key_value = LogicalType::GetNamedChildTypes(type);
+		child_list_t<LogicalType> key_value;
+		key_value.reserve(2);
+		key_value.emplace_back("key", MapType::KeyType(type));
+		key_value.emplace_back("value", MapType::ValueType(type));
 		auto key_value_type = LogicalType::STRUCT(key_value);
 
 		auto map_column =
@@ -554,9 +520,6 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 			return make_uniq<StandardColumnWriter<int32_t, int32_t>>(writer, std::move(schema), path_in_schema);
 		case PhysicalType::INT64:
 			return make_uniq<StandardColumnWriter<int64_t, int64_t>>(writer, std::move(schema), path_in_schema);
-		case PhysicalType::VARCHAR:
-			// wide decimal stored as a BIGNUM blob
-			return make_uniq<WideDecimalColumnWriter>(writer, std::move(schema), path_in_schema);
 		default:
 			return make_uniq<FixedDecimalColumnWriter>(writer, std::move(schema), path_in_schema);
 		}
@@ -566,9 +529,6 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 	case LogicalTypeId::GEOMETRY:
 		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetGeometryOperator>>(writer, std::move(schema),
 		                                                                                    path_in_schema);
-	case LogicalTypeId::GEOGRAPHY:
-		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetGeographyOperator>>(writer, std::move(schema),
-		                                                                                     path_in_schema);
 	case LogicalTypeId::VARCHAR:
 		return make_uniq<StandardColumnWriter<string_t, string_t, ParquetStringOperator>>(writer, std::move(schema),
 		                                                                                  path_in_schema);
@@ -576,8 +536,7 @@ unique_ptr<ColumnWriter> ColumnWriter::CreateWriterRecursive(ClientContext &cont
 		return make_uniq<StandardColumnWriter<hugeint_t, ParquetUUIDTargetType, ParquetUUIDOperator>>(
 		    writer, std::move(schema), path_in_schema);
 	case LogicalTypeId::INTERVAL:
-		return make_uniq<
-		    StandardColumnWriter<interval_no_normalize, ParquetIntervalTargetType, ParquetIntervalOperator>>(
+		return make_uniq<StandardColumnWriter<interval_t, ParquetIntervalTargetType, ParquetIntervalOperator>>(
 		    writer, std::move(schema), path_in_schema);
 	case LogicalTypeId::ENUM:
 		return make_uniq<EnumColumnWriter>(writer, std::move(schema), path_in_schema);

@@ -4,7 +4,6 @@
 #include "duckdb/common/to_string.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/exception/list.hpp"
-#include "duckdb/common/enum_util.hpp"
 #include "duckdb/parser/tableref.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/planner/expression.hpp"
@@ -73,10 +72,9 @@ bool Exception::InvalidatesTransaction(ExceptionType exception_type) {
 	}
 }
 
-constexpr const char *Exception::INVALIDATED_DATABASE_KEY;
-
 bool Exception::InvalidatesDatabase(ExceptionType exception_type) {
 	switch (exception_type) {
+	case ExceptionType::DATA_CORRUPTION:
 	case ExceptionType::FATAL:
 		return true;
 	default:
@@ -207,7 +205,6 @@ bool Exception::IsExecutionError(ExceptionType type) {
 	case ExceptionType::INVALID_INPUT:
 	case ExceptionType::OUT_OF_RANGE:
 	case ExceptionType::CONVERSION:
-	case ExceptionType::PARAMETER_NOT_ALLOWED:
 		return true;
 	default:
 		return false;
@@ -277,8 +274,7 @@ OutOfRangeException::OutOfRangeException(const int64_t value, const PhysicalType
 }
 
 OutOfRangeException::OutOfRangeException(const double value, const PhysicalType orig_type, const PhysicalType new_type)
-    : Exception(ExceptionType::OUT_OF_RANGE, "Type " + TypeIdToString(orig_type) + " with value " +
-                                                 StringUtil::ToString(value) +
+    : Exception(ExceptionType::OUT_OF_RANGE, "Type " + TypeIdToString(orig_type) + " with value " + to_string(value) +
                                                  " can't be cast because the value is out of range "
                                                  "for the destination type " +
                                                  TypeIdToString(new_type)) {
@@ -357,34 +353,6 @@ InterruptException::InterruptException(const string &message) : Exception(Except
 
 FatalException::FatalException(ExceptionType type, const string &msg) : Exception(type, msg) {
 	// FIXME: Make any log context available to add error logging.
-}
-
-void InternalException::Throw(const char *message) {
-	throw InternalException(message);
-}
-
-void NotImplementedException::Throw(const char *message) {
-	throw NotImplementedException(message);
-}
-
-void NotImplementedException::Throw(const char *message, PhysicalType type) {
-	throw NotImplementedException(message, EnumUtil::ToString(type));
-}
-
-void InvalidInputException::Throw(const char *message) {
-	throw InvalidInputException(message);
-}
-
-void OutOfRangeException::Throw(const char *message) {
-	throw OutOfRangeException(message);
-}
-
-void OutOfRangeException::ThrowConversion(double value, PhysicalType orig_type, PhysicalType new_type) {
-	throw OutOfRangeException(value, orig_type, new_type);
-}
-
-void DataCorruptionException::Throw(const char *message) {
-	throw DataCorruptionException(message);
 }
 
 InternalException::InternalException(const string &msg) : Exception(ExceptionType::INTERNAL, msg) {

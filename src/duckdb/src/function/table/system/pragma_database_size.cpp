@@ -82,7 +82,7 @@ void PragmaDatabaseSizeFunction(ClientContext &context, TableFunctionInput &data
 
 	for (; data.index < data.databases.size() && row < STANDARD_VECTOR_SIZE; data.index++) {
 		auto &db = *data.databases[data.index];
-		if (db.IsSystem() || db.IsTemporary() || db.GetVisibility() == AttachVisibility::HIDDEN) {
+		if (db.IsSystem() || db.IsTemporary()) {
 			continue;
 		}
 		auto ds = db.GetCatalog().GetDatabaseSize(context);
@@ -101,11 +101,8 @@ void PragmaDatabaseSizeFunction(ClientContext &context, TableFunctionInput &data
 }
 
 void PragmaDatabaseSize::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction database_size_fun("pragma_database_size", {}, PragmaDatabaseSizeFunction, PragmaDatabaseSizeBind,
-	                                PragmaDatabaseSizeInit);
-	// reads live storage, WAL, and memory statistics
-	database_size_fun.stability = FunctionStability::VOLATILE;
-	set.AddFunction(std::move(database_size_fun));
+	set.AddFunction(TableFunction("pragma_database_size", {}, PragmaDatabaseSizeFunction, PragmaDatabaseSizeBind,
+	                              PragmaDatabaseSizeInit));
 }
 
 } // namespace duckdb

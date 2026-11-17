@@ -50,7 +50,7 @@ namespace {
 //! context to lend (startup, static linking, autoloading). Rolls back unless the load finished.
 class CAPIV2LoadScope {
 public:
-	explicit CAPIV2LoadScope(DatabaseInstance &db) : con(Connection::CreateInternal(db)) {
+	explicit CAPIV2LoadScope(DatabaseInstance &db) : con(db) {
 		con.BeginTransaction();
 	}
 
@@ -85,7 +85,7 @@ private:
 
 //! Called by the extension to get a pointer to the correctly versioned extension C API struct. Runs directly under the
 //! extension's call frame, so it reports failure through the load state rather than throwing.
-const void *ExtensionGetAPIV2(duckdb_v2_extension_handle handle, const char *version, idx_t version_length) {
+const void *ExtensionGetAPIV2(duckdb_v2_extension_handle handle, const char *version) {
 	if (!handle) {
 		return nullptr;
 	}
@@ -94,7 +94,7 @@ const void *ExtensionGetAPIV2(duckdb_v2_extension_handle handle, const char *ver
 		// C_STRUCT_UNSTABLE extensions are tied 1:1 to a DuckDB version, so they always receive the whole struct and
 		// the version they report is a build tag rather than a semver.
 		if (load_state.init_result.abi_type == ExtensionABIType::C_STRUCT) {
-			string version_string = version ? string(version, version_length) : string();
+			string version_string = version ? version : "";
 			idx_t major, minor, patch;
 			const auto parsed = VersioningUtils::ParseSemver(version_string, major, minor, patch);
 			if (!parsed || major != DUCKDB_EXTENSION_API_V2_VERSION_MAJOR ||
@@ -130,8 +130,7 @@ void CallEntrypoint(DuckDBExtensionLoadStateV2 &load_state, const string &extens
 	::duckdb_v2_extension_input input;
 	input.get_api = statically_linked ? nullptr : ExtensionGetAPIV2;
 	input.extension = load_state.ToCStruct();
-	capiv2::CV2CallbackContext callback_context(context);
-	input.context = capiv2::Convert(&callback_context);
+	input.context = capiv2::Convert(&context);
 	input.err = &err_handle;
 
 	(*init_fun)(&input);

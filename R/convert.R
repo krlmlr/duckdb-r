@@ -5,37 +5,33 @@ duckdb_convert_opts <- function(
   bigint = "numeric",
   array = "none",
   geometry = "blob",
-  map = "data.frame",
-  call = parent.frame()
+  map = "data.frame"
 ) {
   tz_out_convert <- match.arg(tz_out_convert)
   timezone_out <- check_tz(timezone_out)
 
   if (bigint == "integer64") {
     if (!is_installed("bit64")) {
-      abort("bit64 package is required for integer64 support", call = call)
+      stop("bit64 package is required for integer64 support")
     }
   } else if (bigint != "numeric") {
-    abort(paste0("Unsupported bigint configuration: ", bigint), call = call)
+    stop(paste0("Unsupported bigint configuration: ", bigint))
   }
 
   if (geometry == "wk") {
     if (!is_installed("wk")) {
-      abort("wk package is required for geometry = \"wk\" support", call = call)
+      stop("wk package is required for geometry = \"wk\" support")
     }
   } else if (geometry != "blob") {
-    abort(paste0("Unsupported geometry configuration: ", geometry), call = call)
+    stop(paste0("Unsupported geometry configuration: ", geometry))
   }
 
   if (map == "list_of") {
     if (!is_installed("vctrs")) {
-      abort(
-        "vctrs package is required for map = \"list_of\" support",
-        call = call
-      )
+      stop("vctrs package is required for map = \"list_of\" support")
     }
   } else if (map != "data.frame") {
-    abort(paste0("Unsupported map configuration: ", map), call = call)
+    stop(paste0("Unsupported map configuration: ", map))
   }
 
   duckdb_convert_opts_impl(
@@ -46,7 +42,7 @@ duckdb_convert_opts <- function(
     geometry = geometry,
     map = map,
     arrow = FALSE,
-    allow_stream_result = FALSE,
+    streaming = FALSE,
     experimental = FALSE,
     strict_relational = TRUE
   )
@@ -62,7 +58,7 @@ duckdb_convert_opts_impl <- function(
   geometry = NULL,
   map = NULL,
   arrow = NULL,
-  allow_stream_result = NULL,
+  streaming = NULL,
   experimental = NULL,
   strict_relational = NULL
 ) {
@@ -87,8 +83,8 @@ duckdb_convert_opts_impl <- function(
   if (!is.null(arrow)) {
     x$arrow <- arrow
   }
-  if (!is.null(allow_stream_result)) {
-    x$allow_stream_result <- allow_stream_result
+  if (!is.null(streaming)) {
+    x$streaming <- streaming
   }
   if (!is.null(experimental)) {
     x$experimental <- experimental

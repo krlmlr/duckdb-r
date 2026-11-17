@@ -14,8 +14,6 @@ namespace duckdb {
 // Query Node
 //===--------------------------------------------------------------------===//
 class BoundQueryNode;
-class BoundDistinctModifier;
-class BoundOrderModifier;
 class BoundSelectNode;
 class BoundSetOperationNode;
 

@@ -340,7 +340,7 @@ unique_ptr<TableRef> PivotRef::Copy() {
 	copy->groups = groups;
 	copy->column_name_alias = column_name_alias;
 	copy->include_nulls = include_nulls;
-	CopyProperties(*copy);
+	copy->alias = alias;
 	return std::move(copy);
 }
 

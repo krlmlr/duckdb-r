@@ -73,12 +73,4 @@ void CompressionSegmentReader::Align(idx_t alignment) {
 	position += padding;
 }
 
-void CompressionSegmentReader::AlignBackward(idx_t alignment) {
-	if (alignment == 0) {
-		throw InternalException("CompressionSegmentReader::AlignBackward called with a zero alignment");
-	}
-	auto padding = position % alignment;
-	position -= padding;
-}
-
 } // namespace duckdb

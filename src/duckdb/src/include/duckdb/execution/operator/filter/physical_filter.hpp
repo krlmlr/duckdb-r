@@ -28,7 +28,6 @@ public:
 	unique_ptr<Expression> expression;
 
 public:
-	void InitializeOutputChunk(Allocator &allocator, DataChunk &chunk) const override;
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
 
 	bool ParallelOperator() const override {

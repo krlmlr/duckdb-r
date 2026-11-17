@@ -9,7 +9,6 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
-#include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 #include "duckdb/parallel/interrupt.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
@@ -21,7 +20,7 @@ public:
 	BatchMemoryManager(ClientContext &context, idx_t initial_memory_request)
 	    : context(context), unflushed_memory_usage(0), min_batch_index(0), available_memory(0),
 	      can_increase_memory(true) {
-		memory_state = TemporaryMemoryManager::Get(context.GetContext()).Register(context.GetContext());
+		memory_state = TemporaryMemoryManager::Get(context).Register(context);
 		SetMemorySize(initial_memory_request);
 	}
 
@@ -49,7 +48,7 @@ public:
 			return;
 		}
 
-		memory_state->SetRemainingSizeAndUpdateReservation(context.GetContext(), size);
+		memory_state->SetRemainingSizeAndUpdateReservation(context, size);
 		auto next_reservation = memory_state->GetReservation();
 		if (available_memory >= next_reservation) {
 			// we tried to ask for more memory but were declined
@@ -121,10 +120,6 @@ public:
 
 	bool IsMinimumBatchIndex(idx_t batch_index) {
 		return batch_index <= min_batch_index;
-	}
-
-	idx_t GetMinimumBatchIndex() const {
-		return min_batch_index;
 	}
 
 	void FinalCheck() {

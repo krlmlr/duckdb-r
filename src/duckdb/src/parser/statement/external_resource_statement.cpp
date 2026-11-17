@@ -11,7 +11,7 @@ ExternalResourceStatement::ExternalResourceStatement(ExternalResourceOperation o
 }
 
 ExternalResourceStatement::ExternalResourceStatement(const ExternalResourceStatement &other)
-    : SQLStatement(other), operation(other.operation), type(other.type), name(other.name) {
+    : SQLStatement(other), operation(other.operation), type(other.type), name(other.name), all(other.all) {
 	if (other.handle) {
 		handle = other.handle->Copy();
 	}
@@ -33,12 +33,12 @@ string ExternalResourceStatement::ToString() const {
 			result += " AS " + SQLIdentifier(name);
 		}
 		if (!options.empty()) {
-			result += " (";
-			result += StringUtil::Join(options, ", ", [](const auto &opt) {
-				return StringUtil::Format("%s %s", SQLIdentifier(opt.first).ToString(opt.first),
-				                          opt.second->ToString());
-			});
-			result += ")";
+			vector<string> stringified;
+			for (auto &opt : options) {
+				stringified.push_back(
+				    StringUtil::Format("%s %s", SQLIdentifier(opt.first).ToString(opt.first), opt.second->ToString()));
+			}
+			result += " (" + StringUtil::Join(stringified, ", ") + ")";
 		}
 		break;
 	case ExternalResourceOperation::REGISTER:
@@ -50,6 +50,9 @@ string ExternalResourceStatement::ToString() const {
 		break;
 	case ExternalResourceOperation::DESTROY:
 		result = "DESTROY EXTERNAL RESOURCE " + SQLIdentifier(name);
+		break;
+	case ExternalResourceOperation::SHOW:
+		result = all ? "SHOW ALL EXTERNAL RESOURCES" : "SHOW EXTERNAL RESOURCES";
 		break;
 	}
 	return result;

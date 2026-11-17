@@ -7,8 +7,7 @@ namespace duckdb {
 
 TupleDataLayout::TupleDataLayout()
     : sort_key_type(SortKeyType::INVALID), flag_width(0), data_width(0), aggr_width(0), row_width(0),
-      trailing_region_width(0), trailing_region_offset(0), all_constant(true), heap_size_offset(0),
-      validity_type(TupleDataValidityType::CAN_HAVE_NULL_VALUES) {
+      all_constant(true), heap_size_offset(0), validity_type(TupleDataValidityType::CAN_HAVE_NULL_VALUES) {
 }
 
 TupleDataLayout TupleDataLayout::Copy() const {
@@ -28,8 +27,6 @@ TupleDataLayout TupleDataLayout::Copy() const {
 	result.sort_width = this->sort_width;
 	result.sort_skippable_bytes = this->sort_skippable_bytes;
 	result.row_width = this->row_width;
-	result.trailing_region_width = this->trailing_region_width;
-	result.trailing_region_offset = this->trailing_region_offset;
 	result.offsets = this->offsets;
 	result.all_constant = this->all_constant;
 	result.heap_size_offset = this->heap_size_offset;
@@ -39,8 +36,7 @@ TupleDataLayout TupleDataLayout::Copy() const {
 }
 
 void TupleDataLayout::Initialize(vector<LogicalType> types_p, Aggregates aggregates_p,
-                                 TupleDataValidityType validity_type_p, TupleDataNestednessType nestedness_type,
-                                 idx_t trailing_region_width_p) {
+                                 TupleDataValidityType validity_type_p, TupleDataNestednessType nestedness_type) {
 	sort_key_type = SortKeyType::INVALID;
 	offsets.clear();
 	aggr_destructor_idxs.clear();
@@ -133,11 +129,6 @@ void TupleDataLayout::Initialize(vector<LogicalType> types_p, Aggregates aggrega
 	}
 #endif
 
-	// The owner-managed trailing region sits after the aggregate states and their padding.
-	trailing_region_width = AlignValue(trailing_region_width_p);
-	trailing_region_offset = row_width;
-	row_width += trailing_region_width;
-
 	for (idx_t aggr_idx = 0; aggr_idx < aggregates.size(); aggr_idx++) {
 		const auto &aggr = aggregates[aggr_idx];
 		if (aggr.function.HasStateDestructorCallback()) {
@@ -168,8 +159,6 @@ void TupleDataLayout::Initialize(const vector<BoundOrderByNode> &orders, const L
 	sort_skippable_bytes.clear();
 	all_constant = true;
 	heap_size_offset = DConstants::INVALID_INDEX;
-	trailing_region_width = 0;
-	trailing_region_offset = 0;
 	aggr_destructor_idxs.clear();
 	validity_type = TupleDataValidityType::CAN_HAVE_NULL_VALUES;
 

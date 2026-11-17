@@ -38,7 +38,12 @@ static unique_ptr<BoundAggregateExpression> BindAggregate(ClientContext &context
 static unique_ptr<Expression> BindScalar(ClientContext &context, const char *name,
                                          vector<unique_ptr<Expression>> children) {
 	FunctionBinder function_binder(context);
-	return function_binder.BindScalarFunction(Identifier::DefaultSchema(), name, std::move(children));
+	ErrorData error;
+	auto result = function_binder.BindScalarFunction(Identifier::DefaultSchema(), name, std::move(children), error);
+	if (!result) {
+		error.Throw();
+	}
+	return result;
 }
 
 template <class MAP_TYPE>
@@ -63,7 +68,7 @@ struct HistogramFunction {
 			target.hist = MAP_TYPE::CreateEmpty(input_data.allocator);
 		}
 		for (auto &entry : *source.hist) {
-			MAP_TYPE::GetOrCreate(*target.hist, entry.first, input_data.allocator) += entry.second;
+			(*target.hist)[entry.first] += entry.second;
 		}
 	}
 };
@@ -75,23 +80,14 @@ struct DefaultMapType {
 	static TYPE *CreateEmpty(ArenaAllocator &) {
 		return new TYPE();
 	}
-
-	template <class KEY>
-	static typename TYPE::mapped_type &GetOrCreate(TYPE &map, const KEY &key, ArenaAllocator &) {
-		return map[key];
-	}
 };
 
 template <class TYPE>
 struct StringMapType {
 	using MAP_TYPE = TYPE;
 
-	static TYPE *CreateEmpty(ArenaAllocator &) {
-		return new TYPE();
-	}
-
-	static typename TYPE::mapped_type &GetOrCreate(TYPE &map, const string_t &key, ArenaAllocator &allocator) {
-		return map.GetOrCreate(key, allocator);
+	static TYPE *CreateEmpty(ArenaAllocator &allocator) {
+		return new TYPE(allocator);
 	}
 };
 
@@ -118,7 +114,7 @@ void HistogramUpdateFunction(Vector inputs[], AggregateInputData &aggr_input, id
 			state.hist = MAP_TYPE::CreateEmpty(aggr_input.allocator);
 		}
 		auto &input_value = input_values[idx];
-		++MAP_TYPE::GetOrCreate(*state.hist, input_value, aggr_input.allocator);
+		++(*state.hist)[input_value];
 	}
 }
 

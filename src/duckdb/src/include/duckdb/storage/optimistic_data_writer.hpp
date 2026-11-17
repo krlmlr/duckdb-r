@@ -26,8 +26,6 @@ struct OptimisticWriteCollection {
 
 	void MergeStorage(OptimisticWriteCollection &collection);
 	void FinalizeFlush();
-	// Reset the accounting fields to match a freshly-replaced collection
-	void ResetCollectionAccounting();
 };
 
 enum class OptimisticWritePartialManagers { PER_COLUMN, GLOBAL };
@@ -35,7 +33,6 @@ enum class OptimisticWritePartialManagers { PER_COLUMN, GLOBAL };
 class OptimisticDataWriter {
 public:
 	OptimisticDataWriter(ClientContext &context, DataTable &table);
-	OptimisticDataWriter(Context &context, DataTable &table);
 	OptimisticDataWriter(DataTable &table, OptimisticDataWriter &parent);
 	~OptimisticDataWriter();
 
@@ -58,8 +55,8 @@ public:
 	//! Whether this writer can write to disk at all (not temporary / in-memory / read-only)
 	bool CanWriteToDisk() const;
 
-	//! Return the runtime services.
-	Context &GetContext() {
+	//! Return the client context.
+	ClientContext &GetClientContext() {
 		return context;
 	}
 
@@ -71,8 +68,8 @@ private:
 	                 const vector<int64_t> &segment_indexes);
 
 private:
-	//! The services in which we're writing the data.
-	Context &context;
+	//! The client context in which we're writing the data.
+	ClientContext &context;
 	//! The table.
 	DataTable &table;
 	//! The partial block manager, if any.

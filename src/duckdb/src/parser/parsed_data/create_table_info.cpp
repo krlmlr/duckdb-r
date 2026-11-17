@@ -2,7 +2,6 @@
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog.hpp"
-#include "duckdb/parser/constraints/not_null_constraint.hpp"
 
 namespace duckdb {
 
@@ -39,16 +38,6 @@ unique_ptr<CreateInfo> CreateTableInfo::Copy() const {
 	return std::move(result);
 }
 
-optional_idx CreateTableInfo::FindNotNullConstraint(LogicalIndex column) const {
-	for (idx_t constraint_idx = 0; constraint_idx < constraints.size(); constraint_idx++) {
-		auto &constraint = *constraints[constraint_idx];
-		if (constraint.type == ConstraintType::NOT_NULL && constraint.Cast<NotNullConstraint>().index == column) {
-			return constraint_idx;
-		}
-	}
-	return optional_idx();
-}
-
 string CreateTableInfo::ExtraOptionsToString() const {
 	string ret;
 	if (!partition_keys.empty()) {
@@ -70,7 +59,7 @@ string CreateTableInfo::ExtraOptionsToString() const {
 	if (!options.empty()) {
 		ret += " WITH (";
 		for (auto &entry : options) {
-			ret += SQLString(entry.first) + "=" + entry.second->ToString() + ",";
+			ret += "'" + entry.first + "'=" + entry.second->ToString() + ",";
 		}
 		ret.pop_back();
 		ret += ")";

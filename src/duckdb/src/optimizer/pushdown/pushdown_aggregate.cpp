@@ -82,8 +82,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownAggregate(unique_ptr<Logical
 		if (!can_pushdown_filter) {
 			continue;
 		}
-		if (f.filter->IsVolatile() || IsVolatile(aggr, *f.filter)) {
-			// a volatile filter is evaluated once per group, not once per input row
+		if (IsVolatile(aggr, *f.filter)) {
 			continue;
 		}
 		// no aggregate! we can push this down

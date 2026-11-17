@@ -6,7 +6,6 @@
  */
 #pragma once
 #include <cinttypes>
-#include <cstddef>
 #include <string>
 
 // On macOS, sys/cdefs.h doesn't contain c++:
@@ -21,12 +20,6 @@
 #endif
 
 namespace duckdb_fastpforlib {
-// Unpack groups of 32 unsigned residuals and add the frame before storing.
-void fastunpack_with_frame(const uint32_t *__restrict input, uint32_t *__restrict output, uint32_t width,
-                           uint32_t frame, std::size_t groups);
-void fastunpack_with_frame(const uint32_t *__restrict input, uint64_t *__restrict output, uint32_t width,
-                           uint64_t frame, std::size_t groups);
-
 namespace internal {
 
 // Unpacks 8 uint8_t values

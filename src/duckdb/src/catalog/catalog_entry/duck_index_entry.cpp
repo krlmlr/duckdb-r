@@ -7,21 +7,18 @@
 
 namespace duckdb {
 
-IndexDataTableInfo::IndexDataTableInfo(shared_ptr<DataTableInfo> info_p) : info(std::move(info_p)) {
+IndexDataTableInfo::IndexDataTableInfo(shared_ptr<DataTableInfo> info_p, const Identifier &index_name_p)
+    : info(std::move(info_p)), index_name(index_name_p) {
 }
 
-void DuckIndexEntry::Rollback(CatalogEntry &prev_entry) {
-	if (prev_entry.oid == oid) {
-		// an altered copy, e.g. by COMMENT ON INDEX, keeps the index of the entry it replaces
-		return;
-	}
+void DuckIndexEntry::Rollback(CatalogEntry &) {
 	if (!info) {
 		return;
 	}
 	if (!info->info) {
 		return;
 	}
-	info->info->GetIndexes().RemoveIndex(oid);
+	info->info->GetIndexes().RemoveIndex(name);
 }
 
 DuckIndexEntry::DuckIndexEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateIndexInfo &create_info,
@@ -29,7 +26,7 @@ DuckIndexEntry::DuckIndexEntry(Catalog &catalog, SchemaCatalogEntry &schema, Cre
     : IndexCatalogEntry(catalog, schema, create_info), initial_index_size(0) {
 	auto &table = table_p.Cast<DuckTableEntry>();
 	auto &storage = table.GetStorage();
-	info = make_shared_ptr<IndexDataTableInfo>(storage.GetDataTableInfo());
+	info = make_shared_ptr<IndexDataTableInfo>(storage.GetDataTableInfo(), name);
 }
 
 DuckIndexEntry::DuckIndexEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateIndexInfo &create_info,
@@ -61,7 +58,7 @@ DataTableInfo &DuckIndexEntry::GetDataTableInfo() const {
 
 void DuckIndexEntry::CommitDrop(CommitDropState &drop_state) {
 	D_ASSERT(info);
-	drop_state.RemoveIndex(GetDataTableInfo().GetIndexes(), oid);
+	drop_state.RemoveIndex(GetDataTableInfo().GetIndexes(), name);
 }
 
 } // namespace duckdb

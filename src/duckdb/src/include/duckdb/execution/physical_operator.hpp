@@ -91,11 +91,6 @@ public:
 		return false;
 	}
 
-	//! Initialize the vectors this operator uses for its output
-	virtual void InitializeOutputChunk(Allocator &allocator, DataChunk &chunk) const {
-		chunk.Initialize(allocator, types);
-	}
-
 	//! Functions to help decide how to set up pipeline dependencies
 	idx_t EstimatedThreadCount() const;
 	bool CanSaturateThreads(ClientContext &context) const;
@@ -105,16 +100,7 @@ public:
 public:
 	// Operator interface
 	virtual unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const;
-	//! Construct global operator state. Runs under the operator's lock and must not rely on a
-	//! previous global operator state. On the execute scheduling paths it runs after the
-	//! containing pipeline's dependencies have finished and may consume completed
-	//! dependency-produced sink state; the external-input initialization path constructs state
-	//! before dependency completion and does not support sink-consuming constructors.
 	virtual unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const;
-	//! Make existing global operator state reusable for a repeated execution. May run before the
-	//! operator's dependencies have produced output for the next round, so it must not consume
-	//! sink state: return true only when the retained state is ready for reuse as-is, and false
-	//! when the state is safe to destroy and rebuild through GetGlobalOperatorState.
 	virtual bool ResetGlobalOperatorState(ClientContext &context, GlobalOperatorState &state) const;
 	virtual OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                                   GlobalOperatorState &gstate, OperatorState &state) const;
@@ -271,7 +257,7 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		if (TARGET::TYPE != PhysicalOperatorType::INVALID && type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast physical operator to type - physical operator type mismatch");
+			throw InternalException("Failed to cast physical operator to type - physical operator type mismatch");
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
@@ -279,7 +265,7 @@ public:
 	template <class TARGET>
 	const TARGET &Cast() const {
 		if (TARGET::TYPE != PhysicalOperatorType::INVALID && type != TARGET::TYPE) {
-			InternalException::Throw("Failed to cast physical operator to type - physical operator type mismatch");
+			throw InternalException("Failed to cast physical operator to type - physical operator type mismatch");
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
@@ -316,8 +302,6 @@ public:
 	}
 
 	unique_ptr<DataChunk> cached_chunk;
-	//! Largest cache capacity reached, retained across flushes and state resets.
-	idx_t cached_chunk_capacity = 0;
 	bool initialized = false;
 	//! Whether or not the chunk can be cached
 	OperatorCachingMode can_cache_chunk = OperatorCachingMode::NONE;

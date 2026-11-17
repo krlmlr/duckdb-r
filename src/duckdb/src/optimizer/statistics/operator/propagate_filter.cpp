@@ -1,6 +1,5 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/function/scalar/generic_common.hpp"
-#include "duckdb/main/settings.hpp"
 #include "duckdb/optimizer/statistics_propagator.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -16,37 +15,6 @@ namespace duckdb {
 
 static bool IsCompareDistinct(ExpressionType type) {
 	return type == ExpressionType::COMPARE_DISTINCT_FROM || type == ExpressionType::COMPARE_NOT_DISTINCT_FROM;
-}
-
-bool StatisticsPropagator::HasNumericMinMax(const BaseStatistics &stats) {
-	if (stats.GetStatsType() == StatisticsType::BIGNUM_STATS) {
-		return BignumStats::HasMinMax(stats);
-	}
-	return NumericStats::HasMinMax(stats);
-}
-
-Value StatisticsPropagator::NumericMin(const BaseStatistics &stats) {
-	return stats.GetStatsType() == StatisticsType::BIGNUM_STATS ? BignumStats::Min(stats) : NumericStats::Min(stats);
-}
-
-Value StatisticsPropagator::NumericMax(const BaseStatistics &stats) {
-	return stats.GetStatsType() == StatisticsType::BIGNUM_STATS ? BignumStats::Max(stats) : NumericStats::Max(stats);
-}
-
-void StatisticsPropagator::SetNumericMin(BaseStatistics &stats, const Value &val) {
-	if (stats.GetStatsType() == StatisticsType::BIGNUM_STATS) {
-		BignumStats::SetMin(stats, val);
-	} else {
-		NumericStats::SetMin(stats, val);
-	}
-}
-
-void StatisticsPropagator::SetNumericMax(BaseStatistics &stats, const Value &val) {
-	if (stats.GetStatsType() == StatisticsType::BIGNUM_STATS) {
-		BignumStats::SetMax(stats, val);
-	} else {
-		NumericStats::SetMax(stats, val);
-	}
 }
 
 bool StatisticsPropagator::ExpressionIsConstant(Expression &expr, const Value &val) {
@@ -90,7 +58,7 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &stats, Express
 		// don't handle non-numeric columns here (yet)
 		return;
 	}
-	if (!HasNumericMinMax(stats)) {
+	if (!NumericStats::HasMinMax(stats)) {
 		// no stats available: skip this
 		return;
 	}
@@ -99,19 +67,19 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &stats, Express
 	case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 		// X < constant OR X <= constant
 		// max becomes the constant
-		SetNumericMax(stats, constant);
+		NumericStats::SetMax(stats, constant);
 		break;
 	case ExpressionType::COMPARE_GREATERTHAN:
 	case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
 		// X > constant OR X >= constant
 		// min becomes the constant
-		SetNumericMin(stats, constant);
+		NumericStats::SetMin(stats, constant);
 		break;
 	case ExpressionType::COMPARE_EQUAL:
 		// X = constant
 		// both min and max become the constant
-		SetNumericMin(stats, constant);
-		SetNumericMax(stats, constant);
+		NumericStats::SetMin(stats, constant);
+		NumericStats::SetMax(stats, constant);
 		break;
 	default:
 		break;
@@ -130,7 +98,7 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &lstats, BaseSt
 		// don't handle non-numeric columns here (yet)
 		return;
 	}
-	if (!HasNumericMinMax(lstats) || !HasNumericMinMax(rstats)) {
+	if (!NumericStats::HasMinMax(lstats) || !NumericStats::HasMinMax(rstats)) {
 		// no stats available: skip this
 		return;
 	}
@@ -143,14 +111,14 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &lstats, BaseSt
 
 		// we know that left.max is AT MOST equal to right.max
 		// because any value in left that is BIGGER than right.max will not pass the filter
-		if (NumericMax(lstats) > NumericMax(rstats)) {
-			SetNumericMax(lstats, NumericMax(rstats));
+		if (NumericStats::Max(lstats) > NumericStats::Max(rstats)) {
+			NumericStats::SetMax(lstats, NumericStats::Max(rstats));
 		}
 
 		// we also know that right.min is AT MOST equal to left.min
 		// because any value in right that is SMALLER than left.min will not pass the filter
-		if (NumericMin(rstats) < NumericMin(lstats)) {
-			SetNumericMin(rstats, NumericMin(lstats));
+		if (NumericStats::Min(rstats) < NumericStats::Min(lstats)) {
+			NumericStats::SetMin(rstats, NumericStats::Min(lstats));
 		}
 		// so in our example, the bounds get updated as follows:
 		// left: [-50, 100], right: [-50, 100]
@@ -160,11 +128,11 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &lstats, BaseSt
 		// LEFT > RIGHT OR LEFT >= RIGHT
 		// we know that every value of left is bigger (or equal to) every value in right
 		// this is essentially the inverse of the less than (or equal to) scenario
-		if (NumericMax(rstats) > NumericMax(lstats)) {
-			SetNumericMax(rstats, NumericMax(lstats));
+		if (NumericStats::Max(rstats) > NumericStats::Max(lstats)) {
+			NumericStats::SetMax(rstats, NumericStats::Max(lstats));
 		}
-		if (NumericMin(lstats) < NumericMin(rstats)) {
-			SetNumericMin(lstats, NumericMin(rstats));
+		if (NumericStats::Min(lstats) < NumericStats::Min(rstats)) {
+			NumericStats::SetMin(lstats, NumericStats::Min(rstats));
 		}
 		break;
 	case ExpressionType::COMPARE_EQUAL:
@@ -174,16 +142,16 @@ void StatisticsPropagator::UpdateFilterStatistics(BaseStatistics &lstats, BaseSt
 		// so if we have e.g. left = [-50, 250] and right = [-100, 100]
 		// the tighest bounds are [-50, 100]
 		// select the highest min
-		if (NumericMin(lstats) > NumericMin(rstats)) {
-			SetNumericMin(rstats, NumericMin(lstats));
+		if (NumericStats::Min(lstats) > NumericStats::Min(rstats)) {
+			NumericStats::SetMin(rstats, NumericStats::Min(lstats));
 		} else {
-			SetNumericMin(lstats, NumericMin(rstats));
+			NumericStats::SetMin(lstats, NumericStats::Min(rstats));
 		}
 		// select the lowest max
-		if (NumericMax(lstats) < NumericMax(rstats)) {
-			SetNumericMax(rstats, NumericMax(lstats));
+		if (NumericStats::Max(lstats) < NumericStats::Max(rstats)) {
+			NumericStats::SetMax(rstats, NumericStats::Max(lstats));
 		} else {
-			SetNumericMax(lstats, NumericMax(rstats));
+			NumericStats::SetMax(lstats, NumericStats::Max(rstats));
 		}
 		break;
 	default:
@@ -271,9 +239,7 @@ FilterPropagateResult StatisticsPropagator::ClassifyFilter(Expression &condition
 
 	if (ExpressionIsConstant(condition, Value::BOOLEAN(false))) {
 		return FilterPropagateResult::FILTER_ALWAYS_FALSE;
-	} else if (ExpressionIsConstantOrNull(condition, Value::BOOLEAN(false)) ||
-	           ExpressionIsConstant(condition, Value(LogicalType::BOOLEAN))) {
-		// a condition that is always NULL rejects every row too
+	} else if (ExpressionIsConstantOrNull(condition, Value::BOOLEAN(false))) {
 		return FilterPropagateResult::FILTER_FALSE_OR_NULL;
 	}
 
@@ -355,21 +321,7 @@ unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalFilt
 		return make_uniq<NodeStatistics>(0U, 0U);
 	}
 
-	// the filter evaluates its conjuncts in an adaptive order over the input rows, so their verification statistics
-	// are derived from the input statistics before any conjunct narrows them
-	const bool verify_stats = Settings::Get<DebugVerifyStatsSetting>(context);
-	column_binding_map_t<unique_ptr<BaseStatistics>> input_statistics;
-	if (verify_stats) {
-		for (auto &entry : statistics_map) {
-			// compressed materialization registers bindings without statistics
-			if (entry.second) {
-				input_statistics[entry.first] = entry.second->ToUnique();
-			}
-		}
-	}
-	// the conjuncts are propagated against statistics narrowed by the earlier conjuncts: these hold for the filter
-	// output and the pruning of the later conjuncts, but not for the vectors they are evaluated on
-	VerificationStatsGuard narrowing_guard(attach_verification_stats);
+	// then propagate to each of the expressions
 	for (idx_t i = 0; i < filter.expressions.size(); i++) {
 		auto &condition = filter.expressions[i];
 		auto prune_result = HandleFilter(condition);
@@ -386,7 +338,7 @@ unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalFilt
 				if (filter.projection_map.empty()) {
 					node_ptr = std::move(filter.children[0]);
 				}
-				return std::move(node_stats);
+				break;
 			}
 		} else if (prune_result == FilterPropagateResult::FILTER_ALWAYS_FALSE ||
 		           prune_result == FilterPropagateResult::FILTER_FALSE_OR_NULL) {
@@ -394,16 +346,6 @@ unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalFilt
 			ReplaceWithEmptyResult(node_ptr);
 			return make_uniq<NodeStatistics>(0U, 0U);
 		}
-	}
-	SimplifyConstantOrNull(filter.expressions);
-	if (verify_stats) {
-		// the remaining conjuncts are final: attach the verification statistics derived from the input statistics
-		narrowing_guard.Release();
-		std::swap(statistics_map, input_statistics);
-		for (auto &condition : filter.expressions) {
-			PropagateExpression(condition);
-		}
-		std::swap(statistics_map, input_statistics);
 	}
 	// the max cardinality of a filter is the cardinality of the input (i.e. no tuples get filtered)
 	return std::move(node_stats);

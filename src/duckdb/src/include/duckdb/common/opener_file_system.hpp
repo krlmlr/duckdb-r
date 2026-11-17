@@ -38,9 +38,7 @@ public:
 	//! "<name>.duckdb_extension.info" or "<name>.duckdb_extension.repo.json". Matching is on the file name only, so a
 	//! directory that happens to contain the marker does not reserve the files inside it
 	bool IsDuckDBExtensionName(const string &path) {
-		// match the canonical name case-insensitively: on the default macOS and Windows file systems a
-		// differently-cased name refers to the same file
-		auto name = StringUtil::Lower(FileSystem::ExtractName(CanonicalizePath(path)));
+		auto name = FileSystem::ExtractName(path);
 		return StringUtil::EndsWith(name, ".duckdb_extension") || StringUtil::Contains(name, ".duckdb_extension.");
 	}
 
@@ -147,9 +145,6 @@ public:
 	void MoveFile(const string &source, const string &target) {
 		MoveFile(source, target, nullptr);
 	}
-	optional<FileMetadata> GetStatsIfExists(const OpenFileInfo &file) {
-		return GetStatsIfExists(file, nullptr);
-	}
 	bool FileExists(const string &filename) {
 		return FileExists(filename, nullptr);
 	}
@@ -178,12 +173,6 @@ public:
 		VerifyNoOpener(opener);
 		VerifyCanAccessFile(filename);
 		return GetFileSystem().FileExists(filename, GetOpener());
-	}
-
-	optional<FileMetadata> GetStatsIfExists(const OpenFileInfo &file, optional_ptr<FileOpener> opener) override {
-		VerifyNoOpener(opener);
-		VerifyCanAccessFile(file.path);
-		return GetFileSystem().GetStatsIfExists(file, GetOpener());
 	}
 
 	bool IsPipe(const string &filename, optional_ptr<FileOpener> opener) override {
@@ -242,10 +231,6 @@ public:
 		GetFileSystem().SetDisabledFileSystems(names);
 	}
 
-	vector<string> GetDisabledFileSystems() override {
-		return GetFileSystem().GetDisabledFileSystems();
-	}
-
 	bool SubSystemIsDisabled(const string &name) override {
 		return GetFileSystem().SubSystemIsDisabled(name);
 	}
@@ -291,7 +276,11 @@ protected:
 	}
 
 	unique_ptr<MultiFileList> GlobFilesExtended(const string &path, const FileGlobInput &input,
-	                                            optional_ptr<FileOpener> opener) override;
+	                                            optional_ptr<FileOpener> opener) override {
+		VerifyNoOpener(opener);
+		VerifyCanAccessFile(path);
+		return GetFileSystem().Glob(path, input, GetOpener());
+	}
 
 	bool SupportsGlobExtended() const override {
 		return true;
