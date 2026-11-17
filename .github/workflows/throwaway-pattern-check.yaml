@@ -1,0 +1,18 @@
+# Throwaway, for duckdb/duckdb-r#2996: which base branches does this filter match?
+# Delete together with the claude/throwaway-pattern-check branch.
+name: throwaway-pattern-check
+
+on:
+  pull_request:
+    branches:
+      - "v[0-9]+.[0-9]+-[a-z]+"
+
+permissions: {}
+
+jobs:
+  echo:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+        run: echo "matched base_ref=$BASE_REF"
