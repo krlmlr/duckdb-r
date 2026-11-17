@@ -521,10 +521,11 @@ BoundStatement Binder::Bind(TableFunctionRef &ref) {
 
 	// selection, named-argument checking, folding and casting all happen in the function binder
 	FunctionBinder function_binder(*this);
+	auto &current = function_binder.GetCurrentEntry(function).Cast<TableFunctionCatalogEntry>();
 	auto resolved =
 	    table_in_out
-	        ? function_binder.BindTableInOutFunction(function.functions, subquery.types, named_arguments, error)
-	        : function_binder.BindTableFunction(function.functions, positional_arguments, named_arguments, error);
+	        ? function_binder.BindTableInOutFunction(current.functions, subquery.types, named_arguments, error)
+	        : function_binder.BindTableFunction(current.functions, positional_arguments, named_arguments, error);
 	if (!resolved) {
 		error.AddQueryLocation(ref);
 		error.Throw();
