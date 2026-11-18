@@ -115,7 +115,7 @@ groups <- list(
     owner = "handbook/operations/vendoring/pipeline",
     globs = c(
       "VENDORING.md", "vendor.sh", "vendor-one.sh", "vendor-one-test.sh", "vendor-lib.sh", "rconfigure.py",
-      "merge-version.sh", "setup-git.sh"
+      "merge-version.sh", "merge-version-test.sh", "merge-news.sh", "merge-news-test.sh", "setup-git.sh"
     )
   ),
   list(
@@ -124,7 +124,7 @@ groups <- list(
   ),
   list(
     owner = "handbook/operations/releases/versioning",
-    globs = c("preview-prefix*")
+    globs = c("preview-prefix*", "landing-version*")
   ),
   list(
     owner = "handbook/operations/releases/cran",
@@ -133,6 +133,10 @@ groups <- list(
   list(
     owner = "handbook/branches/flavors",
     globs = c("series.yaml", "series-table.R")
+  ),
+  list(
+    owner = "handbook/operations/ci/workflows",
+    globs = c("pull-request-base.sh", "pull-request-base-test.sh")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/selection",
@@ -169,6 +173,10 @@ groups <- list(
   list(
     owner = "handbook/branches/flavors",
     globs = c("flavor*", "reflavor*")
+  ),
+  list(
+    owner = "handbook/branches/model",
+    globs = c("delete-branch.sh", "delete-branch-test.sh")
   ),
   list(
     owner = "handbook/branches/mirrors",

@@ -39,15 +39,18 @@ A series' `<S>-vendor` is no series and gets no stage of its own:
 it is the vendor strand stage 1 vendors onto and derives the buffer from
 ([`branches/model/`](/handbook/branches/model/README.md)).
 Ignore a forward series
-whose green is an ancestor of its base series' green;
+whose tips its base series' refs reach:
+its green by the base's green, or, while that green sits below its seed, its `-dev` by the base's `-dev`;
 that is cutover litter pending deletion
-(the base moves on after cutover, so equality cannot be the test).
+(the base moves on after cutover, so equality cannot be the test,
+and a forward's green sits below its seed at birth, where the base's green may have it too;
+`series_fwd_swapped` in [`scripts/series-lib.sh`](/scripts/series-lib.sh) reads it).
 `<S>-rc-dev` has no `-build` beside it and is not a series of its own:
 it is the unflavored mirror of `<S>-dev`, derived commit for commit
 ([`series-rc/SKILL.md`](/.claude/skills/series-rc/SKILL.md)).
 Nor are `<S>-alpha` and `<S>-rc-alpha`, each one stamp commit on a green commit or its rc twin
 ([`series-alpha/SKILL.md`](/.claude/skills/series-alpha/SKILL.md)).
-Nor is `<L>-land-dev` with its `<L>-land-green`, a line on its way onto `main`
+Nor is `<L>-land-dev` with its `<L>-land-green`, a batch on its way onto `main` or a release branch, `main-land-dev` among them
 ([`series-land/SKILL.md`](/.claude/skills/series-land/SKILL.md)).
 
 **All four refs exist from day one, and green starts below the flavor
