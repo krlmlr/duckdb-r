@@ -1,6 +1,6 @@
 Package: duckdb
 Title: DBI Package for the DuckDB Database Management System
-Version: 2.0.99.9000.822
+Version: 2.0.99.9000.854
 Authors@R: c(
     person("Hannes", "Mühleisen", , "hannes@cwi.nl", role = "aut",
            comment = c(ORCID = "0000-0001-8552-0029")),
@@ -55,6 +55,7 @@ Suggests:
     DBItest,
     dbplyr (>= 2.6.0),
     dplyr,
+    hms,
     nanoarrow,
     rlang,
     sf,
