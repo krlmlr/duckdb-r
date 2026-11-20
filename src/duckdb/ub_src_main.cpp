@@ -10,6 +10,8 @@
 
 #include "src/main/client_context_file_opener.cpp"
 
+#include "src/main/client_context_wrapper.cpp"
+
 #include "src/main/client_data.cpp"
 
 #include "src/main/client_verify.cpp"
@@ -61,6 +63,8 @@
 #include "src/main/query_result.cpp"
 
 #include "src/main/query_result_stream.cpp"
+
+#include "src/main/relation.cpp"
 
 #include "src/main/result_format.cpp"
 

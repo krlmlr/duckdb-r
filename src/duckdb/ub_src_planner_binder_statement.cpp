@@ -42,6 +42,8 @@
 
 #include "src/planner/binder/statement/bind_prepare.cpp"
 
+#include "src/planner/binder/statement/bind_relation.cpp"
+
 #include "src/planner/binder/statement/bind_select.cpp"
 
 #include "src/planner/binder/statement/bind_set.cpp"

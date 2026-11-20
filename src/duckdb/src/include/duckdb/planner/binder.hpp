@@ -538,6 +538,7 @@ private:
 	BoundStatement Bind(PragmaStatement &stmt);
 	BoundStatement Bind(ExplainStatement &stmt);
 	BoundStatement Bind(VacuumStatement &stmt);
+	BoundStatement Bind(RelationStatement &stmt);
 	BoundStatement Bind(CallStatement &stmt);
 	BoundStatement Bind(ExportStatement &stmt);
 	BoundStatement Bind(ExtensionStatement &stmt);
