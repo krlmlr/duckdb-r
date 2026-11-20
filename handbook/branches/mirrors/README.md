@@ -13,8 +13,7 @@ and shields.io compares two refs of one repository,
 so the branch compared against has to be in the fork
 and not only in the canonical repo.
 `main` is carried for a second reason as well:
-it is what every series seeds from, except a line releasing from a branch of its own, which seeds from that branch,
-and that branch is mirrored for both reasons.
+it is what every series seeds from.
 Forward-porting reads the canonical `main` instead
 ([`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md)),
 because a mirror is behind for most of the cycle below
@@ -42,9 +41,9 @@ a mirror is carried because a badge measures against it,
 so the badge table in the root [`README.md`](/README.md) says what the rules
 must be, and [`scripts/pull-config.sh`](/scripts/pull-config.sh) holds the two
 against each other.
-It is authored here, in the canonical repository, on `main`:
-the app reads it from the fork's default branch, which is a mirror of that `main`,
-so it takes effect from `main`'s copy alone.
+It is authored here, in the canonical repository,
+because CI/CD infrastructure has its source of truth on `main`,
+and read from the fork's default branch, which is a mirror of that `main`.
 
 **A mirror moves on the app's schedule, not on ours.**
 Pull syncs a repository every six hours,
@@ -53,8 +52,6 @@ so a mirror is at most that far behind what it copies;
 a sync can be asked for at any moment from the URL that config names —
 which is what someone who needs a mirror at the canonical tip asks for,
 rather than pushing the branch.
-Pull moves a mirror through a pull request in the fork,
-and one into a release branch's mirror starts no `rcc` run ([`operations/ci/workflows/`](/handbook/operations/ci/workflows/README.md)).
 
 **A mirror is created by pushing it, not by configuring it.**
 Pull skips a rule whose base branch the fork does not have,
@@ -81,7 +78,7 @@ The buffer and `-dev` are working branches nothing installs,
 and duplicating either is the thing this avoids.
 A `-fwd-green` is a rebuild published from the fork's own universe
 to verify a cutover before it happens, and nothing publishes its copy here;
-it travels with the rest,
+it travels so that the cutover can archive the replaced copy of `<S>-green` against it in this repository,
 and it is deleted here with the fork's `-fwd` refs once the swap has made its tip `<S>-green`
 ([`series-forward`](/.claude/skills/series-forward/SKILL.md)).
 
@@ -98,8 +95,8 @@ the old green is no ancestor of.
 That is the one legitimate non-fast-forward,
 so [`scripts/series-cutover.sh`](/scripts/series-cutover.sh) forces the copy itself,
 under a lease and after the swap, rather than leaving the next firing to trip on it,
-and only where the copy it replaces is the fork's green or under a pin in the fork
-([`model/`](/handbook/branches/model/README.md)), so the move loses no history.
+and only after the copy it replaces has become the head of a closed pull request here,
+so the move loses no history.
 
 Unlike the mirrors above, this one is ours to push:
 Pull carries branches from the canonical repository into the fork and never back.

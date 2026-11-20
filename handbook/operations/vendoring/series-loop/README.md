@@ -4,7 +4,7 @@ The scheduled routine that vendors every series.
 The procedures are machine-loaded playbooks under
 [`.claude/skills/`](/.claude/skills) —
 [`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md) with its
-siblings `series-forward`, `series-cutover`, `series-rebase`, `series-open`, `series-rc`, `series-alpha`, `series-land` —
+siblings `series-forward`, `series-rebase`, `series-open`, `series-rc`, `series-alpha`, `series-land` —
 linked from here, never restated:
 a reader who wants to *run* the loop follows the link;
 what runs is this page's topic.
@@ -39,7 +39,7 @@ to do, and they run in this order:
   A red there never rewinds green; it is recorded in the commit
   message of the `-dev` commit that answers it, which is where the
   next forward reads it.
-* **Forward-port** — bring the R-side work of the branch the series releases from onto the series
+* **Forward-port** — bring `main`'s R-side work onto the series
   ([`scripts/series-port.sh`](/scripts/series-port.sh)),
   and bring every ref's tooling level with `main` —
   the buffer included, which takes no ports but does take the sync,
@@ -50,11 +50,10 @@ to do, and they run in this order:
   tooling sync and fixes named by hand apply.
   That is read from the lineage under the seed rather than configured,
   so opening or retiring a release line changes no script.
-  Which branch that is, `releases_from` in [`scripts/series.yaml`](/scripts/series.yaml) says:
-  `main` for `main`'s own series, and a line's own release branch, cut from `main`, for the v2.0 series,
-  whose R side is ported from that branch, where its fixes are written first
-  ([`branches/model/`](/handbook/branches/model/README.md)).
-  A line declared `stale: true` there, no longer active and awaiting retirement, takes the tooling sync alone.
+  The exception is a line that parks when another lands on `main`:
+  its seed sits on `main`'s own history, so it is declared instead,
+  by naming its own baseline as `releases_from` in [`scripts/series.yaml`](/scripts/series.yaml)
+  ([`series-land`](/.claude/skills/series-land/SKILL.md)).
   A `patch/` entry the port brings to `-dev` does nothing there,
   because a vendor run applies the strand's stack, so the port carries
   it on to `<S>-vendor`, from where the next pick brings it to the buffer
@@ -91,7 +90,7 @@ to do, and they run in this order:
   under stops the run with the conflict in a worktree it keeps, writes
   no ref, and resumes with `--continue` or is discarded with `--abort`.
   A live forward counterpart does **not** hold the base series back: it
-  consumes, ports and verifies at full speed until a cutover swaps the
+  consumes, ports and verifies at full speed until a human swaps the
   refs, which costs CI on a lineage about to be retired and buys the
   only thing that makes retiring it checkable rather than hopeful
   (below).
@@ -107,15 +106,11 @@ to do, and they run in this order:
   `<S>-dev` against `<S>-fwd-dev` and sorts each differing path into
   what the forwarding explains and what it does not; the findings go
   into the report and to the stage that should have moved them. A
-  caught-up counterpart is *reported* with the command of the cutover's
-  report, never cut over by a firing. The cutover is a session's, sent by
-  the maintainer: it opens a cutover pull request, reviews a stack of pull
-  requests per strand, and swaps with `--confirm <S>@<sha>` once he has
-  ticked the question naming that tip of `<S>-fwd-green`
-  ([`series-cutover`](/.claude/skills/series-cutover/SKILL.md)).
-  The swap refuses a ref no stack pins, and deletes the forward's refs in
-  both repositories afterwards, listing whatever a remote refused with the
-  line that removes it
+  caught-up counterpart is *reported* with the cutover command, never
+  executed; that move is a human's, and the script prints the same
+  comparison and the review of the forward's R side before it asks for
+  confirmation, archives what it replaces as closed pull requests, and
+  deletes the forward's refs in both repositories afterwards
   ([`series-forward`](/.claude/skills/series-forward/SKILL.md)).
 * **Report what the tooling got wrong** — a firing that had to work
   around a script opens a pull request against it,
@@ -201,14 +196,14 @@ series' verdict read-only and is always safe to run
 
 **Every `scripts/series-*.sh` takes the same arguments.**
 Positional is only what the script *names* —
-a series, the strand of one a cutover stack is built for, a rev-range, the two refs a forward replay is bounded by.
+a series, a rev-range, the two refs a forward replay is bounded by.
 Everything else is an option, spelled identically in all of them:
 
 * `--remote <name>` — the remote of *this* repository carrying the series
   refs. Default `origin`, or `$SERIES_REMOTE`.
 * `--upstream <path>` — a `duckdb/duckdb` checkout on disk, read with
   `git -C`. Default `$UPSTREAM_CLONE`, and for `series-cut.sh` then `../../../duckdb`.
-  Only `series-check.sh`, `series-cut.sh`, `series-cutover.sh` and `series-cutover-stack.sh` read one.
+  Only `series-check.sh`, `series-cut.sh` and `series-cutover.sh` read one.
 * `--canonical <name>` — the remote of the canonical repository: where
   r-universe publishes the base flavors from, and where `main` itself lives.
   Default `$SERIES_CANONICAL`, then `upstream`, which is what a `gh` clone of a
@@ -224,10 +219,6 @@ Everything else is an option, spelled identically in all of them:
   touches git.
 * Anything else beginning with `-`, an option missing its value, or a
   positional the script does not name: the usage on stderr, exit **2**.
-  So is a confirmation that names something else:
-  `series-cutover.sh <S> --confirm <S>@<sha>` names the series it swaps and the SHA it swaps to,
-  and another name, a SHA of another shape, an option it excludes beside it, or a run with neither
-  `--confirm` nor `--prepare` is a wrong invocation, as [its header](/scripts/series-cutover.sh) lists.
   Two is the usage status everywhere, so a caller can tell a wrong
   invocation from a wrong answer —
   `series-converge.sh` already reserved 1 for *diverged*.
@@ -268,8 +259,7 @@ and [`scripts/vendor-lib.sh`](/scripts/vendor-lib.sh) the glue gate;
 [`scripts/series-lib-test.sh`](/scripts/series-lib-test.sh) checks the helpers against whatever the configuration says.
 A series that carries no flavor has no rc strand, and `series-land.sh --source <ref>` builds its landing up to that ref as it stands.
 Two exit statuses follow from the split: a glue gate that could not run exits 8 in `vendor-one.sh` and `series-forward-build.sh` alike,
-and a generator that fails before the commit exits 7.
-This repository's generator fails where the upstream checkout cannot name its version or supply its logos
+and a generator that fails before the commit exits 7, which this repository's generator never does
 ([`troubleshooting/`](/handbook/operations/vendoring/troubleshooting/README.md)).
 
 **A firing also reports the series that does not exist.**

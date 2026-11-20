@@ -20,25 +20,19 @@ The families, in one breath:
   with its refs in the archive
   ([`model/`](/handbook/branches/model/README.md)).
 * **Linearity** — the active history is linear and merge-free,
-  so it stays bisectable; ports onto a series are cherry-picks.
-  The one merge is a forward merge, an older release branch merged into the next newer line,
-  so the canonical branches' first parents stay linear and bisectable
-  ([`model/`](/handbook/branches/model/README.md)).
+  so it stays bisectable; forward-ports are cherry-picks.
 * **Flavor / identity** — the names inside a branch agree with each other,
   everywhere in the branch.
 * **Version** — each strand advances its own counter and freezes the other
   ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
-* **Source of truth** — R-side work reaches a series by forwarding from
-  the branch the series releases from, never the reverse;
+* **Source of truth** — R-side work is born on `main` and reaches
+  a series by forwarding, never the reverse;
   the one exception is vendor-coupled glue on the preview line,
   born beside the vendor commit that forces it.
-  Between the canonical branches, an R-side fix is written on the oldest active release branch
-  and merged forward into the newer lines
-  ([`model/`](/handbook/branches/model/README.md)).
 * **CI / green** — a `-green` ref only ever fast-forwards to
   commits with recorded successful runs; the one sideways move, a cutover,
-  refuses to move a lineage that no review stack's pull request pins
-  ([`model/`](/handbook/branches/model/README.md)).
+  keeps every lineage it replaces as a closed pull request's head before
+  it moves anything ([`model/`](/handbook/branches/model/README.md)).
 * **Forward convergence** — at the end of a forwarding, `<S>-dev` and
   `<S>-fwd-dev` are identical, or every difference between them is
   explicable. A forward is the same series rebuilt on a newer `main`
@@ -48,10 +42,10 @@ The families, in one breath:
   built, the replay takes `<S>-dev`'s commits themselves, so the two
   agree there by construction, except where the replay kept a test the
   base had stopped and says so.
-* **Prerelease**: while a release stabilises, only the branch the series releases from,
-  by its fold-back fixes, and the dev branches move, so an unfinished release is abandoned by walking away;
+* **Prerelease** — while a release stabilises, only `main` and the dev
+  branches move, so an unfinished release is abandoned by walking away;
   what ships is an ancestor of what was revdep-tested;
-  a fold-back fix reaches the branch the series releases from before any series;
+  a fold-back fix reaches `main` before any series;
   and at the glue freeze every releasing series carries identical glue.
 
 Read every statement as a claim about **trees, not ancestry**:
@@ -70,16 +64,13 @@ recomputed from the match each time and force-pushed,
 which is why nothing gates it.
 
 Forward convergence sits between the two families:
-it is **measured on every firing and judged by a human**.
+it is **measured on every firing and enforced by nobody**.
 [`scripts/series-converge.sh`](/scripts/series-converge.sh) reports it,
-and [`scripts/series-cutover.sh`](/scripts/series-cutover.sh) reports the
-same reading under `--prepare` and `--confirm` alike,
-and neither refuses on it, because the invariant's second half is
+and [`scripts/series-cutover.sh`](/scripts/series-cutover.sh) prints the
+same reading immediately before it asks to swap the refs —
+but neither refuses, because the invariant's second half is
 *explicable*, and whether a difference is explicable is a judgement no
-script can make.
-It is made on the review stacks, a strand and a layer at a time, and in the maintainer's sign-off
-([`series-cutover`](/.claude/skills/series-cutover/SKILL.md)).
-What the tooling can do, and does, is keep the list of
+script can make. What the tooling can do, and does, is keep the list of
 differences it explains away short and evidenced, so that what is left
 is a work list rather than a verdict.
 The structural and flavor families hold **by construction** —
