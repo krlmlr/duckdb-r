@@ -148,7 +148,7 @@ This file is what names the contents, so nothing here is an orphan.
 * [`2026-09-28-matrix-limits/`](2026-09-28-matrix-limits/):
   a matrix column carrying a class, which writes as that class's scalar type and loses values,
   and an `ARRAY` column that `rel_to_altrep()` reads with the wrong shape.
-  Supports [`usage/relational/`](/handbook/usage/relational/README.md).
+  Supports [`usage/types/`](/handbook/usage/types/README.md) and [`usage/relational/`](/handbook/usage/relational/README.md).
 * [`2026-09-28-type-rereview/`](2026-09-28-type-rereview/):
   the type facts a re-review after #2850 found wrong or stated too broadly, from the integer minimums through Arrow
   to which CRS can be named in a type without `spatial`.
@@ -159,15 +159,6 @@ This file is what names the contents, so nothing here is an orphan.
   whether `dbExistsTable()` leaves an open transaction usable on DuckDB 1.5.6 and 2.0,
   and how a relaxed policy, a second connection, a catalog lookup and the two combined answer eighteen names inside one.
   Supports [`usage/statements/`](/handbook/usage/statements/README.md).
-* [`2026-11-17-progress-display/`](2026-11-17-progress-display/):
-  every call the progress display gets, and when its `Finish()` comes, for large local queries read whole or streamed,
-  for queries with a slow remote part and a slow local part, and for a stream under three streaming buffer sizes.
-  Supports [`usage/interactive/`](/handbook/usage/interactive/README.md).
-
-* [`2026-11-17-lazy-vector-summaries/`](2026-11-17-lazy-vector-summaries/):
-  what `range()`, `mean()`, `anyNA()`, `unique()` and `c()` cost on a converted column of `rel_to_altrep()` against a plain vector,
-  before and after #2890 gave the atomic classes per-element methods that skip the guard.
-  Supports [`architecture/glue/altrep/`](/handbook/architecture/glue/altrep/README.md).
 
 Adding one: create the directory, name it for the date and the topic,
 open its `README.md` with what and when and on what,

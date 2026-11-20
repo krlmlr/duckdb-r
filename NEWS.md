@@ -1,15 +1,6 @@
-# duckdb (development version)
+# duckdb 2.0.0.9000
 
-Commits since v2.0.0.9001: <https://github.com/duckdb/duckdb-r/compare/v2.0.0.9001...v2.0-cyanoptera>.
-
-
-# duckdb 2.0.0.9001 (2026-11-19)
-
-_Drafted with AI from the vendored upstream commits and the R-side changes, not reviewed by a maintainer._
-
-## Features
-
-- Update to DuckDB v2.0.1-alpha56598, a preview of v2.0.1 with the fixes the v2.0 line has gained since v2.0.0.
+- Commits since 2.0.0: <https://github.com/duckdb/duckdb-r/compare/v2.0.0...main>.
 
 
 # duckdb 2.0.0
@@ -69,6 +60,12 @@ _Drafted with AI from the vendored upstream commits and the R-side changes, not 
 - A query that scans an Arrow stream on the stream's own connection fails with the invalidation error rather than waiting for good.
 
 - `dbBind()` on a `dbSendQuery()` result after `dbDisconnect()` fails with "Attempting to execute a prepared statement after its connection was closed!" rather than running the statement again; `dbFetch()` still returns its rows.
+
+## Known issues
+
+- The progress display stops after the first batch of a result read as an Arrow stream
+  (`dbSendQueryArrow()` or `dbGetQueryArrow()`, then `$get_next()`).
+  The engine reports progress while it computes the first batch and treats the query as finished from then on (#2967).
 
 
 # duckdb 1.5.6
