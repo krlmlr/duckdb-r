@@ -1,6 +1,6 @@
 ---
 name: series-forward
-description: Forward a series onto a newer base, `main` or the release branch it releases from, by building an `-fwd` sibling beside it from the series' own `-dev`, so its commits keep what the series proved, and swapping it in once it has caught up, so the green ref consumers depend on is never rewritten. Use when that base has moved under a series, a landing among other moves, and its branches need the newer base, or when asked to forward a series.
+description: Forward a series onto a newer `main` by building an `-fwd` sibling beside it from the series' own `-dev`, so its commits keep what the series proved, and swapping it in once it has caught up, so the green ref consumers depend on is never rewritten. Use when `main` has moved under a series and its branches need the newer base, or when asked to forward a series.
 ---
 
 # Forwarding a series to a newer base
@@ -24,16 +24,9 @@ Nothing schedules a forward; what makes one due is drift worth resolving.
 For a series whose own line has just released, the version is one reading of that drift:
 its seed sits below the release it produced, `1.5.5.9020.36` being under `1.5.6`,
 and re-seeding is what restores the correspondence.
-A preview line is the exception, its prefix being deliberately not that of the release it was seeded from
+A preview line is the exception, its prefix being deliberately not `main`'s
 ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)),
-so a bump on its base moves nothing under it and only the R-side drift counts.
-
-**The base is the branch the series releases from.**
-That is `main` for `main`'s own series and for every line still releasing from it,
-and a line's release branch where `releases_from` in [`scripts/series.yaml`](/scripts/series.yaml) names one,
-`v2.0-cyanoptera` for the line CRAN ships; wherever `main` stands below as the base, read that branch.
-A landing is the commonest move of either: the series' own vendor commits arrive on its base,
-and a forward then replays only what came after them ([`series-land`](/.claude/skills/series-land/SKILL.md)).
+so a bump on `main` moves nothing under it and only the R-side drift counts.
 
 ## Create the forward series
 
@@ -51,9 +44,9 @@ and it would start vendoring onto that ref while the replay is still writing it.
    is [`references/create.md`](references/create.md); read it before the first replay and at every stop.
    The procedure:
 
-   * **Regenerate the seed** on the current base: `scripts/flavor.sh <F>` (needs `krlmlr/cpp11`),
+   * **Regenerate the seed** on current `main`: `scripts/flavor.sh <F>` (needs `krlmlr/cpp11`),
      then a separate `chore: Add fifth version component` commit appending the counter's `.0`;
-     a preview line takes its own prefix there, and a seed on a released `main` takes the first development version.
+     a preview line takes its own prefix there, and a seed on a released `main` takes fledge's first dev version.
    * **Read the whole glue set and what the base learned, and judge it**, before the first pick:
 
      ```sh
@@ -109,7 +102,7 @@ and it would start vendoring onto that ref while the replay is still writing it.
    **The base series keeps consuming too**, at full speed,
    vendoring, repairing, porting and extending as if no forward existed;
    `<S>-green` still serves consumers, unchanged, on the old lineage.
-   The two run level until a cutover swaps them,
+   The two run level until a human swaps them,
    which is what the invariant below needs
    and what the loop's stage 5 used to prevent.
 
@@ -220,7 +213,7 @@ so the twin's copy cannot overwrite what the buffer just regenerated;
 that says nothing about whether the two branches may differ there,
 and on the live series they do not.
 
-## Cut over: a human decides
+## Cut over — by hand, always
 
 A line has **one forward at a time**:
 the loop serves the series r-universe publishes and the forward being built beside it, and nothing else
@@ -228,78 +221,85 @@ the loop serves the series r-universe publishes and the forward being built besi
 A second forward is not opened while one is in flight;
 it is cut over, rebased (above), or abandoned first.
 
-A cutover is due when `<S>-fwd-green` vendors at least the upstream commit `<S>-green` vendors,
-since coverage may never regress.
-**A human decides it, never the loop.**
-The series loop reports a ready cutover and stops there (`series-loop/SKILL.md`, stage 6).
-The maintainer asks a session to run it,
-and [`series-cutover`](../series-cutover/SKILL.md) is that run, from the cutover pull request to the cleanup:
-the session does every mechanical step, and the maintainer reviews the stacks and signs off on one SHA of `<S>-fwd-green`.
-Nothing reads a terminal and no script calls `gh`; the session opens the pull requests with its own tools.
+When `<S>-fwd-green` vendors at least the upstream commit
+`<S>-green` vendors —
+coverage may never regress — run
 
 ```sh
-scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare
-scripts/series-cutover-stack.sh <S> <X> --remote origin --upstream ../../../duckdb   # per strand
-scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --confirm <S>@<sha>
+scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare --out <dir>
+scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb
 ```
 
-`--prepare` is the half that moves nothing:
-it prints the refs to swap, the coverage, the convergence read, the package and the versions,
-and the tip of `<S>-fwd-green` to decide on.
+**A human runs this, never the loop.**
+The series loop reports a ready cutover and stops there
+(`series-loop/SKILL.md`, stage 6),
+and the script refuses to swap without a terminal
+and a typed confirmation.
+`--prepare` is the half that needs neither:
+it prints the gates and the reads below, writes the review, and moves nothing,
+so the decision is made on a page that can be read twice.
 Pass the upstream clone:
-coverage is among what the swap enforces, as the [script's header](/scripts/series-cutover.sh) lists it, and it needs the clone's ancestry.
-Convergence, the package and the versions are reported, never enforced:
-the stacks and the sign-off weigh them.
+without it the coverage gate degrades to a warning,
+and a warning is not what should authorize
+retiring the lineage consumers are reading.
 
-**The review reads a stack per strand, before the swap.**
-For each of `-vendor`, `-build`, `-dev` and `-green`,
-[`scripts/series-cutover-stack.sh`](/scripts/series-cutover-stack.sh) builds the layers its header lists,
-as branches in the fork, each one commit on the previous.
-Opened as draft pull requests, each layer into the one below,
-they split what the forward differs by into `main`'s share, the engine's, and the forward's own,
-and each is read against what it is expected to show ([`series-cutover`](../series-cutover/SKILL.md)).
-The replay is a validation of what the loop did:
-a commit of `main` that does not apply where the forward applied it, or a difference nobody can explain,
-is fixed on the `-fwd` strand at the exact commit it concerns, folded with [`scripts/series-fold.sh`](/scripts/series-fold.sh),
-and the stacks are rebuilt once CI has judged the fold.
-The convergence read is the summary of the same question,
-and a finding there is inherited by the swap, never resolved by it.
+**The review comes before the swap.**
+The script prints, as a stat, everything `<S>-fwd-green` changes against current `main` outside the engine,
+and writes the full diff to `--out`:
+the glue, the R code, the tests and the patch stack.
+The forward's seed is a recent `main`, so that diff is the series' own work,
+and it is read before consumers are pointed at it,
+each part held to the leaf that owns it:
+glue to [`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md),
+tests to [`testing/`](/handbook/testing/README.md),
+patches to [`operations/vendoring/pipeline/`](/handbook/operations/vendoring/pipeline/README.md).
+The convergence read beside it is the other half, what the forward carries against what it replaces;
+a finding there is inherited by the swap, never resolved by it.
 
-The report names the package on both sides,
-`Package:` once and `Version:` for each of the four refs, before and after,
-so the sign-off is given with the version consumers will be offered.
-A version that would go **backwards** is reported, not refused:
+The report names the package on both sides —
+`Package:` once, and `Version:` for each of the four refs,
+before and after —
+so the confirmation is given with the version
+consumers will be offered on screen.
+A version that would go **backwards** is warned about, not refused:
 the replay renumbers the fifth component
 as a counter of its own chain,
 which starts well below the one the base series accumulated,
 and the fourth component usually covers it
 because the forward is seeded on a newer `main`.
 Where it does not, r-universe, which publishes from `<S>-green`, has no upgrade to offer
-until the new chain climbs past the old one's counter,
+until the new chain climbs past the old one's counter —
 a cost rather than a corruption,
-and whether it is worth paying is the judgement the sign-off already makes.
+and whether it is worth paying is the judgement
+the typed confirmation already asks for.
 On a preview line it never does, and a version going back is normal there:
 the prefix is pinned to the line being previewed rather than taken from `main`
 ([`scripts/preview-prefix.sh`](/scripts/preview-prefix.sh)),
 so only the restarted counter differs.
 
-**The replaced history is pinned before anything moves.**
-The swap takes `<S>-dev`, `<S>-build` and `<S>-vendor` off their lineages in the fork,
-and `<S>-green` off its own in both repositories,
+**The replaced history is kept before anything moves.**
+The swap takes `<S>-dev` and `<S>-build` off their lineages in the fork,
+and the canonical repository's copy of `<S>-green` off its own,
 and a ref nothing points at is history nothing can read.
-The first layer of each stack stands on the old tip,
-and its open pull request's head is a **pin**: GitHub keeps it as `refs/pull/<n>/head` for as long as the pull request exists, closed or not.
-The swap refuses to move a ref no pin holds,
-`-build-base` being under `-build` and the canonical copy of green being the fork's green or under a pin
-([`branches/model/`](/handbook/branches/model/README.md)).
+So, after the confirmation and before the push,
+each of those lineages becomes the head of a **draft pull request opened and closed on the spot**,
+against the forward ref that takes its place:
+`<S>-dev` against `<S>-fwd-dev` and `<S>-build` against `<S>-fwd-build` in the fork,
+`<S>-green` against `<S>-fwd-green` in the canonical repository,
+which carries every green ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+GitHub keeps a pull request's head as `refs/pull/<n>/head` for as long as the pull request exists, closed or not,
+so the commits stay reachable, and the pull request is where to find them.
+Green and `-build-base` are on those lineages already and need none of their own.
 Nothing is merged, and the names stay what they were:
 r-universe keeps building `<S>-green`, and no entry anywhere changes.
+A remote that is not on GitHub cannot be archived that way;
+the script refuses rather than swapping anyway, and `--no-archive` is the explicit override.
 
-It then swaps the refs in a single `git push --atomic`
+It then swaps all four refs in a single `git push --atomic`
 with a per-ref lease,
 so consumers never observe a half-replaced series.
 A base ref that does not exist yet is **created** rather than swapped,
-leased as "must not exist":
+leased as "must not exist" —
 a series opened directly as `-fwd`
 has no counterpart to replace,
 and its first cutover is what brings `<S>-*` into being.
@@ -317,18 +317,11 @@ with the forward's rc and alpha strands and its retry ledger,
 and `<S>-fwd-green`'s copy is deleted in the canonical repository:
 their tips are the series' refs now, and the derived strands are re-cut from the swapped-in series
 ([`series-rc/SKILL.md`](../series-rc/SKILL.md), [`series-alpha/SKILL.md`](../series-alpha/SKILL.md)).
-Each deletion is leased on the tip the run read, so a ref that moved since is kept, and the run shows what moved.
-If the remote refuses ref deletion (some git proxies do, a cloud session's among them),
+If the remote refuses ref deletion (some git proxies do),
 or a cutover predates this cleanup,
-what stays is cutover litter.
-The run lists each ref it left with the line that removes it, and exits 9:
-on GitHub, a dispatch of [`delete-branch.yaml`](/.github/workflows/delete-branch.yaml), which a session runs,
-where the ref's twin without its `fwd-` is at its tip, as it is right after the swap, or a closed pull request's head is,
-and otherwise a `gh api -X DELETE` that checks the tip first, for a maintainer's shell
-(`series_delete_line`, [`scripts/series-lib.sh`](/scripts/series-lib.sh));
-the swap stands, and the deletion is somebody's to run by hand.
-The loop ignores a forward series
-whose tips its base series' refs reach, as `series_fwd_swapped` in [`scripts/series-lib.sh`](/scripts/series-lib.sh) reads it,
+what stays is cutover litter:
+the loop ignores a forward series
+whose green is an ancestor of its base series' green,
 and
 
 ```sh
@@ -337,5 +330,4 @@ scripts/series-prune.sh <S>
 
 lists the litter in both repositories with the commands that remove it, and runs none of them.
 It offers nothing of a live forward, and nothing it offers is lost by deletion:
-the replaced lineages are under the pins, and the rest is recomputed from `<S>-dev`.
-The stacks and the cutover pull request are closed and their branches deleted afterwards ([`series-cutover`](../series-cutover/SKILL.md)).
+the replaced lineages are the archive pull requests' heads, and the rest is recomputed from `<S>-dev`.

@@ -3,12 +3,11 @@
 # prefix of the line it *previews*, not the one it was seeded from
 # (handbook/operations/releases/versioning/README.md).
 #
-# A series previewing an unreleased line takes the prefix that sorts between the
-# line released before it and its own release: `a.b.99` before a minor
-# release, `a.99.99` before a major one. So previewing 2.1 is `2.0.99.9000`
-# and previewing 2.0 is `1.99.99.9000`. Which line is being previewed is read
-# from the engine the strand vendors, so this needs no input and cannot drift
-# from the tree it stamps.
+# A series previewing an unreleased line takes fledge's prefix for that line --
+# `a.b.99` before a minor release, `a.99.99` before a major one -- so previewing
+# 2.1 is `2.0.99.9000` and previewing 2.0 is `1.99.99.9000`. Which line is being
+# previewed is read from the engine the strand vendors, so this needs no input
+# and cannot drift from the tree it stamps.
 #
 # **It is owed at a branch cut, by both series.** When upstream cuts a release
 # branch, `main` starts previewing the *next* line the same week, so the series
@@ -22,22 +21,14 @@
 #
 # **A line a released version already names is not a preview line**, whatever
 # branch the series tracks, so it is owed no prefix and reports none: the seed
-# took its version from `main` and keeps it. `v2.0-cyanoptera`, `v1.5-variegata`
-# and `v1.4-andium` are in that state today.
+# took its version from `main` and keeps it. `v1.5-variegata` and `v1.4-andium`
+# are the two in that state today.
 #
 # Run it on the two `-build`/`-dev` strands of each; `-green` is fast-forward
 # only and takes the stamp when the loop advances over it.
 #
 # The vendor counter is kept: the chain does not restart, so the fifth component
 # carries over and the version still rises.
-#
-# **A fourth component above `.9000` is stamped already.** Once `main` itself
-# carries the prefix of the line it previews, `2.0.99` while upstream `main`
-# heads for 2.1, its fourth component counts landings and the bumps between them
-# (handbook/operations/releases/versioning/README.md), and a seed regenerated on
-# it takes whatever that counter has reached, `2.0.99.9004.0`. That is the
-# previewed line's prefix, and lowering it to `.9000` is what the gate below
-# would refuse, so the prefix is owed only where the three components differ.
 #
 # Usage: preview-prefix.sh [--line <a.b>] [--check]
 #   --line <a.b>  the line being previewed, where the engine cannot say.
@@ -97,8 +88,8 @@ esac
 major=${line%%.*}
 minor=${line#*.}
 
-# Before a minor release the major is kept and the patch pinned at 99, one
-# minor down; before a major one minor and patch are pinned, one major down.
+# fledge's own bumps: pre-minor keeps the major and pins the minor at 99;
+# pre-major pins both, one major down.
 if [ "$minor" -gt 0 ]; then
   prefix="$major.$((minor - 1)).99.9000"
 else
@@ -108,13 +99,6 @@ fi
 cur=$("$gnu_sed" -rn 's/^Version: (.*)$/\1/p' DESCRIPTION)
 counter=$(printf '%s\n' "$cur" | "$gnu_sed" -rn 's/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.([0-9]+)$/\1/p')
 want=$prefix${counter:+.$counter}
-# The previewed line's three components with a fourth of `.9000` or more, the
-# counter `main` advances once it carries this prefix, is the prefix stamped.
-cur3=$(printf '%s\n' "$cur" | "$gnu_sed" -rn 's/^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+(\.[0-9]+)?$/\1/p')
-cur4=$(printf '%s\n' "$cur" | "$gnu_sed" -rn 's/^[0-9]+\.[0-9]+\.[0-9]+\.([0-9]+)(\.[0-9]+)?$/\1/p')
-if [ -n "$cur3" ] && [ "$cur3" = "${prefix%.9000}" ] && [ "$cur4" -ge 9000 ]; then
-  want=$cur
-fi
 
 # A released line keeps the version it was seeded with, and the prefix owed to a
 # preview line would be a downgrade here -- `1.5.5.9020.47` reporting as owing
