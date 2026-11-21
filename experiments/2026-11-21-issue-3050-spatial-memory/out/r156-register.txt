@@ -1,0 +1,20 @@
+## r156-register: r lib-156 source=register
+duckdb 1.5.6, engine v1.5.6 (069cc9f9b5)
+                      name   value
+1             memory_limit 3.7 GiB
+2 preserve_insertion_order    true
+3                  threads       4
+[1] 70000
+year 2015: 2497 rows, sum(n) 2879870, 1.9 s
+year 2016: 2587 rows, sum(n) 2966012, 2.1 s
+year 2017: 2610 rows, sum(n) 2990415, 2.1 s
+year 2018: 2638 rows, sum(n) 3115280, 1.9 s
+year 2019: 2585 rows, sum(n) 2982570, 1.9 s
+year 2020: 2514 rows, sum(n) 2893423, 2.0 s
+year 2021: 2634 rows, sum(n) 3088824, 2.1 s
+year 2022: 2597 rows, sum(n) 3100662, 2.2 s
+year 2023: 2657 rows, sum(n) 3111200, 1.9 s
+year 2024: 2681 rows, sum(n) 3226383, 2.0 s
+total: 26000 rows, sum(n) 30354639, mean(avg_dist) 1597.224, 20.1 s
+RESULT r156-register | peak RSS 1170 MiB | cgroup peak 1092 MiB | wall 0:21.36 | ok
+

@@ -1,0 +1,65 @@
+## 1.5.6 years=2024 k=5000
+year 2024: 2.9 s
+peak buffer memory 2078 MiB, peak temp dir 0 MiB, latency 2.8 s
+HASH_GROUP_BY: 2,518 rows, 4.68 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 k=5000 | peak RSS 1154 MiB | cgroup peak 1077 MiB | wall 0:04.43 | ok
+
+## 2.0.0 years=2024 k=5000
+year 2024: 32.2 s
+peak buffer memory 3815 MiB, peak temp dir 6793 MiB, latency 32.2 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 51.90 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 k=5000 | peak RSS 1253 MiB | cgroup peak 7686 MiB | wall 0:34.08 | ok
+
+## 1.5.6 years=2024 k=2000
+year 2024: 3.0 s
+peak buffer memory 1435 MiB, peak temp dir 0 MiB, latency 2.9 s
+HASH_GROUP_BY: 2,518 rows, 4.05 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 k=2000 | peak RSS 848 MiB | cgroup peak 772 MiB | wall 0:05.09 | ok
+
+## 2.0.0 years=2024 k=2000
+year 2024: 2.8 s
+peak buffer memory 386 MiB, peak temp dir 0 MiB, latency 2.8 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (28 MiB), 3.48 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 k=2000 | peak RSS 541 MiB | cgroup peak 465 MiB | wall 0:04.68 | ok
+
+## 1.5.6 years=2024 k=1000
+year 2024: 2.7 s
+peak buffer memory 1004 MiB, peak temp dir 0 MiB, latency 2.7 s
+HASH_GROUP_BY: 2,518 rows, 3.15 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 k=1000 | peak RSS 609 MiB | cgroup peak 530 MiB | wall 0:04.62 | ok
+
+## 2.0.0 years=2024 k=1000
+year 2024: 2.3 s
+peak buffer memory 250 MiB, peak temp dir 0 MiB, latency 2.3 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (19 MiB), 2.52 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 k=1000 | peak RSS 416 MiB | cgroup peak 338 MiB | wall 0:03.86 | ok
+
+## 1.5.6 years=2024 k=300
+year 2024: 1.9 s
+peak buffer memory 534 MiB, peak temp dir 0 MiB, latency 1.8 s
+HASH_GROUP_BY: 2,518 rows, 1.95 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 k=300 | peak RSS 383 MiB | cgroup peak 303 MiB | wall 0:03.56 | ok
+
+## 2.0.0 years=2024 k=300
+year 2024: 1.6 s
+peak buffer memory 127 MiB, peak temp dir 0 MiB, latency 1.6 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (7 MiB), 1.45 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 k=300 | peak RSS 301 MiB | cgroup peak 222 MiB | wall 0:03.56 | ok
+
+## 1.5.6 years=2024 k=100
+year 2024: 1.0 s
+peak buffer memory 193 MiB, peak temp dir 0 MiB, latency 1.0 s
+HASH_GROUP_BY: 2,518 rows, 0.84 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 k=100 | peak RSS 257 MiB | cgroup peak 177 MiB | wall 0:02.69 | ok
+
+## 2.0.0 years=2024 k=100
+year 2024: 1.1 s
+peak buffer memory 62 MiB, peak temp dir 0 MiB, latency 1.1 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (3 MiB), 0.79 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 k=100 | peak RSS 236 MiB | cgroup peak 157 MiB | wall 0:03.07 | ok
+

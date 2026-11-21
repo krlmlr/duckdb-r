@@ -1,0 +1,19 @@
+## cli-1.5.6: cli duckdb query.sql
+┌─────────────────┬────────────┬─────────┬──────────────┐
+│ library_version │ source_id  │ threads │ memory_limit │
+│     varchar     │  varchar   │  int64  │   varchar    │
+├─────────────────┼────────────┼─────────┼──────────────┤
+│ v1.5.6          │ 069cc9f9b5 │       4 │ 3.7 GiB      │
+└─────────────────┴────────────┴─────────┴──────────────┘
+Run Time (s): real 1.910 user 2.557288 sys 0.425330
+Run Time (s): real 1.642 user 2.380292 sys 0.082236
+Run Time (s): real 1.553 user 2.447006 sys 0.040163
+Run Time (s): real 1.538 user 2.411185 sys 0.099629
+Run Time (s): real 1.907 user 2.967707 sys 0.063773
+Run Time (s): real 1.753 user 3.839850 sys 0.203585
+Run Time (s): real 1.856 user 4.148133 sys 0.141731
+Run Time (s): real 1.804 user 2.694487 sys 0.352155
+Run Time (s): real 1.726 user 2.678435 sys 0.089418
+Run Time (s): real 2.122 user 4.486133 sys 0.379026
+RESULT cli-1.5.6 | peak RSS 1448 MiB | cgroup peak 1387 MiB | wall 0:18.02 | ok
+

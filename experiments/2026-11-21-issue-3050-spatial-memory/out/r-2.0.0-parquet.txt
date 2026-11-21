@@ -1,0 +1,20 @@
+## r-2.0.0-parquet: r lib-2.0.0 source=parquet
+duckdb 2.0.0, engine v2.0.0 (d54cbbe3df)
+                      name                                         value
+1             memory_limit                                       3.7 GiB
+2 preserve_insertion_order                                          true
+3           temp_directory /tmp/Rtmpp9kEi6/duckdb/temp/spill-348dfdf1aec
+4                  threads                                             4
+year 2015: 2497 rows, sum(n) 2879870, 2.5 s, temp files 0 (0 MiB)
+year 2016: 2587 rows, sum(n) 2966012, 2.0 s, temp files 0 (0 MiB)
+year 2017: 2610 rows, sum(n) 2990415, 2.3 s, temp files 0 (0 MiB)
+year 2018: 2638 rows, sum(n) 3115280, 12.9 s, temp files 4 (3 MiB)
+year 2019: 2585 rows, sum(n) 2982570, 2.3 s, temp files 4 (1 MiB)
+year 2020: 2514 rows, sum(n) 2893423, 2.0 s, temp files 4 (1 MiB)
+year 2021: 2634 rows, sum(n) 3088824, 7.0 s, temp files 5 (2 MiB)
+year 2022: 2597 rows, sum(n) 3100662, 7.4 s, temp files 5 (2 MiB)
+year 2023: 2657 rows, sum(n) 3111200, 8.2 s, temp files 4 (3 MiB)
+year 2024: 2681 rows, sum(n) 3226383, 28.8 s, temp files 5 (283 MiB)
+total: 26000 rows, sum(n) 30354639, mean(avg_dist) 1597.224, 75.5 s
+RESULT r-2.0.0-parquet | peak RSS 1264 MiB | cgroup peak 7945 MiB | wall 1:17.79 | ok
+

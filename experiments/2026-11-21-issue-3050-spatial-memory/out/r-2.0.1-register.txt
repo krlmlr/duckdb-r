@@ -1,0 +1,20 @@
+## r-2.0.1-register: r lib-2.0.1 source=register
+duckdb 2.0.1, engine v2.0.1 (8d78114e90)
+                      name                                          value
+1             memory_limit                                        3.7 GiB
+2 preserve_insertion_order                                           true
+3           temp_directory /tmp/RtmpIHc7Q9/duckdb/temp/spill-362e37b02025
+4                  threads                                              4
+year 2015: 2497 rows, sum(n) 2879870, 2.3 s, temp files 0 (0 MiB)
+year 2016: 2587 rows, sum(n) 2966012, 2.5 s, temp files 0 (0 MiB)
+year 2017: 2610 rows, sum(n) 2990415, 2.2 s, temp files 0 (0 MiB)
+year 2018: 2638 rows, sum(n) 3115280, 2.5 s, temp files 0 (0 MiB)
+year 2019: 2585 rows, sum(n) 2982570, 2.3 s, temp files 0 (0 MiB)
+year 2020: 2514 rows, sum(n) 2893423, 2.1 s, temp files 0 (0 MiB)
+year 2021: 2634 rows, sum(n) 3088824, 2.3 s, temp files 0 (0 MiB)
+year 2022: 2597 rows, sum(n) 3100662, 2.6 s, temp files 0 (0 MiB)
+year 2023: 2657 rows, sum(n) 3111200, 2.4 s, temp files 0 (0 MiB)
+year 2024: 2681 rows, sum(n) 3226383, 2.6 s, temp files 0 (0 MiB)
+total: 26000 rows, sum(n) 30354639, mean(avg_dist) 1597.224, 23.7 s
+RESULT r-2.0.1-register | peak RSS 779 MiB | cgroup peak 846 MiB | wall 0:26.87 | ok
+
