@@ -46,6 +46,10 @@ public:
 	~ScopedInterruptHandler();
 
 	void HandleInterrupt() const;
+	//! Whether the signal arrived, so a caller can record that before HandleInterrupt() raises it
+	bool Interrupted() const {
+		return interrupted != 0;
+	}
 	void Disable();
 
 	//! Whether an instance is installed: a query is running, on this connection or another one.

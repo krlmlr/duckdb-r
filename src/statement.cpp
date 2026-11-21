@@ -6,6 +6,7 @@
 #include "rapi.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <mutex>
 #include "signal.hpp"
 #include "typesr.hpp"
@@ -141,9 +142,18 @@ duckdb::unique_ptr<DataChunk> RQueryResult::FetchChunk() {
 	return chunk;
 }
 
+// Ending the query takes the client context lock, which a running callback may hold, as in the destructor.
 void RQueryResult::Release() {
 	Untrack();
 	pending_chunk.reset();
+	if (RCallbackScope::Active()) {
+		if (stream_result) {
+			RCallbackScope::Defer(std::move(stream_result));
+		}
+		if (result) {
+			RCallbackScope::Defer(std::move(result));
+		}
+	}
 	stream_result.reset();
 	result.reset();
 	stream_drained = true;
@@ -653,7 +663,16 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 	if (wrapper.Invalidated()) {
 		rapi_error_with_context("rapi_stream_fetch", INVALIDATED_MESSAGE);
 	}
+	if (wrapper.fetch_interrupted) {
+		rapi_error_with_context("rapi_stream_fetch",
+		                        "A fetch from this query result was interrupted, and the rows it had read are lost. "
+		                        "Run the query again.");
+	}
 
+	// -1 for all remaining rows, else a whole number of rows that converts to idx_t exactly
+	if (!(n == -1 || (std::isfinite(n) && n >= 0 && n == std::floor(n) && n <= 9007199254740992.0))) {
+		rapi_error_with_context("rapi_stream_fetch", "`n` must be -1 or a non-negative whole number");
+	}
 	bool unlimited = n < 0;
 	idx_t target = unlimited ? 0 : (idx_t)n;
 
@@ -698,6 +717,11 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 			chunks.push_back(std::move(chunk));
 		}
 
+		// Raising the interrupt drops the rows pulled so far, which the engine has already handed out:
+		// recorded first, so that the next fetch fails rather than reading the result as complete.
+		if (signal_handler.Interrupted()) {
+			wrapper.fetch_interrupted = true;
+		}
 		signal_handler.HandleInterrupt();
 		signal_handler.Disable();
 

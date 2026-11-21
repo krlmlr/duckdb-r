@@ -433,6 +433,9 @@ struct RQueryResult : public ROpenResult {
 	// rapi_stream_fetch() reads it through once it has taken the result
 	bool streamed = false;
 	duckdb::unique_ptr<QueryResultStream<>> stream_result;
+	// Set when a fetch was interrupted: the rows it had pulled are gone,
+	// so the result must not read as complete afterwards
+	bool fetch_interrupted = false;
 };
 
 typedef cpp11::external_pointer<RQueryResult> rqry_eptr_t;
