@@ -45,7 +45,7 @@ What the run compresses to:
   `as.data.frame()`, which materializes it into R vectors first;
   `rel_from_table_function()` cannot express `arrow_scan` at all.
   On the 1.5.x engine of the recorded run, its three arguments were `POINTER` values and the R side
-  builds scalars, so the binder answered that `arrow_scan(DOUBLE, DOUBLE, DOUBLE)` does not exist.
+  built scalars, so the binder answered that `arrow_scan(DOUBLE, DOUBLE, DOUBLE)` does not exist.
   The v2.0 re-run above supersedes that reason: `arrow_scan` takes no arguments,
   and the factory it needs travels as `bind_info`, which `rel_from_table_function()` cannot pass.
 * **`rel_from_sql()` over a registered name does work.**

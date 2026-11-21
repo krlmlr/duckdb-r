@@ -92,8 +92,11 @@ Measured evidence:
   for choosing `arrow_scan` against `arrow_scan_dumb`;
   today's glue names only `arrow_scan`,
   though the engine registers both.
-  A caller that wants to force the pushdown-free route passes
-  `pushdown = FALSE`.
+  The source's class picks the closures, and `pushdown` picks only the scan.
+  `pushdown = FALSE` on an arrow-package object keeps the arrow-package closures
+  and binds `arrow_scan_dumb`, so `ProduceStream()` is never asked for a projection or a filter;
+  it never moves such an object onto the nanoarrow route.
+  `pushdown = TRUE` on a nanoarrow source is an error, since nanoarrow's closures cannot filter.
 * **Only sources whose stream does not call R.**
   The stream is pulled by engine threads,
   and nanoarrow's reader over an R connection calls R and refuses any thread but R's
@@ -101,12 +104,14 @@ Measured evidence:
   Construction cannot tell such a stream apart from the outside,
   so the nanoarrow route takes an allowlist rather than anything `as_nanoarrow_array_stream()` accepts:
   a data frame and a `nanoarrow_array`, which it converts itself into a stream over memory.
+  The allowlist applies only to sources that take the nanoarrow route.
   Anything else that is not an arrow-package object,
   a ready-made `nanoarrow_array_stream` included,
   is refused by `rel_from_arrow()` on R's thread, before any relation is built,
   with an error that names the class and points at collecting the source into R first.
-  The arrow-package route is unaffected,
-  since its export wraps the source in Arrow's `Scanner`, whose reader does not call R.
+  The arrow-package route needs no allowlist of its own:
+  its export wraps the source in Arrow's `Scanner`, which pulls on Arrow's own pool,
+  so a source whose reader calls R fails there rather than reaching engine threads.
 * **Unexported, like the rest.**
   Every function in `R/relational.R` is `@noRd`
   and reached through `:::` by duckplyr;
@@ -155,8 +160,8 @@ No behavior change on its own, since nothing binds `arrow_scan_dumb` yet.
   choosing the arrow-package closures when
   `inherits(x, c("Table", "RecordBatch", "RecordBatchReader", "Dataset", "Scanner", "arrow_dplyr_query"))`
   and the nanoarrow closures for a data frame or a `nanoarrow_array`,
-  with `pushdown` overriding the choice,
-  and refusing any other class.
+  and refusing any other class;
+  `pushdown` picks `arrow_scan` or `arrow_scan_dumb` and never the closures.
   `@noRd`, documented in the file the way its neighbors are.
 * Tests (`tests/testthat/test-relational.R`, or a sibling file):
   a relation over an arrow table, over a data frame through nanoarrow, and the refusal of a `nanoarrow_array_stream`;
