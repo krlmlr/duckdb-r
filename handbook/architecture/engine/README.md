@@ -89,7 +89,7 @@ jemalloc's BSD-2-Clause notice travels with it:
 and fails when [`inst/COPYRIGHTS`](/inst/COPYRIGHTS),
 which an installed package keeps, no longer quotes it verbatim.
 All of this happens only on a line whose own `src/Makevars.in`
-carries the `{{ JEMALLOC }}` placeholder:
+carries the `{{ JEMALLOC }}` placeholder and whose `configure` carries the probe:
 the series loop syncs `scripts/` from `main` into lines that predate it,
 and there `rconfigure.py` drops the tree as it did before.
 What the swap buys is thread-local caches and per-arena purging

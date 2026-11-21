@@ -112,9 +112,11 @@ def copy_logos():
 #
 # This script is tooling the series loop syncs from main into every line, and
 # a line whose configure and Makevars.in predate the allocator choice cannot
-# compile the tree. There it is dropped, as it was before: the
-# `{{ JEMALLOC }}` placeholder in the line's own src/Makevars.in is what says
-# the line can use it.
+# compile the tree. There it is dropped, as it was before. A line can use it
+# when both of its own pieces are there: the `{{ JEMALLOC }}` placeholder in
+# src/Makevars.in, which includes Makevars.jemalloc, and the probe in
+# configure, which writes it -- either alone would ship a tree nothing
+# compiles.
 jemalloc_dir = 'third_party/jemalloc'
 jemalloc_skip = ['jemalloc_cpp.cpp']
 
@@ -131,9 +133,15 @@ def is_jemalloc(path):
 
 
 def jemalloc_supported_here():
-    """Can this line's build use jemalloc? Its src/Makevars.in says."""
+    """Can this line's build use jemalloc? Its Makevars.in and configure say."""
     with open(os.path.join('src', 'Makevars.in'), 'r', encoding='utf-8') as f:
-        return '{{ JEMALLOC }}' in f.read()
+        placeholder = '{{ JEMALLOC }}' in f.read()
+    with open('configure', 'r', encoding='utf-8') as f:
+        probe = '-DDUCKDB_ENABLE_JEMALLOC' in f.read()
+    if placeholder != probe:
+        print("Dropping jemalloc: src/Makevars.in {} the placeholder, but configure {} the probe.".format(
+            'has' if placeholder else 'lacks', 'has' if probe else 'lacks'))
+    return placeholder and probe
 
 
 def drop_jemalloc(target_dir, source_list, include_list):
@@ -204,6 +212,9 @@ def copy_jemalloc_license(target_dir):
     shutil.copyfile(source, os.path.join(target_dir, jemalloc_dir, jemalloc_license))
     with open(source, 'r', encoding='utf-8') as f:
         notice = f.read().strip()
+    if not os.path.isfile(copyrights_path):
+        print("Warning: {} is missing, so nothing records jemalloc's notice.".format(copyrights_path))
+        return
     with open(copyrights_path, 'r', encoding='utf-8') as f:
         recorded = f.read()
     if notice not in recorded:
