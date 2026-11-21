@@ -95,7 +95,7 @@ deprecate_soft <- function(msg, caller_env) {
       msg,
       old = "dbSendQuery",
       new = NULL,
-      package = "duckdb",
+      package = get_package_name(),
       class = "deprecatedWarning",
       call = NULL
     ))
