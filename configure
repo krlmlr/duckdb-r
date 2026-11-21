@@ -209,6 +209,13 @@ fi
 # This logic is identical for Windows or non-Windows builds,
 # only that we need to-tar-win.mk instead of to-tar.mk on Windows.
 
+# A restore that fails partway can still have written an allocator object
+# compiled for the other allocator, so any attempt makes the record unknown;
+# a restore that succeeds reads the archive's own record below.
+if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ]; then
+  allocator_built=unknown
+fi
+
 if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xm -f "${DUCKDB_R_PREBUILT_ARCHIVE}"; then
   cp include/from-tar.mk Makevars.duckdb
   # The archive carries the Makevars.jemalloc its objects were compiled with,
@@ -216,8 +223,6 @@ if [ -f "${DUCKDB_R_PREBUILT_ARCHIVE}" ] && tar -xm -f "${DUCKDB_R_PREBUILT_ARCH
   # that says nothing, so its allocator objects are treated as stale.
   if tar -tf "${DUCKDB_R_PREBUILT_ARCHIVE}" Makevars.jemalloc > /dev/null 2>&1; then
     allocator_built=$(allocator_of Makevars.jemalloc)
-  else
-    allocator_built=unknown
   fi
 else
   cp include/to-tar.mk Makevars.duckdb
