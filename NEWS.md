@@ -9,7 +9,8 @@ Commits since v2.0.99.9000: <https://github.com/duckdb/duckdb-r/compare/v2.0.99.
   It warns with the number it closed; clear results with `dbClearResult()` before disconnecting.
   A closed result is no longer valid, and every method but `dbClearResult()` fails naming the closed connection,
   as does a stream from `dbFetchArrow()` or `dbGetQueryArrow()`.
-  A stream that is still being read keeps its connection from being garbage-collected.
+  A stream that has not been released yet keeps its connection from being garbage-collected,
+  even one read to the end.
   `dbDisconnect()` on a connection that is already closed now returns `FALSE` after its warning.
   A reader from `arrow::to_arrow()` created before the disconnect returns no rows,
   because arrow's safe reader turns the closed stream's error into the end of the stream.

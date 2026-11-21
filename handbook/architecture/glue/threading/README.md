@@ -122,14 +122,22 @@ or from a progress callback of the very fetch that is reading the stream, on R's
 So every read takes the stream's own lock, and a close only tries it:
 with no read in flight, the close tears the query result down at once;
 with one in flight, it marks the stream closed and leaves the teardown to that read, which finishes it as it ends,
-so the read never loses what it reads, and the next one reports the closed connection
+so the read in flight returns what it read, and the next one reports the closed connection
 (`RArrowArrayStreamWrapper::Close()` in [`src/arrow_export.cpp`](/src/arrow_export.cpp)).
+That holds at the level of the C stream only.
+nanoarrow's R-level `$get_next()` asks for the schema again after the read,
+which reports the closed connection,
+so the batch is lost and the user sees only the error.
 The close does not wait, because a read may need what R's thread holds:
 inside a callback, R's thread holds a client context lock that a read may want,
 and underneath a progress callback it holds the stream's own lock.
 The locks are taken in one order:
-the lock on the connections' streams, then a stream's own lock, then a client context lock;
-a read takes only the latter two, and R's thread only ever tries the stream's lock.
+the lock on the connections' streams, then a stream's own lock, then a client context lock.
+Only the close tries the stream's lock without blocking.
+A read blocks on it, on whichever thread it runs, R's included,
+and so does a read finishing the teardown a close left to it (`FinishPendingClose()`).
+That teardown also takes the lock on the open results, as the result stops being tracked,
+and, inside a callback, the lock on the parked objects.
 Inside a callback, the teardown parks what would take a client context lock, on whichever thread runs it.
 A teardown left to a read in flight on another thread may finish after `dbDisconnect()` has returned,
 so the instance is released then rather than at the disconnect.
