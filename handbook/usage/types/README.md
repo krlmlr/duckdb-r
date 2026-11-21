@@ -240,6 +240,7 @@ and the `spatial` extension's own types:
 * A `Period` with a year, month, day, hour or minute is refused without `interval = "Period"`, naming its column or parameter,
   and so is one in a list cell or a map value under either `interval`, which writes the seconds alone there.
   Without the option, a `Period` of seconds alone writes them, as a `DOUBLE`, or an `INTEGER` if they are stored as integers.
+  An S4 subclass of `Period` is not taken for one, under either `interval`: it writes the seconds it holds, whatever its other parts.
 * `INTERVAL` has no clock mapping, and `interval = "Period"` is the exact one:
   one clock duration has one precision, so a month does not combine with a day and a month part has no exact form;
   its days would be 86400 seconds, where DuckDB adds a calendar day to a `TIMESTAMPTZ` across a daylight saving change;

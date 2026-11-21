@@ -155,6 +155,7 @@ RStrings::RStrings() {
 	duckdb_vector_sym = Rf_install("duckdb_vector");
 	crs_sym = Rf_install("crs");
 	geodesic_sym = Rf_install("geodesic");
+	s3class_sym = Rf_install(".S3Class");
 	ptype_sym = Rf_install("ptype");
 	period_slot_syms[0] = Rf_install("year");
 	period_slot_syms[1] = Rf_install("month");

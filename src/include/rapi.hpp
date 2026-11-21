@@ -493,6 +493,8 @@ struct RStrings {
 	SEXP duckdb_vector_sym;
 	SEXP crs_sym;
 	SEXP geodesic_sym;
+	// The S3 classes an S4 object that contains one inherits from
+	SEXP s3class_sym;
 	// The slots of a lubridate Period, in the order lubridate gives them
 	SEXP period_slot_syms[5];
 

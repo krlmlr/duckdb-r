@@ -158,9 +158,35 @@ static SEXP DataFrameNames(SEXP df) {
 	return TYPEOF(names) == STRSXP && Rf_xlength(names) == Rf_xlength(df) ? names : R_NilValue;
 }
 
+// Whether the strings in `klass`, an attribute read in place, include `name`
+static bool HasClassString(SEXP klass, const char *name) {
+	if (TYPEOF(klass) != STRSXP) {
+		return false;
+	}
+	for (R_xlen_t i = 0; i < Rf_xlength(klass); i++) {
+		if (strcmp(CHAR(STRING_ELT(klass, i)), name) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Rf_inherits() without running R code. For an S4 object, Rf_inherits() asks R for its superclasses,
+// which runs R code, and DataFrameScanBind() may detect a column's type off R's thread.
+// The class attribute and the S3 classes an S4 class contains, which R keeps in `.S3Class`, are read in place;
+// an S3 class reached only through an S4 superclass that does not contain it is not found.
+static bool InheritsInPlace(SEXP v, const char *name) {
+	if (!Rf_isS4(v)) {
+		return Rf_inherits(v, name);
+	}
+	return HasClassString(Rf_getAttrib(v, R_ClassSymbol), name) ||
+	       HasClassString(Rf_getAttrib(v, RStrings::get().s3class_sym), name);
+}
+
 // Whether `v` is a lubridate Period: an S4 double or integer vector of class "Period".
 // The class attribute is read in place, since Rf_inherits() asks R for an S4 object's superclasses,
 // which runs R code, and DataFrameScanBind() may call this off R's thread.
+// An S4 subclass of Period is therefore not a Period here, and reads as the numbers it holds.
 bool RApiTypes::IsPeriod(SEXP v) {
 	if ((TYPEOF(v) != REALSXP && TYPEOF(v) != INTSXP) || !Rf_isS4(v)) {
 		return false;
@@ -173,20 +199,20 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_
 	if (period_interval && IsPeriod(v)) {
 		return RType::PERIOD(v);
 	}
-	if (TYPEOF(v) == REALSXP && Rf_inherits(v, "POSIXct")) {
+	if (TYPEOF(v) == REALSXP && InheritsInPlace(v, "POSIXct")) {
 		return RType::TIMESTAMP;
-	} else if (TYPEOF(v) == REALSXP && Rf_inherits(v, "Date")) {
+	} else if (TYPEOF(v) == REALSXP && InheritsInPlace(v, "Date")) {
 		return RType::DATE;
-	} else if (TYPEOF(v) == INTSXP && Rf_inherits(v, "Date")) {
+	} else if (TYPEOF(v) == INTSXP && InheritsInPlace(v, "Date")) {
 		return RType::DATE_INTEGER;
-	} else if (TYPEOF(v) == REALSXP && Rf_inherits(v, "difftime")) {
+	} else if (TYPEOF(v) == REALSXP && InheritsInPlace(v, "difftime")) {
 		SEXP units = Rf_getAttrib(v, RStrings::get().units_sym);
 		if (TYPEOF(units) != STRSXP) {
 			return RType::UNKNOWN;
 		}
 		SEXP units0 = STRING_ELT(units, 0);
 		if (units0 == RStrings::get().secs) {
-			if (hms_time && Rf_inherits(v, "hms")) {
+			if (hms_time && InheritsInPlace(v, "hms")) {
 				return RType::TIME;
 			}
 			return RType::INTERVAL_SECONDS;
@@ -201,7 +227,7 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_
 		} else {
 			return RType::UNKNOWN;
 		}
-	} else if (TYPEOF(v) == INTSXP && Rf_inherits(v, "difftime")) {
+	} else if (TYPEOF(v) == INTSXP && InheritsInPlace(v, "difftime")) {
 		SEXP units = Rf_getAttrib(v, RStrings::get().units_sym);
 		if (TYPEOF(units) != STRSXP) {
 			return RType::UNKNOWN;
@@ -220,7 +246,7 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_
 		} else {
 			return RType::UNKNOWN;
 		}
-	} else if (Rf_isFactor(v) && TYPEOF(v) == INTSXP) {
+	} else if (TYPEOF(v) == INTSXP && InheritsInPlace(v, "factor")) {
 		SEXP levels = GET_LEVELS(v);
 		if (TYPEOF(levels) != STRSXP) {
 			return RType::UNKNOWN;
@@ -232,7 +258,7 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_
 		} else if (TYPEOF(v) == INTSXP) {
 			return RType::MATRIX(RType::INTEGER, Rf_ncols(v));
 		} else if (TYPEOF(v) == REALSXP) {
-			if (integer64 && Rf_inherits(v, "integer64")) {
+			if (integer64 && InheritsInPlace(v, "integer64")) {
 				return RType::MATRIX(RType::INTEGER64, Rf_ncols(v));
 			}
 			return RType::MATRIX(RType::NUMERIC, Rf_ncols(v));
@@ -248,18 +274,18 @@ RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_
 	} else if (TYPEOF(v) == RAWSXP) {
 		return RTypeId::BYTE;
 	} else if (TYPEOF(v) == REALSXP) {
-		if (integer64 && Rf_inherits(v, "integer64")) {
+		if (integer64 && InheritsInPlace(v, "integer64")) {
 			return RType::INTEGER64;
 		}
 		return RType::NUMERIC;
 	} else if (TYPEOF(v) == STRSXP) {
 		return RType::STRING;
 	} else if (TYPEOF(v) == VECSXP) {
-		if (Rf_inherits(v, "blob")) {
+		if (InheritsInPlace(v, "blob")) {
 			return RType::BLOB;
 		}
 
-		if (Rf_inherits(v, "data.frame")) {
+		if (InheritsInPlace(v, "data.frame")) {
 			child_list_t<RType> child_types;
 			R_xlen_t ncol = Rf_length(v);
 
@@ -931,6 +957,11 @@ static SEXP FindInvalidValueError(SEXP cond, void *data_p) {
 // so it is caught here and returned in `r_error`, and so is any other jump, which is dropped.
 string RApiTypes::FindInvalidValueCaught(SEXP v, const string &path, bool hms_time, bool period_interval,
                                          string &r_error) {
+	// A value FindInvalidValue() does not look at reads no data and so cannot fail:
+	// a plain column skips setting up the R handler
+	if (!MayHoldInvalidValue(v, hms_time)) {
+		return "";
+	}
 	FindInvalidValueData data {v, path, hms_time, period_interval, string(), string()};
 	try {
 		cpp11::unwind_protect([&]() { R_tryCatchError(FindInvalidValueBody, &data, FindInvalidValueError, &data); });
