@@ -230,13 +230,13 @@ Measured on data.table 1.18.6.1, collapse 2.1.8 and the development version of p
 ([`experiments/2026-09-28-frame-libraries/`](/experiments/2026-09-28-frame-libraries/README.md)).
 
 The other direction, a Polars frame as a table, is the one [#98](https://github.com/duckdb/duckdb-r/issues/98) names.
-Nothing here registers it: `duckdb_register()` takes a data frame, and `duckdb_register_arrow()` takes what the `arrow` package owns.
-It is reachable all the same, because polars implements `as_nanoarrow_array_stream()` for its eager and lazy frames.
-The closures the registration seam takes are ordinary R functions.
-That is also how a `LazyFrame` can be handed the filter DuckDB pushes down
+No supported function registers it: `duckdb_register()` takes a data frame, and `duckdb_register_arrow()` takes what the `arrow` package owns.
+The only route today is the unexported `duckdb:::rapi_register_arrow()`, which is internal and not supported.
+polars implements `as_nanoarrow_array_stream()` for its eager and lazy frames, so the closures that function takes can export one.
+They are ordinary R functions, which is also how a `LazyFrame` can be handed the filter DuckDB pushes down
 ([`experiments/2026-08-08-polars-source/`](/experiments/2026-08-08-polars-source/README.md)).
-Making that an interface rather than a trick is [`plan/PLAN-polars-source.md`](/plan/PLAN-polars-source.md).
-polars not being on CRAN is what keeps it from being a method here.
+Making that a supported interface is [`plan/PLAN-polars-source.md`](/plan/PLAN-polars-source.md).
+It proposes an extension point that polars implements, rather than a Polars method here, because polars is not on CRAN.
 
 ## ADBC
 
