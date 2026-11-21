@@ -2610,14 +2610,6 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
       scan_list <- message_of(DBI::dbGetQuery(con, "SELECT count(*) FROM df"))
       after_list <- DBI::dbGetQuery(con, "SELECT 43 AS answer")$answer
 
-      hms_con <- DBI::dbConnect(drv, time = "hms")
-      df <- lazy_sql(hms_con, "SELECT TIME '12:34:56' AS t FROM range(10)")
-      scan_hms <- message_of(DBI::dbGetQuery(
-        hms_con,
-        "SELECT count(*) FROM df"
-      ))
-      after_hms <- DBI::dbGetQuery(hms_con, "SELECT 44 AS answer")$answer
-      DBI::dbDisconnect(hms_con)
       df <- lazy()
 
       # Another connection runs the frame's query on its own connection, which is free
@@ -2645,8 +2637,6 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
         after = after,
         scan_list = scan_list,
         after_list = after_list,
-        scan_hms = scan_hms,
-        after_hms = after_hms,
         from_other = from_other,
         from_sibling = from_sibling,
         own_after_run = own_after_run
@@ -2663,11 +2653,61 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
   expect_equal(out$after, 42)
   expect_identical(out$scan_list, out$scan)
   expect_equal(out$after_list, 43)
-  expect_identical(out$scan_hms, out$scan)
-  expect_equal(out$after_hms, 44)
   expect_equal(out$from_other, 0:9)
   expect_equal(out$from_sibling, 0:9)
   expect_equal(out$own_after_run, 45L)
+})
+
+test_that("a lazy hms column scanned on its own connection with `time = \"hms\"` is refused, not hung", {
+  skip_if_not_installed("callr")
+  skip_if_not_installed("hms")
+
+  # Under `time = "hms"`, the search for times outside a day looks into a double column.
+  # A lazy column is refused before that search reads it, as any lazy column is,
+  # and the connection stays usable.
+  pkg <- get_package_name()
+
+  out <- callr::r(
+    function(pkg) {
+      ns <- asNamespace(pkg)
+      message_of <- function(code) {
+        tryCatch(
+          {
+            code
+            "no error"
+          },
+          error = conditionMessage
+        )
+      }
+
+      drv <- ns$duckdb(environment_scan = TRUE)
+      con <- DBI::dbConnect(drv)
+      on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+      lazy_sql <- function(con, sql) {
+        ns$rel_to_altrep(ns$rel_from_sql(con, sql))
+      }
+
+      df <- lazy_sql(con, "SELECT range AS i FROM range(10)")
+      scan <- message_of(DBI::dbGetQuery(con, "SELECT count(*) FROM df"))
+
+      hms_con <- DBI::dbConnect(drv, time = "hms")
+      on.exit(DBI::dbDisconnect(hms_con), add = TRUE, after = FALSE)
+      df <- lazy_sql(hms_con, "SELECT TIME '12:34:56' AS t FROM range(10)")
+      scan_hms <- message_of(DBI::dbGetQuery(
+        hms_con,
+        "SELECT count(*) FROM df"
+      ))
+      after_hms <- DBI::dbGetQuery(hms_con, "SELECT 44 AS answer")$answer
+
+      list(scan = scan, scan_hms = scan_hms, after_hms = after_hms)
+    },
+    list(pkg = pkg),
+    timeout = 60
+  )
+
+  expect_false(identical(out$scan, "no error"))
+  expect_identical(out$scan_hms, out$scan)
+  expect_equal(out$after_hms, 44)
 })
 
 test_that("a lazy data frame read column by column is refused on its own connection only for a column not yet fetched (#2889, #2891)", {
