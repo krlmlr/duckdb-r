@@ -262,7 +262,9 @@ test_that("result mismatch: a lazy data frame fails on every access with the sam
   local_edition(3)
   withr::local_envvar(NO_COLOR = "true")
   dbExecute(con, "CREATE TABLE oracle_mismatch_altrep AS SELECT 1 AS a")
-  rel <- rel_from_table(con, "oracle_mismatch_altrep")
+  # A limit keeps the lazy data frame from reading column by column (#2891),
+  # which tolerates a column added at the end
+  rel <- rel_limit(rel_from_table(con, "oracle_mismatch_altrep"), 10)
   dbExecute(con, "ALTER TABLE oracle_mismatch_altrep ADD COLUMN y INTEGER")
   df <- rel_to_altrep(rel)
 
