@@ -685,3 +685,140 @@ test_that("expr_constant() stays on TIMESTAMP with the relational path (#2574)",
 
   expect_equal(dbGetQuery(con, "DESCRIBE t")$column_type, "TIMESTAMP")
 })
+
+# A POSIXct scans as TIMESTAMPTZ, and a cast from that into a naive timestamp
+# takes the wall clock in the session zone once icu is loaded. Written into a
+# naive column, it must keep the UTC wall clock that `posixct = "timestamp"`
+# writes, whether icu is loaded or not.
+test_that("dbAppendTable() into naive timestamp columns stores UTC without icu loaded (#2574)", {
+  withr::local_timezone("Europe/Berlin")
+  con <- local_con()
+
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP, b TIMESTAMP_NS, c TIMESTAMP_S)")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbAppendTable(con, "t", data.frame(a = instant, b = instant, c = instant))
+
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT a::VARCHAR, b::VARCHAR, c::VARCHAR FROM t"
+    )),
+    rep("2024-01-10 13:03:12", 3),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbAppendTable() into naive timestamp columns stores UTC with icu loaded (#2574)", {
+  skip_if_no_icu()
+  withr::local_timezone("Europe/Berlin")
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP, b TIMESTAMP_NS, z TIMESTAMPTZ)")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbAppendTable(con, "t", data.frame(a = instant, b = instant, z = instant))
+
+  res <- dbGetQuery(con, "SELECT a::VARCHAR AS a, b::VARCHAR AS b FROM t")
+  expect_equal(res$a, "2024-01-10 13:03:12")
+  expect_equal(res$b, "2024-01-10 13:03:12")
+  # A TIMESTAMPTZ column keeps the instant
+  expect_equal(dbReadTable(con, "t")$z, instant, ignore_attr = TRUE)
+})
+
+test_that("dbAppendTable() into naive timestamp columns ignores SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP, b TIMESTAMP_NS, c TIMESTAMP_MS)")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbAppendTable(con, "t", data.frame(a = instant, b = instant, c = instant))
+
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT a::VARCHAR, b::VARCHAR, c::VARCHAR FROM t"
+    )),
+    rep("2024-01-10 13:03:12", 3),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbWriteTable(field.types =) to naive timestamps ignores SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbWriteTable(
+    con,
+    "t",
+    data.frame(a = instant, b = instant, c = instant, z = instant),
+    field.types = c(
+      a = "TIMESTAMP",
+      b = "TIMESTAMP_NS",
+      c = "datetime",
+      z = "TIMESTAMPTZ"
+    )
+  )
+
+  expect_equal(
+    dbGetQuery(con, "DESCRIBE t")$column_type,
+    c("TIMESTAMP", "TIMESTAMP_NS", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE")
+  )
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT a::VARCHAR, b::VARCHAR, c::VARCHAR FROM t"
+    )),
+    rep("2024-01-10 13:03:12", 3),
+    ignore_attr = TRUE
+  )
+  expect_equal(dbReadTable(con, "t")$z, instant, ignore_attr = TRUE)
+})
+
+test_that("dbWriteTable(append = TRUE) into a naive timestamp column ignores SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP)")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbWriteTable(con, "t", data.frame(a = instant), append = TRUE)
+
+  expect_equal(
+    dbGetQuery(con, "SELECT a::VARCHAR AS a FROM t")$a,
+    "2024-01-10 13:03:12"
+  )
+})
+
+test_that("dbCreateTable() and dbAppendTable() into a naive timestamp column ignore SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(a = instant, z = instant)
+  dbCreateTable(con, "t", c(a = "TIMESTAMP", z = "TIMESTAMPTZ"))
+  dbAppendTable(con, "t", df)
+
+  expect_equal(
+    dbGetQuery(con, "SELECT a::VARCHAR AS a FROM t")$a,
+    "2024-01-10 13:03:12"
+  )
+  expect_equal(dbReadTable(con, "t")$z, instant, ignore_attr = TRUE)
+})

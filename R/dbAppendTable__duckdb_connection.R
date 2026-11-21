@@ -31,10 +31,12 @@ dbAppendTable__duckdb_connection <- function(
     duckdb_register(conn, view_name, value)
 
     target_types <- duckdb_target_column_types(conn, name)
+    source_types <- duckdb_target_column_types(conn, view_name)
     select_exprs <- duckdb_select_exprs_for_target(
       conn,
       names(value),
-      target_types
+      target_types,
+      source_types
     )
 
     sql <- paste0(
@@ -71,8 +73,14 @@ duckdb_target_column_types <- function(conn, name) {
 }
 
 # Build SELECT column expressions,
-# converting source representations into the target column types where DuckDB cannot implicitly cast (e.g. MAP).
-duckdb_select_exprs_for_target <- function(conn, col_names, target_types) {
+# converting source representations into the target column types where DuckDB cannot implicitly cast (e.g. MAP),
+# or where its cast would not keep what the value meant (a `TIMESTAMPTZ` into a naive timestamp).
+duckdb_select_exprs_for_target <- function(
+  conn,
+  col_names,
+  target_types,
+  source_types
+) {
   vapply(
     col_names,
     function(col_name) {
@@ -81,6 +89,11 @@ duckdb_select_exprs_for_target <- function(conn, col_names, target_types) {
       if (!is.null(target_type) && duckdb_is_map_type(target_type)) {
         # `map_from_entries()` builds a MAP from a LIST(STRUCT(key, value)) representation, which matches how MAPs are read back into R.
         paste0("map_from_entries(", quoted, ") AS ", quoted)
+      } else if (
+        identical(source_types[[col_name]], "TIMESTAMP WITH TIME ZONE") &&
+          duckdb_is_naive_timestamp_type(target_type)
+      ) {
+        paste0(duckdb_tz_to_naive_utc(quoted), " AS ", quoted)
       } else {
         as.character(quoted)
       }
@@ -95,6 +108,22 @@ duckdb_select_exprs_for_target <- function(conn, col_names, target_types) {
 # Returns FALSE for nested types such as "MAP(VARCHAR, INTEGER)[]" (array of MAP) or "STRUCT(m MAP(...))".
 duckdb_is_map_type <- function(type) {
   grepl("^MAP\\(.*\\)$", type)
+}
+
+# Returns TRUE if `type`, as `DESCRIBE` or `typeof()` spell it, is a timestamp without a time zone.
+duckdb_is_naive_timestamp_type <- function(type) {
+  !is.null(type) &&
+    type %in% c("TIMESTAMP", "TIMESTAMP_S", "TIMESTAMP_MS", "TIMESTAMP_NS")
+}
+
+# A `POSIXct` scans as `TIMESTAMPTZ` under `dbConnect(posixct = "timestamptz")`.
+# Cast to a naive timestamp, that would store the wall clock in the session `TimeZone` once the icu extension is loaded,
+# and the UTC one before.
+# `epoch_us()` and `make_timestamp()` are core functions,
+# so this stores the UTC wall clock either way, as `posixct = "timestamp"` writes it.
+# Handbook: handbook/usage/timestamps/README.md
+duckdb_tz_to_naive_utc <- function(expr) {
+  paste0("make_timestamp(epoch_us(", expr, "))")
 }
 
 #' @rdname duckdb_connection-class

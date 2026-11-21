@@ -77,13 +77,15 @@ dbWriteTable__duckdb_connection_character_data.frame <- function(
       temp_str <- "TEMPORARY"
     }
 
-    col_names <- dbGetQuery(
+    view_info <- dbGetQuery(
       conn,
       SQL(sprintf(
         "DESCRIBE %s",
         view_name
       ))
-    )$column_name
+    )
+    col_names <- view_info$column_name
+    col_types <- view_info$column_type
 
     # Auto-fill MAP column types from `dbDataType()`,
     # so that `vctrs::list_of`-tagged columns produced by `dbConnect(map = "list_of")` round-trip back into MAP columns.
@@ -105,11 +107,20 @@ dbWriteTable__duckdb_connection_character_data.frame <- function(
             )
           )
         } else {
+          source <- sprintf("#%d", col_idx)
+          if (
+            col_types[[col_idx]] == "TIMESTAMP WITH TIME ZONE" &&
+              duckdb_is_naive_timestamp_type(
+                duckdb_resolve_type(conn, field.types[[name]])
+              )
+          ) {
+            source <- duckdb_tz_to_naive_utc(source)
+          }
           cols <- c(
             cols,
             sprintf(
-              "#%d::%s %s",
-              col_idx,
+              "%s::%s %s",
+              source,
               field.types[name],
               dbQuoteIdentifier(conn, name)
             )
@@ -160,6 +171,12 @@ duckdb_augment_field_types_for_map <- function(conn, value, field.types) {
     }
   }
   field.types
+}
+
+# The type a `field.types` entry names, spelled as `typeof()` spells it,
+# so that `DATETIME` or `timestamp` read as `TIMESTAMP`.
+duckdb_resolve_type <- function(conn, type) {
+  dbGetQuery(conn, SQL(paste0("SELECT typeof(NULL::", type, ") AS type")))$type
 }
 
 #' @rdname duckdb_connection-class
