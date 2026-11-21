@@ -189,6 +189,36 @@ def copy_jemalloc_license(target_dir):
         exit(1)
 
 
+def allocator_objects(target_dir, source_list):
+    """The objects whose code depends on DUCKDB_ENABLE_JEMALLOC.
+
+    ./configure removes them when the allocator decision changes, so that make
+    rebuilds them rather than link an object compiled for the other allocator.
+    A unity file counts when any file it includes mentions the define.
+    """
+    parent = os.path.dirname(target_dir)
+    result = []
+    for x in source_list:
+        path = x if os.path.isabs(x) else os.path.join(parent, x)
+        with open(path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        members = [path]
+        if os.path.basename(path).startswith('ub_'):
+            members = [os.path.join(target_dir, m) for m in re.findall(r'#include "([^"]+)"', text)]
+        for member in members:
+            if not os.path.isfile(member):
+                continue
+            with open(member, 'r', encoding='utf-8') as f:
+                if 'DUCKDB_ENABLE_JEMALLOC' in f.read():
+                    result.append(x)
+                    break
+    if not result:
+        print("No vendored source mentions DUCKDB_ENABLE_JEMALLOC any more.")
+        print("  Update rconfigure.py: the allocator may have moved.")
+        exit(1)
+    return result
+
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', duckdb_path, 'scripts'))
 import package_build
 
@@ -318,6 +348,7 @@ def object_list_of(sources):
 
 object_list = object_list_of(source_list)
 jemalloc_object_list = object_list_of(jemalloc_sources)
+allocator_object_list = object_list_of(allocator_objects(target_dir, source_list))
 
 
 include_list = ' '.join(['-I' + 'duckdb/' + x for x in include_list])
@@ -383,6 +414,7 @@ write_makevars(
 
 text = "SOURCES=" + object_list + '\n'
 text += "SOURCES_JEMALLOC=" + jemalloc_object_list + '\n'
+text += "SOURCES_ALLOCATOR=" + allocator_object_list + '\n'
 
 with open_utf8(os.path.join('src', 'include', 'sources.mk'), 'w') as f:
     f.write(text)

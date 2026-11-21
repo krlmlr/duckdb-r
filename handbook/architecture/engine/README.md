@@ -70,6 +70,11 @@ and `$(SOURCES_JEMALLOC)` —
 a source list of its own, because `src/include/sources.mk` is shared with Windows.
 `DUCKDB_R_DISABLE_JEMALLOC=1` keeps the standard allocator regardless
 ([`build/configuration/`](/handbook/build/configuration/README.md)).
+An object compiled for one allocator links under the other and then fails to load,
+so `configure` compares its choice with the one `Makevars.jemalloc` recorded
+— the tree's own, or the one a `DUCKDB_R_PREBUILT_ARCHIVE` restored with its objects —
+and removes `$(SOURCES_ALLOCATOR)`, the objects `rconfigure.py` found reading the define,
+when the two differ.
 Upstream's packaging vendors `third_party/jemalloc/` along with the rest
 ([duckdb/duckdb#22811](https://github.com/duckdb/duckdb/pull/22811)),
 and `rconfigure.py` moves its sources to `$(SOURCES_JEMALLOC)`
