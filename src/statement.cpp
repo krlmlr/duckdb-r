@@ -679,6 +679,22 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 	vector<duckdb::unique_ptr<DataChunk>> chunks;
 	idx_t total = 0;
 
+	// From the first row taken off the result to the return of the converted rows, an interrupt would drop rows
+	// the result has already moved past. The handler is installed for the whole span, on either kind of result:
+	// for a streamed result, fetching continues query execution, which can take arbitrarily long, and Ctrl-C aborts
+	// the query as in rapi_execute_impl(); for either, converting many rows takes long too.
+	// An interrupt it catches marks the result before it is raised, so the next fetch fails rather than serving
+	// later rows, or none with eof = TRUE, as though nothing had been lost.
+	// What it cannot catch is an interrupt after it is removed: between the return of this function and R
+	// binding its value. R raises that one once .Call() returns, and the R caller has to mark the result itself
+	// (plan/PLAN-streaming-results.md).
+	ScopedInterruptHandler signal_handler(wrapper.context);
+	auto mark_interrupted = [&]() {
+		if (signal_handler.Interrupted()) {
+			wrapper.fetch_interrupted = true;
+		}
+	};
+
 	// Serve the tail split off by the previous fetch first.
 	if (wrapper.pending_chunk && (unlimited || total < target)) {
 		auto pending = std::move(wrapper.pending_chunk);
@@ -690,12 +706,6 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 	}
 
 	if (!wrapper.stream_drained && (unlimited || total < target)) {
-		// For a streamed result, fetching continues query execution, which can
-		// take arbitrarily long: install the same interrupt handler as
-		// rapi_execute_impl() so Ctrl-C aborts the query. A completed result
-		// has its chunks in memory already and needs none.
-		ScopedInterruptHandler signal_handler(wrapper.streamed ? wrapper.context : nullptr);
-
 		ErrorData error;
 		bool fetch_hit_end = false;
 		while (unlimited || total < target) {
@@ -716,20 +726,15 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 			total += chunk->size();
 			chunks.push_back(std::move(chunk));
 		}
-
-		// Raising the interrupt drops the rows pulled so far, which the engine has already handed out:
-		// recorded first, so that the next fetch fails rather than reading the result as complete.
-		if (signal_handler.Interrupted()) {
-			wrapper.fetch_interrupted = true;
-		}
-		signal_handler.HandleInterrupt();
-		signal_handler.Disable();
-
-		if (error.HasError()) {
-			rapi_error_with_context("rapi_stream_fetch", error);
-		}
 		if (fetch_hit_end) {
 			wrapper.stream_drained = true;
+		}
+
+		if (error.HasError()) {
+			mark_interrupted();
+			signal_handler.HandleInterrupt();
+			signal_handler.Disable();
+			rapi_error_with_context("rapi_stream_fetch", error);
 		}
 	}
 
@@ -745,6 +750,10 @@ static duckdb::unique_ptr<DataChunk> duckdb_r_split_chunk_tail(DataChunk &chunk,
 	out.reserve(2);
 	out.push_back({"df"_nm = df});
 	out.push_back({"eof"_nm = cpp11::as_sexp(wrapper.stream_drained && !wrapper.pending_chunk)});
+
+	mark_interrupted();
+	signal_handler.HandleInterrupt();
+	signal_handler.Disable();
 	return out;
 }
 
