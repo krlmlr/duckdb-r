@@ -364,7 +364,7 @@ test_that("converted ALTREP columns scan from engine threads (#2890)", {
   }
 })
 
-test_that("reads of converted ALTREP columns never take the converting slow path (#2890)", {
+test_that("reads of converted ALTREP columns never enter the guarded path (#2890)", {
   con <- local_con()
   con2 <- local_con()
   dbExecute(con2, "SET threads = 4")
@@ -379,7 +379,7 @@ test_that("reads of converted ALTREP columns never take the converting slow path
       "FROM range(5000) ORDER BY range"
     )
   ))
-  # One read per column takes the converting slow path and converts it
+  # One read per column enters the guarded path and converts the column
   for (col in names(df)) {
     df[[col]][[1]]
   }
@@ -413,15 +413,55 @@ test_that("reads of converted ALTREP columns never take the converting slow path
   expect_identical(rapi_altrep_slow_path_count(), before)
 })
 
-test_that("reads of unconverted ALTREP columns take the converting slow path (#2890)", {
+test_that("Elt of an unconverted ALTREP column enters the guarded path (#2890)", {
   con <- local_con()
   sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d, 'v' || range AS s FROM range(10)"
+  slow_paths <- function(expr) {
+    before <- rapi_altrep_slow_path_count()
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
   for (col in c("l", "i", "d", "s")) {
     # A fresh data frame per column, so that no column is converted beforehand
-    df <- rel_to_altrep(rel_from_sql(con, sql))
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # Length's entries alone: an out-of-bounds subscript fails before it reaches Elt, converting nothing
+    length_only <- slow_paths(.subset2(x, 11L))
+    # The same Length entries, then Elt, which converts the column
+    expect_gt(slow_paths(.subset2(x, 1L)), length_only, label = col)
+  }
+})
+
+test_that("Dataptr of an unconverted ALTREP column enters the guarded path (#2890)", {
+  con <- local_con()
+  sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d FROM range(10)"
+  slow_paths <- function(expr) {
     before <- rapi_altrep_slow_path_count()
-    df[[col]][[1]]
-    expect_gt(rapi_altrep_slow_path_count(), before, label = col)
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
+  for (col in c("l", "i", "d")) {
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # One Length entry alone: a zero subscript fails before reading
+    length_only <- slow_paths(.subset2(x, 0L))
+    # One Length entry, then Dataptr, which converts the column
+    expect_gt(slow_paths(-x), length_only, label = col)
+  }
+})
+
+test_that("Get_region of an unconverted ALTREP column enters the guarded path (#2890)", {
+  con <- local_con()
+  sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d FROM range(10)"
+  slow_paths <- function(expr) {
+    before <- rapi_altrep_slow_path_count()
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
+  for (col in c("l", "i", "d")) {
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # Two Length entries alone, as many as sum() makes before it reads
+    length_only <- slow_paths(.subset2(x, 11L))
+    # Two Length entries, then Get_region, which converts the column
+    expect_gt(slow_paths(sum(x)), length_only, label = col)
   }
 })
 
