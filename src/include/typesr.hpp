@@ -139,6 +139,7 @@ struct RApiTypes {
 	// `hms_time` makes an hms TIME rather than INTERVAL, as `time = "hms"` asks for writing,
 	// and `period_interval` a lubridate Period INTERVAL rather than DOUBLE, as `interval = "Period"` does.
 	static RType DetectRType(SEXP v, bool integer64, bool hms_time = false, bool period_interval = false);
+	static bool IsPeriod(SEXP v);
 	static bool IsClassedArray(SEXP v);
 	static bool IsHighArray(SEXP v);
 	static string ArrayColumnError(SEXP v, const string &name);

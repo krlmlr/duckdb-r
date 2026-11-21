@@ -158,8 +158,19 @@ static SEXP DataFrameNames(SEXP df) {
 	return TYPEOF(names) == STRSXP && Rf_xlength(names) == Rf_xlength(df) ? names : R_NilValue;
 }
 
+// Whether `v` is a lubridate Period: an S4 double or integer vector of class "Period".
+// The class attribute is read in place, since Rf_inherits() asks R for an S4 object's superclasses,
+// which runs R code, and DataFrameScanBind() may call this off R's thread.
+bool RApiTypes::IsPeriod(SEXP v) {
+	if ((TYPEOF(v) != REALSXP && TYPEOF(v) != INTSXP) || !Rf_isS4(v)) {
+		return false;
+	}
+	SEXP klass = Rf_getAttrib(v, R_ClassSymbol);
+	return TYPEOF(klass) == STRSXP && Rf_xlength(klass) == 1 && strcmp(CHAR(STRING_ELT(klass, 0)), "Period") == 0;
+}
+
 RType RApiTypes::DetectRType(SEXP v, bool integer64, bool hms_time, bool period_interval) {
-	if (period_interval && (TYPEOF(v) == REALSXP || TYPEOF(v) == INTSXP) && Rf_isS4(v) && Rf_inherits(v, "Period")) {
+	if (period_interval && IsPeriod(v)) {
 		return RType::PERIOD(v);
 	}
 	if (TYPEOF(v) == REALSXP && Rf_inherits(v, "POSIXct")) {
@@ -836,7 +847,7 @@ static string FindInvalidValueAt(SEXP v, const ValuePath &path, bool hms_time, b
 	auto position = [&](R_xlen_t i) {
 		return (in_list ? " (element " : " (row ") + std::to_string(i + 1) + ").";
 	};
-	if (Rf_isS4(v) && Rf_inherits(v, "Period")) {
+	if (RApiTypes::IsPeriod(v)) {
 		RPeriodType period(v);
 		for (R_xlen_t i = 0; i < period.length; i++) {
 			// Written as an INTERVAL, NA in any part is NULL; written as its seconds, only NA seconds are,

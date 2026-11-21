@@ -124,8 +124,7 @@ static bool WalkColumn(SEXP coldata, VISIT &&visit) {
 
 	// A lubridate Period's parts are its slots, which the scan reads too.
 	// Only a double or an integer vector can be one, so nothing else is asked.
-	auto numeric = TYPEOF(coldata) == REALSXP || TYPEOF(coldata) == INTSXP;
-	if (numeric && Rf_isS4(coldata) && Rf_inherits(coldata, "Period")) {
+	if (RApiTypes::IsPeriod(coldata)) {
 		for (auto slot_sym : RStrings::get().period_slot_syms) {
 			if (!WalkColumn(Rf_getAttrib(coldata, slot_sym), visit)) {
 				return false;
