@@ -109,6 +109,12 @@ def copy_logos():
 # delete, which is DuckDB's OVERRIDE_NEW_DELETE build option and not something
 # an R package may do to the process it is loaded into. The DuckDB Java client
 # excludes it from its vendoring for the same reason.
+#
+# This script is tooling the series loop syncs from main into every line, and
+# a line whose configure and Makevars.in predate the allocator choice cannot
+# compile the tree. There it is dropped, as it was before: the
+# `{{ JEMALLOC }}` placeholder in the line's own src/Makevars.in is what says
+# the line can use it.
 jemalloc_dir = 'third_party/jemalloc'
 jemalloc_skip = ['jemalloc_cpp.cpp']
 
@@ -124,12 +130,29 @@ def is_jemalloc(path):
     return (jemalloc_dir + '/') in (path.replace('\\', '/') + '/')
 
 
+def jemalloc_supported_here():
+    """Can this line's build use jemalloc? Its src/Makevars.in says."""
+    with open(os.path.join('src', 'Makevars.in'), 'r', encoding='utf-8') as f:
+        return '{{ JEMALLOC }}' in f.read()
+
+
+def drop_jemalloc(target_dir, source_list, include_list):
+    """Remove jemalloc from the tree and the lists, for a line without it."""
+    shutil.rmtree(os.path.join(target_dir, 'third_party', 'jemalloc'), ignore_errors=True)
+    source_list = [x for x in source_list if not is_jemalloc(x)]
+    include_list = [x for x in include_list if not is_jemalloc(x)]
+    return source_list, include_list, []
+
+
 def split_jemalloc(target_dir, source_list, include_list):
     """Take jemalloc out of the lists package_build returned.
 
     The sources are paths relative to the parent of target_dir.
     Returns (source_list, include_list, jemalloc_sources).
     """
+    if not jemalloc_supported_here():
+        return drop_jemalloc(target_dir, source_list, include_list)
+
     jemalloc_sources = [x for x in source_list if is_jemalloc(x)]
     for x in jemalloc_sources:
         if os.path.basename(x) in jemalloc_skip:
@@ -348,7 +371,7 @@ def object_list_of(sources):
 
 object_list = object_list_of(source_list)
 jemalloc_object_list = object_list_of(jemalloc_sources)
-allocator_object_list = object_list_of(allocator_objects(target_dir, source_list))
+allocator_object_list = object_list_of(allocator_objects(target_dir, source_list)) if jemalloc_sources else ''
 
 
 include_list = ' '.join(['-I' + 'duckdb/' + x for x in include_list])
@@ -413,8 +436,9 @@ write_makevars(
 )
 
 text = "SOURCES=" + object_list + '\n'
-text += "SOURCES_JEMALLOC=" + jemalloc_object_list + '\n'
-text += "SOURCES_ALLOCATOR=" + allocator_object_list + '\n'
+if jemalloc_sources:
+    text += "SOURCES_JEMALLOC=" + jemalloc_object_list + '\n'
+    text += "SOURCES_ALLOCATOR=" + allocator_object_list + '\n'
 
 with open_utf8(os.path.join('src', 'include', 'sources.mk'), 'w') as f:
     f.write(text)

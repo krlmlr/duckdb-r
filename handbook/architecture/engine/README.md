@@ -87,6 +87,10 @@ jemalloc's BSD-2-Clause notice travels with it:
 `rconfigure.py` vendors its `LICENSE` beside the sources
 and fails when [`inst/COPYRIGHTS`](/inst/COPYRIGHTS),
 which an installed package keeps, no longer quotes it verbatim.
+All of this happens only on a line whose own `src/Makevars.in`
+carries the `{{ JEMALLOC }}` placeholder:
+the series loop syncs `scripts/` from `main` into lines that predate it,
+and there `rconfigure.py` drops the tree as it did before.
 What the swap buys is thread-local caches and per-arena purging
 under parallel execution.
 With the standard allocator `Allocator::SupportsFlush()` is glibc-only,
