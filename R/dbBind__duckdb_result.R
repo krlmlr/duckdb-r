@@ -17,26 +17,17 @@ dbBind__duckdb_result <- function(res, params, ...) {
     abort("`params` must not be named")
   }
 
-  # This mirrors the count check in `rapi_bind()`, which no longer runs at bind time,
-  # so a structural error still surfaces at `dbBind()`.
-  # It raises through `rapi_error()` like the glue does,
-  # so the condition keeps its class and `context` (`?duckdb_error`).
-  n_param <- res@stmt_lst$n_param
-  if (n_param == 0) {
-    rapi_error("rapi_bind", "`dbBind()` called but query takes no parameters")
-  }
-  if (length(params) != n_param) {
-    rapi_error(
-      "rapi_bind",
-      paste0("Bind parameters need to be a list of length ", n_param)
-    )
-  }
+  params <- encode_values(params)
+
+  # The structural checks of `rapi_bind()`, which no longer runs at bind time:
+  # parameter count, array parameters, and equal lengths.
+  # An error here still surfaces at `dbBind()`,
+  # with the class and `context` the glue gives it (`?duckdb_error`).
+  rethrow_rapi_bind_check(res@stmt_lst$ref, params)
 
   res@env$rows_fetched <- 0
   res@env$resultset <- NULL
   res@env$pending_params <- NULL
-
-  params <- encode_values(params)
 
   if (!res@arrow) {
     # Defer execution to the first use of the result: dbFetch() or

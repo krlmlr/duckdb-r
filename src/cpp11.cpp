@@ -486,6 +486,14 @@ extern "C" SEXP _duckdb_rapi_prepare(SEXP conn, SEXP query, SEXP env) {
   END_CPP11
 }
 // statement.cpp
+void rapi_bind_check(duckdb::stmt_eptr_t stmt, cpp11::list params);
+extern "C" SEXP _duckdb_rapi_bind_check(SEXP stmt, SEXP params) {
+  BEGIN_CPP11
+    rapi_bind_check(cpp11::as_cpp<cpp11::decay_t<duckdb::stmt_eptr_t>>(stmt), cpp11::as_cpp<cpp11::decay_t<cpp11::list>>(params));
+    return R_NilValue;
+  END_CPP11
+}
+// statement.cpp
 cpp11::list rapi_bind(duckdb::stmt_eptr_t stmt, cpp11::list params, duckdb::ConvertOpts convert_opts);
 extern "C" SEXP _duckdb_rapi_bind(SEXP stmt, SEXP params, SEXP convert_opts) {
   BEGIN_CPP11
@@ -542,6 +550,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_duckdb_rapi_arrow_empty_array",                  (DL_FUNC) &_duckdb_rapi_arrow_empty_array,                   2},
     {"_duckdb_rapi_arrow_schema",                       (DL_FUNC) &_duckdb_rapi_arrow_schema,                        2},
     {"_duckdb_rapi_bind",                               (DL_FUNC) &_duckdb_rapi_bind,                                3},
+    {"_duckdb_rapi_bind_check",                         (DL_FUNC) &_duckdb_rapi_bind_check,                          2},
     {"_duckdb_rapi_canonicalize_path",                  (DL_FUNC) &_duckdb_rapi_canonicalize_path,                   1},
     {"_duckdb_rapi_connect",                            (DL_FUNC) &_duckdb_rapi_connect,                             2},
     {"_duckdb_rapi_connection_in_transaction",          (DL_FUNC) &_duckdb_rapi_connection_in_transaction,           1},

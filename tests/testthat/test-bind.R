@@ -102,6 +102,33 @@ test_that("test blobs", {
   expect_equal(res[[1]][[1]], charToRaw("hello"))
 })
 
+test_that("structural bind errors surface at dbBind(), before execution", {
+  con <- local_con()
+
+  q <- dbSendQuery(con, "SELECT CAST (? AS INTEGER), CAST (? AS INTEGER)")
+  withr::defer(dbClearResult(q))
+
+  # The rethrow names the frame that called `dbBind()`, as for any glue error
+  bind_unequal <- function() dbBind(q, list(1:2, 1:3))
+  err <- expect_error(
+    bind_unequal(),
+    "Bind parameter values need to have the same length"
+  )
+  expect_s3_class(err, "duckdb_error")
+  expect_equal(err$context, "rapi_bind")
+  expect_equal(err$call, quote(bind_unequal()))
+
+  inner <- data.frame(a = c("x", "y"))
+  inner$m <- array(1:8, c(2L, 2L, 2L))
+  err <- expect_error(
+    dbBind(q, list(inner, 1:2)),
+    "Affected parameter: `params[[1]]$m`.",
+    fixed = TRUE
+  )
+  expect_s3_class(err, "duckdb_error")
+  expect_equal(err$context, "rapi_bind")
+})
+
 test_that("various error cases for dbBind()", {
   con <- local_con()
 

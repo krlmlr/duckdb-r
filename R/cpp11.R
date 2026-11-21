@@ -264,6 +264,10 @@ rapi_prepare <- function(conn, query, env) {
   .Call(`_duckdb_rapi_prepare`, conn, query, env)
 }
 
+rapi_bind_check <- function(stmt, params) {
+  invisible(.Call(`_duckdb_rapi_bind_check`, stmt, params))
+}
+
 rapi_bind <- function(stmt, params, convert_opts) {
   .Call(`_duckdb_rapi_bind`, stmt, params, convert_opts)
 }
