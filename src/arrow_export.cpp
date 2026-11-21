@@ -496,12 +496,7 @@ int RArrowArrayStreamWrapper::ReadNext(ArrowArray *out) {
 	if (Invalidated()) {
 		return ReportInvalidated();
 	}
-	auto status = engine.stream.get_next(&engine.stream, out);
-	// An error ends the stream as surely as its end does: every later read reports it again.
-	if (status != 0 || !out->release) {
-		ended = true;
-	}
-	return status;
+	return engine.stream.get_next(&engine.stream, out);
 }
 
 int RArrowArrayStreamWrapper::GetSchema(ArrowArrayStream *stream, ArrowSchema *out) {
@@ -521,6 +516,11 @@ int RArrowArrayStreamWrapper::GetNext(ArrowArrayStream *stream, ArrowArray *out)
 	{
 		ReadGuard guard(*wrapper);
 		status = wrapper->ReadNext(out);
+		// An error ends the stream as surely as its end does: every later read reports it again,
+		// an invalidated stream's included.
+		if (status != 0 || !out->release) {
+			wrapper->ended = true;
+		}
 	}
 	wrapper->FinishPendingClose();
 	return status;
