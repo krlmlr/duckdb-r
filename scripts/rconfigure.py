@@ -112,6 +112,13 @@ def copy_logos():
 jemalloc_dir = 'third_party/jemalloc'
 jemalloc_skip = ['jemalloc_cpp.cpp']
 
+# jemalloc's BSD-2-Clause notice, which redistribution in source and binary
+# form must carry. Upstream's packaging copies sources and headers only, so the
+# vendored tree gets its LICENSE here, and inst/COPYRIGHTS -- which an
+# installed package keeps -- must quote it verbatim.
+jemalloc_license = 'LICENSE'
+copyrights_path = os.path.join('inst', 'COPYRIGHTS')
+
 
 def is_jemalloc(path):
     return (jemalloc_dir + '/') in (path.replace('\\', '/') + '/')
@@ -128,6 +135,8 @@ def split_jemalloc(target_dir, source_list, include_list):
         if os.path.basename(x) in jemalloc_skip:
             os.remove(os.path.join(os.path.dirname(target_dir), x))
     jemalloc_sources = [x for x in jemalloc_sources if os.path.basename(x) not in jemalloc_skip]
+
+    copy_jemalloc_license(target_dir)
 
     # Every source the packaging emits is one jemalloc's own CMakeLists.txt
     # compiles -- but that is a property of the upstream tree and not a rule,
@@ -161,6 +170,23 @@ def read_jemalloc_roster():
         print("{} no longer declares JEMALLOC_C_FILES.".format(cmakelists))
         exit(1)
     return text.split('set(JEMALLOC_C_FILES', 1)[1].split(')', 1)[0]
+
+
+def copy_jemalloc_license(target_dir):
+    """Vendor jemalloc's LICENSE, and check inst/COPYRIGHTS still quotes it."""
+    source = os.path.join(duckdb_path, jemalloc_dir, jemalloc_license)
+    if not os.path.isfile(source):
+        print("Could not find {}!".format(source))
+        exit(1)
+    shutil.copyfile(source, os.path.join(target_dir, jemalloc_dir, jemalloc_license))
+    with open(source, 'r', encoding='utf-8') as f:
+        notice = f.read().strip()
+    with open(copyrights_path, 'r', encoding='utf-8') as f:
+        recorded = f.read()
+    if notice not in recorded:
+        print("{} no longer quotes {} verbatim.".format(copyrights_path, source))
+        print("  Copy the new notice into it.")
+        exit(1)
 
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', duckdb_path, 'scripts'))

@@ -78,6 +78,10 @@ checks them against the list jemalloc's `CMakeLists.txt` compiles,
 and drops `jemalloc_cpp.cpp`, which overrides global `new` and `delete`:
 that is DuckDB's `OVERRIDE_NEW_DELETE`,
 and not something an R package may do to the process it is loaded into.
+jemalloc's BSD-2-Clause notice travels with it:
+`rconfigure.py` vendors its `LICENSE` beside the sources
+and fails when [`inst/COPYRIGHTS`](/inst/COPYRIGHTS),
+which an installed package keeps, no longer quotes it verbatim.
 What the swap buys is thread-local caches and per-arena purging
 under parallel execution.
 With the standard allocator `Allocator::SupportsFlush()` is glibc-only,
