@@ -93,6 +93,42 @@ using namespace duckdb;
 	}
 }
 
+EnvScanScope *EnvScanScope::CheckNotNested(DBWrapper &db, ClientContext &context) {
+	for (auto scope = db.env_scan_scope; scope; scope = scope->enclosing) {
+		if (&scope->context == &context) {
+			cpp11::stop(
+			    "Cannot query a connection from R code that looks up a name for a query of the same connection.");
+		}
+	}
+	return db.env_scan_scope;
+}
+
+EnvScanScope::EnvScanScope(DBWrapper &db_p, ClientContext &context_p, SEXP env, const ConvertOpts &convert_opts,
+                           identifier_map_t<unique_ptr<TableRef>> *scan_refs)
+    : db(db_p), context(context_p), enclosing(CheckNotNested(db_p, context_p)), saved_env(db_p.env),
+      saved_registered_dfs(db_p.registered_dfs), saved_convert_opts(db_p.env_convert_opts),
+      saved_scan_refs(db_p.env_scan_refs), saved_scan_context(db_p.env_scan_context),
+      saved_scan_error(std::move(db_p.env_scan_error)) {
+	// The data frames found are kept alive by this list, which the caller attaches to what it returns
+	db.registered_dfs = Rf_cons(R_NilValue, R_NilValue);
+	db.env = env;
+	db.env_convert_opts = &convert_opts;
+	db.env_scan_refs = scan_refs;
+	db.env_scan_context = &context;
+	db.env_scan_error = nullptr;
+	db.env_scan_scope = this;
+}
+
+EnvScanScope::~EnvScanScope() {
+	db.env = saved_env;
+	db.registered_dfs = saved_registered_dfs;
+	db.env_convert_opts = saved_convert_opts;
+	db.env_scan_refs = saved_scan_refs;
+	db.env_scan_context = saved_scan_context;
+	db.env_scan_error = std::move(saved_scan_error);
+	db.env_scan_scope = enclosing;
+}
+
 unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, ReplacementScanInput &input,
                                                         optional_ptr<ReplacementScanData> data_p) {
 	auto &data = (ReplacementDataDBWrapper &)*data_p;

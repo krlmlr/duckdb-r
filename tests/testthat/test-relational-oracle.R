@@ -448,6 +448,69 @@ test_that("from sql: a query on another connection during the lookup pins nothin
   expect_match(rel_to_sql(rel), "^WITH gate AS ")
 })
 
+test_that("from sql: a lookup that makes a relation or queries on another connection leaves the outer lookup intact", {
+  drv <- duckdb(environment_scan = TRUE)
+  c1 <- dbConnect(drv)
+  c2 <- dbConnect(drv)
+  withr::defer({
+    dbDisconnect(c2)
+    dbDisconnect(c1, shutdown = TRUE)
+  })
+
+  inner_env <- new.env(parent = emptyenv())
+  inner_env$inner_df <- data.frame(z = 5L)
+  inner <- NULL
+  env <- new.env(parent = emptyenv())
+  env$later <- data.frame(b = 2L)
+  makeActiveBinding(
+    "gate",
+    function() {
+      inner <<- rel_from_sql(c2, "SELECT * FROM inner_df", env = inner_env)
+      dbGetQuery(c2, "SELECT 42 AS x")
+      data.frame(a = 1L)
+    },
+    env
+  )
+
+  rel <- rel_from_sql(c1, "SELECT * FROM gate CROSS JOIN later", env = env)
+  gc()
+
+  expect_equal(
+    as.data.frame(rel),
+    data.frame(a = 1L, b = 2L),
+    ignore_attr = TRUE
+  )
+  expect_equal(as.data.frame(inner), data.frame(z = 5L), ignore_attr = TRUE)
+})
+
+test_that("from sql: a lookup that queries the same connection is refused", {
+  scan_con <- local_con(drv = duckdb(environment_scan = TRUE))
+
+  env <- new.env(parent = emptyenv())
+  makeActiveBinding(
+    "rel_same",
+    function() rel_from_sql(scan_con, "SELECT 1 AS a", env = env),
+    env
+  )
+  makeActiveBinding(
+    "query_same",
+    function() dbGetQuery(scan_con, "SELECT 1 AS a"),
+    env
+  )
+
+  expect_error(
+    rel_from_sql(scan_con, "FROM rel_same", env = env),
+    "Cannot query a connection from R code that looks up a name for a query of the same connection.",
+    fixed = TRUE
+  )
+  expect_error(
+    rel_from_sql(scan_con, "FROM query_same", env = env),
+    "Cannot query a connection from R code that looks up a name for a query of the same connection.",
+    fixed = TRUE
+  )
+  expect_identical(dbGetQuery(scan_con, "SELECT 1 AS a"), data.frame(a = 1L))
+})
+
 # rel_from_table()
 
 test_that("from table: a table that does not exist, a view, a missing schema", {

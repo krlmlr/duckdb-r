@@ -13,7 +13,6 @@
 #include "duckdb/parser/expression/window_expression.hpp"
 #include "duckdb/parser/query_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
-#include "httplib.hpp"
 #include "rapi.hpp"
 #include "reltoaltrep.hpp"
 #include "rrelation.hpp"
@@ -694,21 +693,9 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 	// appended to `registered_dfs`; we then attach that list to the relation's protection list so the SEXPs
 	// survive for the lifetime of the relation. For this connection the scan also records the table reference it
 	// built, which is pinned in a common table expression, so later binds do not look the data frame up again.
-	D_ASSERT(con->db->env == R_NilValue);
+	// The scope puts back what an enclosing query or relation had set, when R code run by its lookup calls this.
 	identifier_map_t<unique_ptr<TableRef>> scanned_refs;
-	con->db->env = (SEXP)env;
-	con->db->env_convert_opts = &con->convert_opts;
-	con->db->registered_dfs = Rf_cons(R_NilValue, R_NilValue);
-	con->db->env_scan_refs = &scanned_refs;
-	con->db->env_scan_context = con->conn->context.get();
-	duckdb_httplib::detail::scope_exit reset_db_env([&]() {
-		con->db->env = R_NilValue;
-		con->db->env_convert_opts = nullptr;
-		con->db->registered_dfs = R_NilValue;
-		con->db->env_scan_refs = nullptr;
-		con->db->env_scan_context = nullptr;
-		con->db->env_scan_error = nullptr;
-	});
+	EnvScanScope env_scan_scope(*con->db, *con->conn->context, env, con->convert_opts, &scanned_refs);
 
 	auto select_stmt = RQueryRelation::ParseStatement(*con->conn->context, sql, "Expected a single SELECT statement");
 	shared_ptr<RQueryRelation> rel;

@@ -118,6 +118,8 @@ namespace duckdb {
 
 typedef unordered_map<std::string, cpp11::list> arrow_scans_t;
 
+class EnvScanScope;
+
 struct DBWrapper {
 	duckdb::unique_ptr<DuckDB> db;
 	arrow_scans_t arrow_scans;
@@ -133,7 +135,36 @@ struct DBWrapper {
 	//! The R error or interrupt the environment scan met for `env_scan_context`,
 	//! which the engine's bind reports only as a generic exception
 	std::exception_ptr env_scan_error;
+	//! The innermost EnvScanScope, which links to the ones it is nested in
+	EnvScanScope *env_scan_scope = nullptr;
 	bool allow_extensions = true;
+};
+
+//! Points the environment scan of `db` at `env` while `context` prepares a query or makes a relation from SQL text,
+//! and puts back on exit what an enclosing one had set:
+//! R code run by a lookup can itself query, or make a relation from SQL text, on another connection.
+//! On the same connection it would wait for the lock the enclosing bind holds, so it is refused.
+class EnvScanScope {
+public:
+	EnvScanScope(DBWrapper &db, ClientContext &context, SEXP env, const ConvertOpts &convert_opts,
+	             identifier_map_t<unique_ptr<TableRef>> *scan_refs = nullptr);
+	~EnvScanScope();
+
+	EnvScanScope(const EnvScanScope &) = delete;
+	EnvScanScope &operator=(const EnvScanScope &) = delete;
+
+private:
+	DBWrapper &db;
+	ClientContext &context;
+	EnvScanScope *enclosing;
+	cpp11::sexp saved_env;
+	cpp11::sexp saved_registered_dfs;
+	const ConvertOpts *saved_convert_opts;
+	identifier_map_t<unique_ptr<TableRef>> *saved_scan_refs;
+	ClientContext *saved_scan_context;
+	std::exception_ptr saved_scan_error;
+
+	static EnvScanScope *CheckNotNested(DBWrapper &db, ClientContext &context);
 };
 
 template <class T>
