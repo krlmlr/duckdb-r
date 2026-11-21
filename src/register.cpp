@@ -170,6 +170,8 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 		// An R error or interrupt, such as from a promise or an active binding.
 		// The engine's bind turns every exception into a generic one, so a relation made from SQL text keeps the
 		// first one for its own connection's bind and rethrows it once the bind has failed (rapi_rel_from_sql()).
+		// The exception holds cpp11's single static unwind token, so no other cpp11::unwind_protect() may catch a
+		// jump between this capture and that rethrow: it would overwrite the token's continuation.
 		if (&context == db_wrapper->env_scan_context && !db_wrapper->env_scan_error) {
 			db_wrapper->env_scan_error = std::current_exception();
 		}
