@@ -2,7 +2,7 @@
 # .github/workflows/versions-matrix/action.R.
 # Explained in handbook/operations/ci/matrix/README.md.
 
-list(
+entries <- list(
   # Add even earlier Windows versions
   data.frame(os = "windows-latest", r = r_versions[4:6]),
   # Build the DuckDB C++ engine with a tripwire (-DDUCKDB_R_POISON_ENGINE) and
@@ -49,10 +49,23 @@ list(
   # runner too, and the matrix covers a source build on every OS *and*
   # architecture it carries: macOS is arm64 already, and the base matrix pairs
   # windows-11-arm with windows-latest.
-  data.frame(
-    os = "ubuntu-26.04-arm",
-    r = r_versions[[2]],
-    env = "DUCKDB_R_USE_SYSTEM_LIB=0",
-    desc = "vendored build (compiles bundled DuckDB sources)"
-  )
+  #
+  # Not in the vendoring fork, though. The custom before-install action exempts
+  # krlmlr/duckdb-r from the fast path, so every entry there is a source build
+  # already, and the base matrix's own ubuntu-26.04-arm entry at the same R
+  # version would be this one twice: the same build, the same cache keys, run
+  # once more for nothing. GITHUB_REPOSITORY is the same variable the action's
+  # exemption reads, so the two cannot disagree.
+  if (Sys.getenv("GITHUB_REPOSITORY") != "krlmlr/duckdb-r") {
+    data.frame(
+      os = "ubuntu-26.04-arm",
+      r = r_versions[[2]],
+      env = "DUCKDB_R_USE_SYSTEM_LIB=0",
+      desc = "vendored build (compiles bundled DuckDB sources)"
+    )
+  }
 )
+
+# The template's action cannot take a NULL entry, so drop the one above when it
+# does not apply.
+Filter(Negate(is.null), entries)
