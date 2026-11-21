@@ -245,9 +245,16 @@ jobs:
             echo "::notice title=roxygen2 fork::scripts/roxygen2-fork.sh not on this tip; every commit is documented with the stock roxygen2."
             exit 0
           fi
+          # A fork that no longer applies or builds must not take down a shard
+          # whose commits record the stock build: export the library only on
+          # success, and leave a .9100 commit to scripts/rcc-one.sh, which
+          # tries the install itself and fails that commit alone.
           lib="${RUNNER_TEMP}/roxygen2-fork"
-          scripts/roxygen2-fork.sh --lib "${lib}"
-          echo "EACH_ROXYGEN2_FORK_LIB=${lib}" | tee -a "${GITHUB_ENV}"
+          if scripts/roxygen2-fork.sh --lib "${lib}"; then
+            echo "EACH_ROXYGEN2_FORK_LIB=${lib}" | tee -a "${GITHUB_ENV}"
+          else
+            echo "::warning title=roxygen2 fork::Could not install the patched roxygen2; commits recording .9100 will try again and fail at their roxygen gate."
+          fi
         shell: bash
 
       # Deliberately not custom/after-install: its ccache-action caps the cache
