@@ -10,8 +10,10 @@
 #
 # A historical record: `rcc-logs.yaml` and `rcc-consolidate.yaml` went in
 # #2815, so measurement 1 and measurement 3's consolidation count read
-# workflows that no longer exist. Those reads fail soft and say so; the rest
-# still runs. See README.md.
+# workflows that no longer exist. GitHub still registers `rcc-logs.yaml` as
+# active with its old runs, so measurement 1 prints those stale counts rather
+# than failing. Only the `rcc-consolidate.yaml` read returns 404 and takes its
+# "workflow not found" fallback. The rest still runs. See README.md.
 #
 #   experiments/2026-08-09-rcc2-read-path/run.sh
 #
@@ -93,7 +95,8 @@ done < <(git ls-remote --heads "${REMOTE}" '*-build' | cut -f2)
 echo "=== 1. dispatches of rcc-logs.yaml (the gap being felt) ==="
 api "repos/${REPO}/actions/workflows/rcc-logs.yaml/runs?per_page=100" \
   | jq -r 'if .workflow_runs == null then "workflow not found: \(.message // "no runs") (removed in #2815)"
-           else "runs of any event: \(.total_count) (first page only)",
+           else "runs of any event: \(.total_count)",
+                "by event, first page of 100 only:",
                 (.workflow_runs | group_by(.event)[] | "  \(.[0].event): \(length)") end'
 echo "every workflow_dispatch run, oldest last:"
 api "repos/${REPO}/actions/workflows/rcc-logs.yaml/runs?event=workflow_dispatch&per_page=100" \
@@ -343,9 +346,9 @@ git rev-list --objects "${tip}" | cut -d' ' -f1 \
               printf "  %-8s %7d objects  %8.1f MB  (%.1f MB packed)\n", "total", N, S/1048576, D/1048576}'
 echo "  oldest record: $(head -1 "${OUT}/record-times" 2>/dev/null || echo "run with WIDEN>0")"
 echo "  newest record: $(tail -1 "${OUT}/record-times" 2>/dev/null || echo "run with WIDEN>0")"
-days=$(sed -n 's/^RCC_RETENTION_DAYS="\${RCC_RETENTION_DAYS:-\([0-9]*\)}"/\1/p' \
-  "$(git rev-parse --show-toplevel)/scripts/rcc-lib.sh")
-echo "  retention window: RCC_RETENTION_DAYS=${days} days"
+lib="$(git rev-parse --show-toplevel)/scripts/rcc-lib.sh"
+days=$(sed -n 's/^RCC_RETENTION_DAYS="\${RCC_RETENTION_DAYS:-\([0-9]*\)}"/\1/p' "${lib}" 2>/dev/null || true)
+echo "  retention window: RCC_RETENTION_DAYS=${days:-unknown (no ${lib})} days"
 echo "  runs of rcc-consolidate.yaml (nothing is pruned without one):"
 api "repos/${REPO}/actions/workflows/rcc-consolidate.yaml/runs?per_page=100" \
   | jq -r 'if .workflow_runs == null then "    workflow not found (removed in #2815; consolidation runs by hand)"

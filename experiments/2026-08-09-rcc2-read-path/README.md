@@ -9,8 +9,11 @@ and `rcc-logs.sh` and `rcc-consolidate.sh` now run by hand
 measurement 1 counts dispatches of a workflow that no longer exists, so there is nothing left to dispatch,
 and measurement 3's premise that nothing is pruned without a run of `rcc-consolidate.yaml` no longer holds,
 since consolidation is now a script someone runs from a checkout.
-The two workflow reads fail soft and say the workflow is gone;
-measurement 2, the writer check and the cost of the branch itself still run.
+Neither read reports that the workflow is gone.
+GitHub still registers `rcc-logs.yaml` as active, with its old runs (165 on 2026-11-21),
+so a re-run of measurement 1 prints those stale counts rather than failing.
+Only the `rcc-consolidate.yaml` read returns 404, and the script then prints "workflow not found".
+Measurement 2, the writer check and the cost of the branch itself still run.
 
 *What it measured:* the three things D6 asked for before the `rcc2` store was cut —
 whether the gap it alone covers had ever been felt,
