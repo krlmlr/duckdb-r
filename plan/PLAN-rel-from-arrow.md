@@ -86,8 +86,10 @@ Measured evidence:
   `rel_from_arrow()` builds an arrow-package producer with pushdown
   when handed something the `arrow` package owns,
   and a nanoarrow producer without pushdown otherwise —
-  the same capability flag that decides
-  `arrow_scan` against `arrow_scan_dumb`.
+  the producer capability that `PLAN-nanoarrow-df-scan.md` proposes
+  for choosing `arrow_scan` against `arrow_scan_dumb`;
+  today's glue names only `arrow_scan`,
+  though the engine registers both.
   A caller that wants to force the pushdown-free route passes
   `pushdown = FALSE`.
 * **Unexported, like the rest.**
