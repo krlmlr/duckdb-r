@@ -260,7 +260,7 @@
       rel_from_table(con, "oracle_from_table_view")
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"oracle_from_table_view is not an table"}
+      ! {"exception_type":"Catalog","exception_message":"Table oracle_from_table_view does not exist!"}
 
 ---
 
