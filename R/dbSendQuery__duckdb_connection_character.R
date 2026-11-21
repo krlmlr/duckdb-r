@@ -5,7 +5,9 @@
 #' @inheritParams DBI::dbBind
 #' @param arrow `r lifecycle::badge("deprecated")`
 #'   Whether the query should be returned as an Arrow Table.
-#'   Use [DBI::dbSendQueryArrow()] or [DBI::dbGetQueryArrow()] instead.
+#'   Use [DBI::dbSendQueryArrow()] or [DBI::dbGetQueryArrow()] instead,
+#'   which return a nanoarrow stream;
+#'   `arrow::as_arrow_table()` converts it to an Arrow Table.
 #' @section Multiple statements:
 #' A `statement` can hold several SQL statements separated by semicolons,
 #' in [dbSendQuery()], [dbSendQueryArrow()],
@@ -46,7 +48,8 @@ dbSendQuery__duckdb_connection_character <- function(
       paste(
         "`dbSendQuery(arrow = TRUE)` and `dbGetQuery(arrow = TRUE)` are deprecated",
         "and will be removed in a future release.",
-        "Use `dbSendQueryArrow()` or `dbGetQueryArrow()` instead."
+        "Use `dbSendQueryArrow()` or `dbGetQueryArrow()` instead,",
+        "and `arrow::as_arrow_table()` on the stream they return for an Arrow Table."
       ),
       env
     )
@@ -74,9 +77,10 @@ setMethod(
   dbSendQuery__duckdb_connection_character
 )
 
-# Warns like lifecycle::deprecate_soft():
-# for a call from user code or a test, not for one from another package's code,
-# whose users could not act on the warning.
+# Warns on every call from user code or a test,
+# not for one from another package's code, whose users could not act on the warning.
+# Unlike lifecycle::deprecate_soft(), it does not throttle the warning.
+# The condition carries the fields of .Deprecated()'s, without a call.
 # arrow::to_arrow() still sends its query with `arrow = TRUE`
 # (handbook/usage/memory/reading/README.md).
 deprecate_soft <- function(msg, caller_env) {
@@ -87,7 +91,14 @@ deprecate_soft <- function(msg, caller_env) {
       c("R_GlobalEnv", "testthat") ||
       (nzchar(tested) && caller == tested)
   ) {
-    .Deprecated(msg = msg)
+    warning(warningCondition(
+      msg,
+      old = "dbSendQuery",
+      new = NULL,
+      package = "duckdb",
+      class = "deprecatedWarning",
+      call = NULL
+    ))
   }
 }
 
