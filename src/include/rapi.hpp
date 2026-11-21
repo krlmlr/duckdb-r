@@ -24,6 +24,7 @@
 #include "rrelation.hpp"
 
 #include <atomic>
+#include <exception>
 
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
@@ -129,6 +130,9 @@ struct DBWrapper {
 	//! connection makes a relation from SQL text
 	identifier_map_t<unique_ptr<TableRef>> *env_scan_refs = nullptr;
 	ClientContext *env_scan_context = nullptr;
+	//! The R error or interrupt the environment scan met for `env_scan_context`,
+	//! which the engine's bind reports only as a generic exception
+	std::exception_ptr env_scan_error;
 	bool allow_extensions = true;
 };
 

@@ -707,10 +707,22 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 		con->db->registered_dfs = R_NilValue;
 		con->db->env_scan_refs = nullptr;
 		con->db->env_scan_context = nullptr;
+		con->db->env_scan_error = nullptr;
 	});
 
 	auto select_stmt = RQueryRelation::ParseStatement(*con->conn->context, sql, "Expected a single SELECT statement");
-	auto rel = make_shared_ptr<RQueryRelation>(con->conn->context, std::move(select_stmt), "queryrelation");
+	shared_ptr<RQueryRelation> rel;
+	try {
+		rel = make_shared_ptr<RQueryRelation>(con->conn->context, std::move(select_stmt), "queryrelation");
+	} catch (std::exception &) {
+		// An R error or interrupt in the lookup reaches here as a generic exception: raise the R condition instead
+		if (con->db->env_scan_error) {
+			auto error = con->db->env_scan_error;
+			con->db->env_scan_error = nullptr;
+			std::rethrow_exception(error);
+		}
+		throw;
+	}
 	rel->PinTableRefs(scanned_refs);
 	cpp11::writable::list prot = {con->db->registered_dfs};
 	return make_external_prot<RelationWrapper>("duckdb_relation", prot, std::move(rel), con->convert_opts);

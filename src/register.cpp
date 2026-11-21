@@ -108,28 +108,37 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	// up forces a promise -- arbitrary R code, and with it a garbage collection.
 	RCallbackScope callback_scope;
 
-	auto table_name_symbol = cpp11::safe[Rf_install](input.table_name.c_str());
 	SEXP rho = db_wrapper->env;
 	if (TYPEOF(rho) != ENVSXP) {
 		return nullptr;
 	}
 
 	SEXP df = R_NilValue;
-
+	try {
+		auto table_name_symbol = cpp11::safe[Rf_install](input.table_name.c_str());
 #if defined(R_VERSION) && R_VERSION >= R_Version(4, 5, 0)
-	df = cpp11::safe[R_getVarEx](table_name_symbol, rho, Rboolean::TRUE, R_NilValue);
+		df = cpp11::safe[R_getVarEx](table_name_symbol, rho, Rboolean::TRUE, R_NilValue);
 #else
-	while (rho != R_EmptyEnv) {
-		df = cpp11::safe[Rf_findVarInFrame3](rho, table_name_symbol, TRUE);
-		if (df != R_UnboundValue) {
-			break;
+		while (rho != R_EmptyEnv) {
+			df = cpp11::safe[Rf_findVarInFrame3](rho, table_name_symbol, TRUE);
+			if (df != R_UnboundValue) {
+				break;
+			}
+			rho = ENCLOS(rho);
 		}
-		rho = ENCLOS(rho);
-	}
-	if (TYPEOF(df) == PROMSXP) {
-		df = cpp11::safe[Rf_eval](df, rho);
-	}
+		if (TYPEOF(df) == PROMSXP) {
+			df = cpp11::safe[Rf_eval](df, rho);
+		}
 #endif
+	} catch (cpp11::unwind_exception &) {
+		// An R error or interrupt, such as from a promise or an active binding.
+		// The engine's bind turns every exception into a generic one, so a relation made from SQL text keeps the
+		// first one for its own connection's bind and rethrows it once the bind has failed (rapi_rel_from_sql()).
+		if (&context == db_wrapper->env_scan_context && !db_wrapper->env_scan_error) {
+			db_wrapper->env_scan_error = std::current_exception();
+		}
+		throw;
+	}
 
 	PROTECT(df);
 	if (!Rf_inherits(df, "data.frame")) {
