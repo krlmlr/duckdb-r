@@ -145,12 +145,16 @@ pass unchanged. No new R-visible behaviour.
 **Depends on:** T1.
 **Scope:**
 
-- New `StreamResultWrapper` holding a `unique_ptr<StreamQueryResult>`
-  and any required `Connection` keepalive.
-- `cpp11` finalizer that closes the stream.
-- Internal-only `rapi_stream_open(stmt, opts)` and
-  `rapi_stream_close(stream)` entrypoints. Not registered in the public
-  R namespace yet; reachable from tests via `:::`.
+- No new type: the existing `RQueryResult` externalptr carries the
+  stream. With the `allow_stream_result` convert option,
+  `rapi_execute()` returns it for a data-frame result too, holding the
+  submitted `QueryResult` and its `ClientContext`; the first fetch
+  moves a streamed result into a `QueryResultStream<>`,
+  and a completed one is read through `QueryResult::Fetch()`.
+- The externalptr's finalizer ends the query.
+- Internal-only `rapi_stream_close(stream)` entrypoint
+  (there is no separate open: `rapi_execute()` opens).
+  Not registered in the public R namespace yet; reachable via `:::`.
 
 **Testability:**
 - New `tests/testthat/test-stream-internal.R` that opens and closes a
@@ -350,22 +354,22 @@ recorded here as the T1 deliverable.
   so the transform code sees flat vectors on both paths.
 - **Connection lock model.**
   `ClientContext` tracks a single `active_query` / `open_result`;
-  a live `StreamQueryResult` occupies it until drained or closed.
-  Starting any other query on the same connection invalidates the
-  open stream (`IsOpenInternal()` turns false);
-  a subsequent fetch on the invalidated stream throws
-  `Attempting to execute an unsuccessful or closed pending query result`.
+  a live stream occupies it until drained or closed.
+  A statement the glue starts ends every open result on its connection
+  first (`EndOpenResults()`), and the engine then reports the stream as
+  ended, not failed; so `RQueryResult` records that it was invalidated,
+  and the next fetch fails with `INVALIDATED_MESSAGE`,
+  the error the Arrow route reports.
   So: exactly one live stream per connection, second query kills the first —
   the documented caveat for `stream = TRUE`.
-  A drained stream closes itself
-  (`FetchInternal()` calls `Close()`, which resets `context`),
-  so post-EOF fetches must not reach `Fetch()` —
-  the wrapper tracks a `stream_drained` flag.
+  A drained stream no longer holds the connection and keeps reading as
+  ended; the wrapper tracks a `stream_drained` flag so post-EOF fetches
+  serve only the buffered tail.
 - **Splitting chunks.**
   `DataChunk::Split()` splits by *columns*, not rows.
   Row splits use `DataChunk::Copy(other, offset)`
   (copies rows `[offset, size)` into a fresh flat chunk)
-  plus `SetCardinality(keep)` to truncate the front in place.
+  plus `SetChildCardinality(keep)` to truncate the front in place.
 - **tz_force, factors, row names.**
   `tz_force` is applied in R (`duckdb_post_execute()`) on the whole
   resultset; the streaming path applies it per fetched batch in
