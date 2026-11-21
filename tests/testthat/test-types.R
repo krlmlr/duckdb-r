@@ -366,14 +366,22 @@ test_that("a statement returning a column R cannot hold runs through Arrow", {
 test_that("an S4 vector that contains a classed vector writes as that class", {
   # The type is read from the class attributes in place, without asking R for the S4 superclasses
   con <- local_con()
-  methods::setClass("DuckdbTestS4Date", contains = "Date")
-  methods::setClass("DuckdbTestS4Num", contains = "numeric")
+  env <- new.env()
+  methods::setClass("DuckdbTestS4Date", contains = "Date", where = env)
+  methods::setClass("DuckdbTestS4Num", contains = "numeric", where = env)
+  withr::defer({
+    methods::removeClass("DuckdbTestS4Date", where = env)
+    methods::removeClass("DuckdbTestS4Num", where = env)
+  })
   df <- data.frame(row = 1:2)
   df$d <- methods::new(
-    "DuckdbTestS4Date",
+    methods::getClass("DuckdbTestS4Date", where = env),
     as.Date(c("2020-01-01", "2020-01-02"))
   )
-  df$n <- methods::new("DuckdbTestS4Num", c(1.5, 2))
+  df$n <- methods::new(
+    methods::getClass("DuckdbTestS4Num", where = env),
+    c(1.5, 2)
+  )
   duckdb_register(con, "t", df)
   out <- dbGetQuery(con, "SELECT typeof(d) AS td, typeof(n) AS tn, d, n FROM t")
   expect_equal(out$td, c("DATE", "DATE"))
