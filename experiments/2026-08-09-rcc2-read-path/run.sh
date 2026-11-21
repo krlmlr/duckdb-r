@@ -3,19 +3,26 @@
 # D6 of plan/PLAN-vendoring-simplification.md asks for, plus the writer check
 # its "one wrinkle" clause asks for.
 #
-# Read-only. It fetches refs and reads the REST/GraphQL API; it never pushes,
-# never dispatches a workflow, and writes only under $OUT.
+# It reads the REST/GraphQL API and fetches the fork's refs, force-updating the
+# local refs/remotes/$REMOTE/* it fetches and pulling the whole `rcc2` branch
+# (~220 MB on 2026-08-09). It never pushes and never dispatches a workflow;
+# its scratch files go under $OUT.
 #
-#   experiments/2026-08-rcc2-read-path/run.sh
+# A historical record: `rcc-logs.yaml` and `rcc-consolidate.yaml` went in
+# #2815, so measurement 1 and measurement 3's consolidation count read
+# workflows that no longer exist. Those reads fail soft and say so; the rest
+# still runs. See README.md.
+#
+#   experiments/2026-08-09-rcc2-read-path/run.sh
 #
 # Run it against the fork. `duckdb/duckdb-r` cannot answer any of this: both
 # store workflows carry `if: github.repository == 'krlmlr/duckdb-r'`, so every
 # run of them there is skipped, and the series refs and the store live in the
 # fork besides.
 #
-# Do not dispatch `rcc-logs.yaml` or `rcc-consolidate.yaml` while measuring.
-# The first is measurement 1's whole signal; the second rewrites the branch
-# measurement 3 is weighing.
+# When this ran, `rcc-logs.yaml` and `rcc-consolidate.yaml` were not to be
+# dispatched while measuring: the first was measurement 1's whole signal, the
+# second rewrote the branch measurement 3 weighs.
 #
 # Environment:
 #   GH_TOKEN / GITHUB_TOKEN - token with contents:read and statuses:read
@@ -85,13 +92,15 @@ done < <(git ls-remote --heads "${REMOTE}" '*-build' | cut -f2)
 
 echo "=== 1. dispatches of rcc-logs.yaml (the gap being felt) ==="
 api "repos/${REPO}/actions/workflows/rcc-logs.yaml/runs?per_page=100" \
-  | jq -r '"runs of any event: \(.total_count)",
-           (.workflow_runs | group_by(.event)[] | "  \(.[0].event): \(length)")'
+  | jq -r 'if .workflow_runs == null then "workflow not found: \(.message // "no runs") (removed in #2815)"
+           else "runs of any event: \(.total_count) (first page only)",
+                (.workflow_runs | group_by(.event)[] | "  \(.[0].event): \(length)") end'
 echo "every workflow_dispatch run, oldest last:"
 api "repos/${REPO}/actions/workflows/rcc-logs.yaml/runs?event=workflow_dispatch&per_page=100" \
   | jq -r --arg since "${SINCE}" '
+      if .workflow_runs == null then "  workflow not found" else
       "  total: \(.total_count)   since \($since): \([.workflow_runs[]|select(.created_at >= $since)]|length)",
-      (.workflow_runs[] | "  \(.created_at)  run \(.id)  by \(.triggering_actor.login)  \(.conclusion)")'
+      (.workflow_runs[] | "  \(.created_at)  run \(.id)  by \(.triggering_actor.login)  \(.conclusion)") end'
 echo
 
 # ----------------------------------------------- 2. would the replacement agree --
@@ -156,7 +165,8 @@ comm -23 "${OUT}/status-decided" "${OUT}/record-decided" | while IFS= read -r sh
   echo "    STATUS WITHOUT RECORD  ${sha}  status=$(grep -m1 "^${sha} " "${OUT}/status-state" | cut -d' ' -f2)"
 done
 comm -13 "${OUT}/status-decided" "${OUT}/record-decided" | while IFS= read -r sha; do
-  echo "    RECORD WITHOUT STATUS  ${sha}  record=$(record_state "${sha}")  status=$(grep -m1 "^${sha} " "${OUT}/status-state" | cut -d' ' -f2)"
+  s=$(grep -m1 "^${sha} " "${OUT}/status-state" | cut -d' ' -f2)
+  echo "    RECORD WITHOUT STATUS  ${sha}  record=$(record_state "${sha}")  status=${s}"
 done
 while IFS= read -r sha; do
   r=$(record_state "${sha}"); s=$(grep -m1 "^${sha} " "${OUT}/status-state" | cut -d' ' -f2)
@@ -333,11 +343,14 @@ git rev-list --objects "${tip}" | cut -d' ' -f1 \
               printf "  %-8s %7d objects  %8.1f MB  (%.1f MB packed)\n", "total", N, S/1048576, D/1048576}'
 echo "  oldest record: $(head -1 "${OUT}/record-times" 2>/dev/null || echo "run with WIDEN>0")"
 echo "  newest record: $(tail -1 "${OUT}/record-times" 2>/dev/null || echo "run with WIDEN>0")"
-echo "  retention window: RCC_RETENTION_DAYS=$(sed -n 's/^RCC_RETENTION_DAYS="\${RCC_RETENTION_DAYS:-\([0-9]*\)}"/\1/p' "$(git rev-parse --show-toplevel)/scripts/rcc-lib.sh") days"
+days=$(sed -n 's/^RCC_RETENTION_DAYS="\${RCC_RETENTION_DAYS:-\([0-9]*\)}"/\1/p' \
+  "$(git rev-parse --show-toplevel)/scripts/rcc-lib.sh")
+echo "  retention window: RCC_RETENTION_DAYS=${days} days"
 echo "  runs of rcc-consolidate.yaml (nothing is pruned without one):"
 api "repos/${REPO}/actions/workflows/rcc-consolidate.yaml/runs?per_page=100" \
-  | jq -r '"    total: \(.total_count)",
-           (.workflow_runs[]? | "    \(.created_at)  \(.event)  by \(.triggering_actor.login)  \(.conclusion)")'
+  | jq -r 'if .workflow_runs == null then "    workflow not found (removed in #2815; consolidation runs by hand)"
+           else "    total: \(.total_count)",
+           (.workflow_runs[] | "    \(.created_at)  \(.event)  by \(.triggering_actor.login)  \(.conclusion)") end'
 
 echo
 echo "output kept in ${OUT}"
