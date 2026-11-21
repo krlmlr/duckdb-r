@@ -213,14 +213,14 @@
       - a (INTEGER)
       - b (VARCHAR)
       
-      WITH d1 AS (SELECT * FROM r_dataframe_scan(0x...)) SELECT * FROM (WITH d2 AS (SELECT * FROM r_dataframe_scan(0x...)) SELECT * FROM (SELECT * FROM (d1 CROSS JOIN d2) ORDER BY a, b) AS query_relation) AS query_relation
+      WITH d1 AS (SELECT * FROM r_dataframe_scan(0x..., true, false, false)) SELECT * FROM (WITH d2 AS (SELECT * FROM r_dataframe_scan(0x..., true, false, false)) SELECT * FROM (SELECT * FROM (d1 CROSS JOIN d2) ORDER BY a, b) AS query_relation) AS query_relation
 
 # from sql: name used twice is pinned once
 
     Code
       writeLines(rel_to_sql(rel))
     Output
-      WITH dd AS (SELECT * FROM r_dataframe_scan(0x...)) SELECT * FROM (SELECT x.a, y.a AS b FROM (dd AS x INNER JOIN dd AS y ON ((x.a = y.a))) ORDER BY x.a) AS query_relation
+      WITH dd AS (SELECT * FROM r_dataframe_scan(0x..., true, false, false)) SELECT * FROM (SELECT x.a, y.a AS b FROM (dd AS x INNER JOIN dd AS y ON ((x.a = y.a))) ORDER BY x.a) AS query_relation
 
 # from sql: the name lookup in the environment is case sensitive
 
