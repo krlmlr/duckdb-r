@@ -525,7 +525,9 @@
 # printed tree and sql text: regular join of each join type
 
     Code
-      for (rel in joins) show_rel(rel)
+      for (rel in joins) {
+        show_rel(rel)
+      }
     Output
       Join REGULAR INNER (a = c)
         r_dataframe_scan(0x...)
