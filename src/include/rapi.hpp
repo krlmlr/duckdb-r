@@ -82,13 +82,11 @@
 // column through its class's methods (`DataFrameScanBind`, src/scan.cpp).
 // Two threads can write the counter at once, so it is updated with
 // read-modify-write operations, relaxed because it orders no other memory.
-// rapi_error_with_context() reads it from DuckDB's data frame scan too, which
-// runs in parallel (`DataFrameScanFunc`). A thread_local counter would
-// read 0 on a worker thread and send it into R from a non-R thread, which is
-// worse than what the guard prevents; sharing sends it down the throwing branch
-// instead. That is a mitigation, not a cure -- a worker that reaches the helper
-// while no ALTREP method is active still calls into R, which is the rule in
-// handbook/architecture/glue/threading/, not something this guard can hold.
+// Only R's thread reads it: rapi_error_with_context() asks OnRThread() first,
+// and a task thread throws there without looking
+// (handbook/architecture/glue/threading/). Nor is it thread_local for its
+// cost: in a shared object every access would be a __tls_get_addr() call, on
+// methods R calls once per element.
 class AltrepGuard {
 public:
 	AltrepGuard() {
