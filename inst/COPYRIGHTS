@@ -1,6 +1,6 @@
-The duckdb package bundles the DuckDB engine (MIT, see LICENSE) and the
-third-party libraries it vendors, whose copyright holders DESCRIPTION lists.
-Notices that a licence requires to accompany the package follow.
+This file records the licence notice of jemalloc, which the duckdb package
+bundles with the DuckDB engine and compiles on 64-bit glibc Linux. Its
+BSD 2-Clause licence asks for the notice to accompany the package.
 
 
 jemalloc (src/duckdb/third_party/jemalloc), compiled on 64-bit glibc Linux
