@@ -35,10 +35,13 @@ one() {
 
 case $section in
 k)
-  for k in 5000 4000 3000 2049 2048 2000 1000 300 100; do one years=2024 k=$k; done
+  for k in 5000 4097 4096 2048 1000 100; do one years=2024 k=$k; done
+  ;;
+limit)
+  for m in 2GB 3GB 4GB 5GB 6GB; do one years=2024 memory_limit=$m; done
   ;;
 threads)
-  for t in 1 2 4; do one years=2024 set.threads=$t; done
+  for t in 1 2 4 8; do one years=2024 set.threads=$t; done
   ;;
 variants)
   for v in no_limit no_order no_argmin no_order_limit; do one years=2024 variant=$v; done

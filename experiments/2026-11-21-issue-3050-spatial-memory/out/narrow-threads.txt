@@ -1,0 +1,80 @@
+## 1.5.6 years=2024 set.threads=1
+year 2024: 3.1 s
+peak buffer memory 1075 MiB, peak temp dir 0 MiB, latency 3.0 s
+HASH_GROUP_BY: 2,518 rows, 2.64 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 set.threads=1 | peak RSS 687 MiB | cgroup peak 619 MiB | wall 0:04.57 | ok
+
+## 2.0.0 years=2024 set.threads=1
+year 2024: 3.0 s
+peak buffer memory 529 MiB, peak temp dir 0 MiB, latency 2.9 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.51 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 set.threads=1 | peak RSS 699 MiB | cgroup peak 625 MiB | wall 0:04.53 | ok
+
+## 2.0.1 years=2024 set.threads=1
+year 2024: 3.0 s
+peak buffer memory 529 MiB, peak temp dir 0 MiB, latency 3.0 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.34 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 set.threads=1 | peak RSS 699 MiB | cgroup peak 624 MiB | wall 0:04.50 | ok
+
+## 1.5.6 years=2024 set.threads=2
+year 2024: 2.5 s
+peak buffer memory 2044 MiB, peak temp dir 0 MiB, latency 2.5 s
+HASH_GROUP_BY: 2,518 rows, 2.73 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 set.threads=2 | peak RSS 1149 MiB | cgroup peak 1081 MiB | wall 0:03.97 | ok
+
+## 2.0.0 years=2024 set.threads=2
+year 2024: 2.4 s
+peak buffer memory 534 MiB, peak temp dir 0 MiB, latency 2.4 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.42 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 set.threads=2 | peak RSS 699 MiB | cgroup peak 625 MiB | wall 0:03.85 | ok
+
+## 2.0.1 years=2024 set.threads=2
+year 2024: 2.6 s
+peak buffer memory 537 MiB, peak temp dir 0 MiB, latency 2.6 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.42 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 set.threads=2 | peak RSS 702 MiB | cgroup peak 627 MiB | wall 0:04.10 | ok
+
+## 1.5.6 years=2024 set.threads=4
+year 2024: 2.3 s
+peak buffer memory 2076 MiB, peak temp dir 0 MiB, latency 2.2 s
+HASH_GROUP_BY: 2,518 rows, 2.89 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 set.threads=4 | peak RSS 1144 MiB | cgroup peak 1077 MiB | wall 0:03.67 | ok
+
+## 2.0.0 years=2024 set.threads=4
+year 2024: 25.0 s
+peak buffer memory 3815 MiB, peak temp dir 6755 MiB, latency 24.9 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 35.65 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 set.threads=4 | peak RSS 1248 MiB | cgroup peak 8093 MiB | wall 0:26.69 | ok
+
+## 2.0.1 years=2024 set.threads=4
+year 2024: 2.5 s
+peak buffer memory 531 MiB, peak temp dir 0 MiB, latency 2.5 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.50 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 set.threads=4 | peak RSS 694 MiB | cgroup peak 619 MiB | wall 0:04.08 | ok
+
+## 1.5.6 years=2024 set.threads=8
+year 2024: 2.5 s
+peak buffer memory 2152 MiB, peak temp dir 0 MiB, latency 2.4 s
+HASH_GROUP_BY: 2,518 rows, 4.63 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 set.threads=8 | peak RSS 1139 MiB | cgroup peak 1072 MiB | wall 0:04.08 | ok
+
+## 2.0.0 years=2024 set.threads=8
+year 2024: 218.8 s
+peak buffer memory 3815 MiB, peak temp dir 44603 MiB, latency 218.7 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 217.72 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 set.threads=8 | peak RSS 2470 MiB | cgroup peak 8192 MiB | wall 3:41.63 | ok
+
+## 2.0.1 years=2024 set.threads=8
+year 2024: 115.4 s
+peak buffer memory 3815 MiB, peak temp dir 25981 MiB, latency 115.4 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 114.34 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 set.threads=8 | peak RSS 2024 MiB | cgroup peak 8192 MiB | wall 1:59.56 | ok
+

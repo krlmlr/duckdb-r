@@ -1,0 +1,99 @@
+## 1.5.6 years=2024 memory_limit=2GB
+year 2024: 2.2 s
+peak buffer memory 2079 MiB, peak temp dir 0 MiB, latency 2.1 s
+HASH_GROUP_BY: 2,518 rows, 2.76 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 memory_limit=2GB | peak RSS 1146 MiB | cgroup peak 1076 MiB | wall 0:03.68 | ok
+
+## 2.0.0 years=2024 memory_limit=2GB
+Error in `duckdb_result()`:
+! Out of Memory Error: could not allocate block of size 256.0 KiB (1.8 GiB/1.8 GiB used)
+ℹ Error type: OUT_OF_MEMORY
+RESULT 2.0.0 years=2024 memory_limit=2GB | peak RSS 2192 MiB | cgroup peak 8192 MiB | wall 1:44.14 | error (exit 1)
+
+## 2.0.1 years=2024 memory_limit=2GB
+year 2024: 146.9 s
+peak buffer memory 1907 MiB, peak temp dir 26717 MiB, latency 146.9 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 145.69 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 memory_limit=2GB | peak RSS 2024 MiB | cgroup peak 8192 MiB | wall 2:28.91 | ok
+
+## 1.5.6 years=2024 memory_limit=3GB
+year 2024: 2.8 s
+peak buffer memory 2077 MiB, peak temp dir 0 MiB, latency 2.8 s
+HASH_GROUP_BY: 2,518 rows, 3.66 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 memory_limit=3GB | peak RSS 1145 MiB | cgroup peak 1082 MiB | wall 0:04.27 | ok
+
+## 2.0.0 years=2024 memory_limit=3GB
+year 2024: 36.1 s
+peak buffer memory 2861 MiB, peak temp dir 10887 MiB, latency 36.1 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 57.34 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 memory_limit=3GB | peak RSS 1306 MiB | cgroup peak 8192 MiB | wall 0:38.33 | ok
+
+## 2.0.1 years=2024 memory_limit=3GB
+year 2024: 85.8 s
+peak buffer memory 2861 MiB, peak temp dir 27634 MiB, latency 85.8 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 203.39 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 memory_limit=3GB | peak RSS 1735 MiB | cgroup peak 8192 MiB | wall 1:31.14 | ok
+
+## 1.5.6 years=2024 memory_limit=4GB
+year 2024: 3.3 s
+peak buffer memory 2077 MiB, peak temp dir 0 MiB, latency 3.2 s
+HASH_GROUP_BY: 2,518 rows, 3.87 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 memory_limit=4GB | peak RSS 1139 MiB | cgroup peak 1073 MiB | wall 0:05.51 | ok
+
+## 2.0.0 years=2024 memory_limit=4GB
+year 2024: 24.6 s
+peak buffer memory 3815 MiB, peak temp dir 6782 MiB, latency 24.6 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 34.59 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 memory_limit=4GB | peak RSS 1255 MiB | cgroup peak 8135 MiB | wall 0:26.36 | ok
+
+## 2.0.1 years=2024 memory_limit=4GB
+year 2024: 2.7 s
+peak buffer memory 531 MiB, peak temp dir 0 MiB, latency 2.7 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.71 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 memory_limit=4GB | peak RSS 693 MiB | cgroup peak 618 MiB | wall 0:04.42 | ok
+
+## 1.5.6 years=2024 memory_limit=5GB
+year 2024: 2.5 s
+peak buffer memory 2078 MiB, peak temp dir 0 MiB, latency 2.5 s
+HASH_GROUP_BY: 2,518 rows, 3.16 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 memory_limit=5GB | peak RSS 1143 MiB | cgroup peak 1076 MiB | wall 0:04.08 | ok
+
+## 2.0.0 years=2024 memory_limit=5GB
+year 2024: 24.7 s
+peak buffer memory 4768 MiB, peak temp dir 6424 MiB, latency 24.7 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 35.39 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 memory_limit=5GB | peak RSS 1280 MiB | cgroup peak 7781 MiB | wall 0:26.34 | ok
+
+## 2.0.1 years=2024 memory_limit=5GB
+year 2024: 2.6 s
+peak buffer memory 531 MiB, peak temp dir 0 MiB, latency 2.6 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.66 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 memory_limit=5GB | peak RSS 695 MiB | cgroup peak 620 MiB | wall 0:04.31 | ok
+
+## 1.5.6 years=2024 memory_limit=6GB
+year 2024: 2.6 s
+peak buffer memory 2077 MiB, peak temp dir 0 MiB, latency 2.6 s
+HASH_GROUP_BY: 2,518 rows, 3.22 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 1.5.6 years=2024 memory_limit=6GB | peak RSS 1145 MiB | cgroup peak 1078 MiB | wall 0:04.14 | ok
+
+## 2.0.0 years=2024 memory_limit=6GB
+year 2024: 2.3 s
+peak buffer memory 531 MiB, peak temp dir 0 MiB, latency 2.3 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.55 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.0 years=2024 memory_limit=6GB | peak RSS 692 MiB | cgroup peak 618 MiB | wall 0:03.80 | ok
+
+## 2.0.1 years=2024 memory_limit=6GB
+year 2024: 2.4 s
+peak buffer memory 531 MiB, peak temp dir 0 MiB, latency 2.4 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+HASH_GROUP_BY: 2,518 rows (37 MiB), 2.41 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+RESULT 2.0.1 years=2024 memory_limit=6GB | peak RSS 695 MiB | cgroup peak 620 MiB | wall 0:03.87 | ok
+
