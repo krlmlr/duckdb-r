@@ -29,7 +29,8 @@ An `RQueryResult` holds the context its statement ran on through a `shared_ptr`,
 and so does the Arrow stream over it.
 A context holds its instance, which is the lifetime fact everything below turns on.
 A relation holds its context only through a `weak_ptr`, `ClientContextWrapper` in the vendored engine.
-After `dbDisconnect()` it fails with "Connection has already been closed", unless something else still holds that context.
+After `dbDisconnect()` it fails with "Connection has already been closed":
+the results and streams that held the context close with the connection (below), so nothing else holds it.
 
 **What a context scopes.**
 The engine's session is the context: the transaction, the temporary catalog,
@@ -88,7 +89,12 @@ The `ConnWrapper` keeps the set of prepared statements, query results of the Arr
 and closing the connection closes each, which lets go of the last references to the context,
 so nothing of the connection outlives it
 (`ConnWrapper::~ConnWrapper()` in [`src/connection.cpp`](/src/connection.cpp)).
-A stream handed over to nanoarrow or arrow may be released on another thread, so its registration is guarded by a lock.
+A stream handed over to nanoarrow or arrow may be released on another thread, so its registration is guarded by a lock,
+and it may be read on another thread while the connection closes, so its close waits for no read and leaves the teardown to a read in flight
+([`threading/`](/handbook/architecture/glue/threading/README.md)).
+A stream handed over keeps the R connection object reachable, protected from the collector for as long as the stream lives,
+since collecting the connection would close it the way `dbDisconnect()` does:
+`dbGetQueryArrow()` on a connection nothing else refers to returns a stream that reads to its end.
 The R objects stay: `dbIsValid()` on such a result says `FALSE`,
 every other method refuses it naming the closed connection,
 a stream `dbFetchArrow()` handed over reports the same instead of reading on,
@@ -96,6 +102,9 @@ and `dbClearResult()` still succeeds, once and without a word.
 DBI asks for results to be cleared before the connection closes, and for a warning otherwise,
 which `dbDisconnect()` gives, counting the results it closed
 ([`R/dbDisconnect__duckdb_connection.R`](/R/dbDisconnect__duckdb_connection.R)).
+A stream handed over and not read to its end or to an error counts on its own, beside the result it came from,
+since clearing that result does not release it:
+`dbGetQueryArrow()` clears its result as it returns the stream.
 A relation needs none of this: it holds the context weakly, and the engine refuses it once the context is gone
 (`ClientContextWrapper::GetContext()` in vendored `src/duckdb/src/main/client_context_wrapper.cpp`).
 The other shape, a result that keeps the instance reachable through the driver registry so that `duckdb(path)` reuses it,

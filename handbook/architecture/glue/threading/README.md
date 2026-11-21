@@ -112,6 +112,28 @@ a producer thread ends the blocking that underwrites it,
 which is why #2583 guards per connection
 rather than trusting this list.
 
+**A stream may be read on one thread while its connection closes on R's.**
+A stream handed over to nanoarrow or arrow is read wherever its consumer reads it:
+a duckdb scan of a registered Arrow reader pulls from it on a worker thread,
+and arrow's readers pull on arrow's pool.
+`dbDisconnect()` closes it on R's thread meanwhile, possibly from a progress callback of another query,
+which runs while that query's worker threads pull,
+or from a progress callback of the very fetch that is reading the stream, on R's thread itself.
+So every read takes the stream's own lock, and a close only tries it:
+with no read in flight, the close tears the query result down at once;
+with one in flight, it marks the stream closed and leaves the teardown to that read, which finishes it as it ends,
+so the read never loses what it reads, and the next one reports the closed connection
+(`RArrowArrayStreamWrapper::Close()` in [`src/arrow_export.cpp`](/src/arrow_export.cpp)).
+The close does not wait, because a read may need what R's thread holds:
+inside a callback, R's thread holds a client context lock that a read may want,
+and underneath a progress callback it holds the stream's own lock.
+The locks are taken in one order:
+the lock on the connections' streams, then a stream's own lock, then a client context lock;
+a read takes only the latter two, and R's thread only ever tries the stream's lock.
+Inside a callback, the teardown parks what would take a client context lock, on whichever thread runs it.
+A teardown left to a read in flight on another thread may finish after `dbDisconnect()` has returned,
+so the instance is released then rather than at the disconnect.
+
 **Reporting an error calls R, even where R may not run.**
 `rapi_error_with_context()` ([`src/utils.cpp`](/src/utils.cpp)) reports by calling the R function `rapi_error()`,
 and the scan reaches it through `SexpToValue()`

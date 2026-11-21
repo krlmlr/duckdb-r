@@ -2,6 +2,18 @@
 
 Commits since v2.0.99.9000: <https://github.com/duckdb/duckdb-r/compare/v2.0.99.9000...main>.
 
+## Breaking changes
+
+- `dbDisconnect()` closes the results and Arrow streams still open on the connection,
+  so that none of them keeps the connection's session, and the database instance with it, alive past the connection.
+  It warns with the number it closed; clear results with `dbClearResult()` before disconnecting.
+  A closed result is no longer valid, and every method but `dbClearResult()` fails naming the closed connection,
+  as does a stream from `dbFetchArrow()` or `dbGetQueryArrow()`.
+  A stream that is still being read keeps its connection from being garbage-collected.
+  `dbDisconnect()` on a connection that is already closed now returns `FALSE` after its warning.
+  A reader from `arrow::to_arrow()` created before the disconnect returns no rows,
+  because arrow's safe reader turns the closed stream's error into the end of the stream.
+
 
 # duckdb 2.0.99.9000 (2026-11-21)
 
@@ -105,7 +117,7 @@ _Drafted with AI from the vendored upstream commits and the R-side changes, not 
 
 - A query that scans an Arrow stream on the stream's own connection fails with the invalidation error rather than waiting for good.
 
-- `dbBind()` on a `dbSendQuery()` result after `dbDisconnect()` fails with "Attempting to execute a prepared statement after its connection was closed!" rather than running the statement again; `dbFetch()` still returns its rows.
+- `dbBind()` on a `dbSendQuery()` result after `dbDisconnect()` fails with "Attempting to execute a prepared statement after its connection was closed!" rather than running the statement again.
 
 
 # duckdb 1.5.6
