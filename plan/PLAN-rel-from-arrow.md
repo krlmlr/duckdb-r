@@ -21,17 +21,18 @@ Measured evidence:
 
 * Neither existing constructor reaches an Arrow scan.
   `rel_from_df()` takes an Arrow table only through `as.data.frame()`,
-  which materializes it — an order of magnitude slower than starting
+  which materializes it, an order of magnitude slower than starting
   from a data frame already in R.
-  `rel_from_table_function()` cannot express `arrow_scan`,
-  because its three arguments are `POINTER` values and the R side
-  builds scalars.
-  On the v2.0 engine `arrow_scan` takes no arguments at all:
+  `rel_from_table_function()` cannot express `arrow_scan`.
+  On the v2.0 engine `arrow_scan` takes no arguments at all
+  (vendored `src/duckdb/src/function/table/arrow.cpp`):
   the factory travels as the table reference's `bind_info`,
   a `shared_ptr<TableFunctionInfo>` that `ArrowScanReplacement()` sets
   and that `rel_from_table_function()` has no way to pass.
+  On the 1.5.x engine the experiment first ran on, the binder refused the call for a different reason,
+  since `arrow_scan` then took three `POINTER` arguments that the R side does not build.
 * `rel_from_sql()` over a registered name does work,
-  and the verbs compose over the resulting relation —
+  and the verbs compose over the resulting relation:
   project, filter, and a join against a data-frame-backed relation.
   So what is missing is a constructor, not engine support.
 * That route binds late.
@@ -41,7 +42,7 @@ Measured evidence:
   existing relation returns,
   and unregistering it leaves a `Catalog Error` that surfaces at first
   access rather than at `rel_to_altrep()`.
-  A data frame found by the environment scan does not behave this way —
+  A data frame found by the environment scan does not behave this way:
   `EnvironmentScanReplacement()` marks the reference as an external
   dependency, and `QueryRelation::Bind()` freezes the pointer into a
   CTE.
@@ -73,6 +74,7 @@ Measured evidence:
   What materialization evaluates is [`architecture/glue/altrep/`](/handbook/architecture/glue/altrep/README.md)'s,
   and the thread rule is [`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)'s:
   bind and the ALTREP methods run on R's thread,
+  the export call that produces the stream is moved onto the scheduling thread by `INITIALIZE_ON_SCHEDULE`,
   and the stream the producer returns is pulled by engine threads,
   so it must not call R.
 * **Registration is not required.**
@@ -85,13 +87,26 @@ Measured evidence:
 * **One constructor, two producers.**
   `rel_from_arrow()` builds an arrow-package producer with pushdown
   when handed something the `arrow` package owns,
-  and a nanoarrow producer without pushdown otherwise —
-  the producer capability that `PLAN-nanoarrow-df-scan.md` proposes
+  and a nanoarrow producer without pushdown for the sources named below.
+  The choice is the producer capability that `PLAN-nanoarrow-df-scan.md` proposes
   for choosing `arrow_scan` against `arrow_scan_dumb`;
   today's glue names only `arrow_scan`,
   though the engine registers both.
   A caller that wants to force the pushdown-free route passes
   `pushdown = FALSE`.
+* **Only sources whose stream does not call R.**
+  The stream is pulled by engine threads,
+  and nanoarrow's reader over an R connection calls R and refuses any thread but R's
+  ([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)).
+  Construction cannot tell such a stream apart from the outside,
+  so the nanoarrow route takes an allowlist rather than anything `as_nanoarrow_array_stream()` accepts:
+  a data frame and a `nanoarrow_array`, which it converts itself into a stream over memory.
+  Anything else that is not an arrow-package object,
+  a ready-made `nanoarrow_array_stream` included,
+  is refused by `rel_from_arrow()` on R's thread, before any relation is built,
+  with an error that names the class and points at collecting the source into R first.
+  The arrow-package route is unaffected,
+  since its export wraps the source in Arrow's `Scanner`, whose reader does not call R.
 * **Unexported, like the rest.**
   Every function in `R/relational.R` is `@noRd`
   and reached through `:::` by duckplyr;
@@ -111,9 +126,21 @@ Move the class to a header (`src/include/arrow_factory.hpp`) and give
 protecting list, so registration and the relational constructor share
 one implementation.
 
-Pure refactor, no behaviour change; the existing arrow tests cover it.
+Pure refactor, no behavior change; the existing arrow tests cover it.
 
-### 2. feat(relational): `rel_from_arrow()`
+### 2. fix(arrow): initialize `arrow_scan_dumb` on the scheduling thread too
+
+`rapi_startup()` ([`src/database.cpp`](/src/database.cpp)) sets `INITIALIZE_ON_SCHEDULE` on `arrow_scan` alone,
+so this commit extends it to `arrow_scan_dumb`:
+without that, the export call, which `ProduceStream()` makes into R, could run in a scan task, off R's thread
+([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)
+names that setting as what keeps the Arrow scan's call into R safe).
+`PLAN-nanoarrow-df-scan.md` carries the same step;
+whichever plan lands first takes it, and the other drops it.
+
+No behavior change on its own, since nothing binds `arrow_scan_dumb` yet.
+
+### 3. feat(relational): `rel_from_arrow()`
 
 * `src/relational.cpp`: `rapi_rel_from_arrow(con, funs, x, pushdown)`
   builds the factory as the `shared_ptr<RArrowTabularStreamFactory>` registration keeps,
@@ -127,30 +154,31 @@ Pure refactor, no behaviour change; the existing arrow tests cover it.
 * `R/relational.R`: `rel_from_arrow(con, x, ..., pushdown = NULL)`,
   choosing the arrow-package closures when
   `inherits(x, c("Table", "RecordBatch", "RecordBatchReader", "Dataset", "Scanner", "arrow_dplyr_query"))`
-  and the nanoarrow closures otherwise,
-  with `pushdown` overriding the choice.
-  `@noRd`, documented in the file the way its neighbours are.
+  and the nanoarrow closures for a data frame or a `nanoarrow_array`,
+  with `pushdown` overriding the choice,
+  and refusing any other class.
+  `@noRd`, documented in the file the way its neighbors are.
 * Tests (`tests/testthat/test-relational.R`, or a sibling file):
-  a relation over an arrow table and over a nanoarrow-able object;
+  a relation over an arrow table, over a data frame through nanoarrow, and the refusal of a `nanoarrow_array_stream`;
   `rel_names()`, `rel_project()`, `rel_filter()`, `rel_order()`,
   a join against `rel_from_df()`;
   `rel_to_altrep()` materializing correctly;
-  and the two lifetime cases the experiment measured —
-  materialization succeeds after `duckdb_unregister_arrow()` of an
-  unrelated same-named entry, and re-registering that name does not
-  change the relation's rows.
+  and the two lifetime cases the experiment measured.
+  A source registered under some name and passed to `rel_from_arrow()` as well
+  still materializes after `duckdb_unregister_arrow()` of that name,
+  and registering different data under that name does not change the relation's rows.
 
-### 3. feat(relational): route filters honestly for a pushdown-free source
+### 4. feat(relational): route filters honestly for a pushdown-free source
 
 With `pushdown = FALSE` the scan is `arrow_scan_dumb`,
 so `rel_filter()` is applied by the engine.
 Add the test that pins it: the same filter over the same data returns
 the same rows through both producers.
 
-### 4. docs: state the constructor and its binding
+### 5. docs: state the constructor and its binding
 
 `handbook/usage/relational/README.md` gains `rel_from_arrow()` beside
-`rel_from_df()`, and states the binding difference —
+`rel_from_df()`, and states the binding difference:
 a relation from a pointer outlives the catalog,
 a relation from `rel_from_sql()` over a registered name does not.
 `handbook/usage/integrations/README.md` cross-links it from the Arrow
@@ -163,7 +191,7 @@ section.
 * **Fixing the late binding of `rel_from_sql()` over a registered
   Arrow name.**
   Attaching an `ExternalDependency` in `ArrowScanReplacement()` the way
-  `EnvironmentScanReplacement()` does would change the behaviour of an
+  `EnvironmentScanReplacement()` does would change the behavior of an
   existing route, and the experiment does not say whether anything
   depends on the current one.
   Worth its own issue.
@@ -176,9 +204,9 @@ section.
 
 ## Open questions
 
-* Whether `rel_from_df()` should recognise an Arrow-shaped argument and
+* Whether `rel_from_df()` should recognize an Arrow-shaped argument and
   delegate, instead of quietly taking the `as.data.frame()` route.
-  It would be a behaviour change for a `:::` caller,
+  It would be a behavior change for a `:::` caller,
   which is duckplyr's call to make.
 * Whether the `pushdown` argument should exist at all,
   or whether the producer should be asked
