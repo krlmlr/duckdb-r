@@ -1,0 +1,35 @@
+## cli-1.5.6-minimal: cli duckdb minimal.sql
+┌─────────────────┬─────────┐
+│ library_version │ threads │
+│     varchar     │  int64  │
+├─────────────────┼─────────┤
+│ v1.5.6          │       4 │
+└─────────────────┴─────────┘
+┌─────────────────┐
+│ setseed(0.3050) │
+│      int32      │
+├─────────────────┤
+│            NULL │
+└─────────────────┘
+Run Time (s): real 0.000 user 0.000291 sys 0.000028
+Run Time (s): real 0.000 user 0.000242 sys 0.000023
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2500 │ 2900000 │
+└──────────────┴─────────┘
+Run Time (s): real 0.236 user 0.714924 sys 0.195303
+Run Time (s): real 0.000 user 0.000280 sys 0.000042
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2500 │ 2809600 │
+└──────────────┴─────────┘
+Run Time (s): real 0.195 user 0.736837 sys 0.000263
+Run Time (s): real 0.000 user 0.000294 sys 0.000033
+RESULT cli-1.5.6-minimal | peak RSS 742 MiB | cgroup peak 722 MiB | wall 0:01.30 | ok
+./minimal-4096.json: peak buffer memory 1321 MiB, peak temp dir 0 MiB
+./minimal-5000.json: peak buffer memory 1321 MiB, peak temp dir 0 MiB
+

@@ -1,0 +1,31 @@
+## cli-2.0.0-pairs: cli duckdb pairs.sql
+┌──────────────┬──────────────────────────┐
+│ count_star() │ typeof(any_value(dgeom)) │
+│    int64     │         varchar          │
+├──────────────┼──────────────────────────┤
+│      3325284 │ GEOMETRY                 │
+└──────────────┴──────────────────────────┘
+Run Time (s): real 0.000 user 0.000272 sys 0.000035
+Run Time (s): real 0.000 user 0.000339 sys 0.000044
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2518 │ 3226383 │
+└──────────────┴─────────┘
+Run Time (s): real 0.306 user 0.819637 sys 0.309479
+Run Time (s): real 0.001 user 0.000498 sys 0.000128
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2518 │ 3078629 │
+└──────────────┴─────────┘
+Run Time (s): real 0.257 user 0.932463 sys 0.030328
+Run Time (s): real 0.001 user 0.000671 sys 0.000117
+RESULT cli-2.0.0-pairs | peak RSS 815 MiB | cgroup peak 761 MiB | wall 0:01.19 | ok
+./pairs-4096.json: peak buffer memory 746 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 0.90 s arg_min_nulls_last(#1, #2, #3)
+./pairs-5000.json: peak buffer memory 750 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 1.07 s arg_min_nulls_last(#1, #2, #3)
+

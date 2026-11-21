@@ -168,6 +168,11 @@ This file is what names the contents, so nothing here is an orphan.
   before and after #2890 gave the atomic classes per-element methods that skip the guard.
   Supports [`architecture/glue/altrep/`](/handbook/architecture/glue/altrep/README.md).
 
+* [`2026-11-21-issue-3050-spatial-memory/`](2026-11-21-issue-3050-spatial-memory/):
+  memory and time of a spatial `LATERAL` top-N query on 1.5.6, 2.0.0 and 2.0.1, from R and the CLI,
+  and which memory limit, thread count, `LIMIT` and query shape make 2.0 spill.
+  Supports the analysis on [#3050](https://github.com/duckdb/duckdb-r/issues/3050); no handbook leaf.
+
 Adding one: create the directory, name it for the date and the topic,
 open its `README.md` with what and when and on what,
 and link it from the leaf that relies on it.

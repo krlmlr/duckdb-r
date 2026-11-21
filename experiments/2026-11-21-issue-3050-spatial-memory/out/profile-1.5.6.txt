@@ -1,0 +1,33 @@
+## profile-1.5.6: r lib-156 years=2024 explain=analyze
+duckdb 1.5.6, engine v1.5.6 (069cc9f9b5)
+                      name                                          value
+1             memory_limit                                        3.7 GiB
+2 preserve_insertion_order                                           true
+3           temp_directory /tmp/RtmpB8RJT6/duckdb/temp/spill-57423fd1061c
+4                  threads                                              4
+year 2024: 2.2 s
+peak buffer memory 2076 MiB, peak temp dir 0 MiB, latency 2.2 s
+PROJECTION: 2,681 rows, 0.00 s
+  RIGHT_DELIM_JOIN: 0 rows, 0.00 s | Join Type: RIGHT; Conditions: geom IS NOT DISTINCT FROM geom; Delim Index: 1
+    PROJECTION: 2,681 rows, 0.00 s
+      FILTER: 2,681 rows, 0.00 s | Expression: (year = 2024)
+        R_DATAFRAME_SCAN: 26,000 rows, 0.00 s | Text: data.frame
+    HASH_JOIN: 2,681 rows, 0.00 s | Join Type: RIGHT; Conditions: geom IS NOT DISTINCT FROM geom
+      PROJECTION: 2,681 rows, 0.00 s
+        HASH_JOIN: 2,681 rows, 0.00 s | Join Type: RIGHT; Conditions: #0 IS NOT DISTINCT FROM geom
+          HASH_GROUP_BY: 2,518 rows, 0.13 s | Groups: #0; Aggregates: count_star(), avg(#1), min(#2), arg_min(#3, #4)
+            PROJECTION: 3,226,383 rows, 0.00 s
+              PROJECTION: 3,226,383 rows, 0.00 s
+                PROJECTION: 3,226,383 rows, 0.00 s
+                  UNNEST: 3,226,383 rows, 0.00 s
+                    HASH_GROUP_BY: 2,518 rows, 2.74 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+                      PROJECTION: 3,325,284 rows, 0.01 s
+                        PROJECTION: 3,325,284 rows, 0.07 s
+                          SPATIAL_JOIN: 3,325,284 rows, 0.19 s | Join Type: INNER; Conditions: ST_DWithin(geom, geom)
+                            SEQ_SCAN: 70,000 rows, 0.00 s | Table: "temp".main."ref"; Type: Sequential Scan; Dynamic Filters: optional: st_intersects_extent(geom, POLYGON ((-1861.199951171875 -4924, -1861.199951171875 302379.5, 302428.5 302379.5, 302428.5 -4924, -1861.199951171875 -4924)))
+                            DELIM_SCAN: 0 rows, 0.00 s | Delim Index: 1
+          DELIM_SCAN: 0 rows, 0.00 s | Delim Index: 1
+      DUMMY_SCAN: 0 rows, 0.00 s
+    HASH_GROUP_BY: 5,362 rows, 0.00 s | Groups: #2; Aggregates: 
+RESULT profile-1.5.6 | peak RSS 1142 MiB | cgroup peak 1076 MiB | wall 0:03.61 | ok
+

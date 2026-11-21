@@ -34,6 +34,9 @@ one() {
 }
 
 case $section in
+default-limit)
+  for t in 4 8 16; do one years=2024 memory_limit=default set.threads=$t; done
+  ;;
 k)
   for k in 5000 4097 4096 2048 1000 100; do one years=2024 k=$k; done
   ;;

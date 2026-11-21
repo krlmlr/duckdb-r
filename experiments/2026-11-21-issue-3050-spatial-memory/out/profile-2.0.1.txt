@@ -1,0 +1,42 @@
+## profile-2.0.1: r lib-2.0.1 years=2024 explain=analyze
+duckdb 2.0.1, engine v2.0.1 (8d78114e90)
+                      name                                          value
+1             memory_limit                                        3.7 GiB
+2 preserve_insertion_order                                           true
+3           temp_directory /tmp/Rtmp0NkLyF/duckdb/temp/spill-5bad714c66a6
+4                  threads                                              4
+year 2024: 2.4 s
+peak buffer memory 532 MiB, peak temp dir 0 MiB, latency 2.4 s
+RESULT_COLLECTOR: 0 rows (0 MiB), 0.00 s
+  EXECUTE: 0 rows (0 MiB), 0.00 s
+    CTE: 0 rows (0 MiB), 0.00 s | CTE Name: data; Table Index: 0; Execution Mode: HYBRID_FANOUT; Fanout Mode: DIRECT; Consumers: 1; Direct Consumers: 1; Buffered Consumers: 0; Chunk Storage: NONE; Order Mode: SEQUENTIAL; Materialized Consumers: 1
+      PROJECTION: 2,681 rows (0 MiB), 0.00 s
+        FILTER: 2,681 rows (0 MiB), 0.00 s | Expression: (year = 2024)
+          TABLE_SCAN: 26,000 rows (1 MiB), 0.00 s | Text: data.frame
+      PROJECTION: 2,681 rows (0 MiB), 0.00 s
+        CTE: 0 rows (0 MiB), 0.00 s | CTE Name: __duckdb_delim_dedup_40; Table Index: 40; Execution Mode: MATERIALIZED; Order Mode: UNORDERED; Materialized Consumers: 2
+          HASH_GROUP_BY: 2,681 rows (0 MiB), 0.00 s | Groups: #0; Aggregates: 
+            PROJECTION: 2,681 rows (0 MiB), 0.00 s
+              PROJECTION: 2,681 rows (0 MiB), 0.00 s
+                CTE_SCAN: 2,681 rows (0 MiB), 0.00 s | CTE Index: 0; CTE Mode: DIRECT; Consumer: 0
+          HASH_JOIN: 2,681 rows (0 MiB), 0.00 s | Join Type: LEFT; Conditions: geom IS NOT DISTINCT FROM geom
+            CTE_SCAN: 2,681 rows (0 MiB), 0.00 s | CTE Index: 0
+            PROJECTION: 2,681 rows (0 MiB), 0.00 s
+              CROSS_PRODUCT: 2,681 rows (0 MiB), 0.00 s
+                HASH_JOIN: 2,681 rows (0 MiB), 0.00 s | Join Type: RIGHT; Conditions: #0 IS NOT DISTINCT FROM geom
+                  HASH_GROUP_BY: 2,518 rows (0 MiB), 0.04 s | Groups: #0; Aggregates: count_star(), avg(#1), min(#2), arg_min(#3, #4)
+                    PROJECTION: 3,226,383 rows (137 MiB), 0.00 s
+                      PROJECTION: 3,226,383 rows (88 MiB), 0.00 s
+                        PROJECTION: 3,226,383 rows (88 MiB), 0.00 s
+                          UNNEST: 3,226,383 rows (14715 MiB), 0.00 s
+                            HASH_GROUP_BY: 2,518 rows (37 MiB), 2.46 s | Groups: #0; Aggregates: arg_min_nulls_last(#1, #2, #3)
+                              PROJECTION: 3,325,284 rows (140 MiB), 0.01 s
+                                PROJECTION: 3,325,284 rows (89 MiB), 0.19 s
+                                  EXTENSION: 3,325,284 rows (114 MiB), 0.33 s | Join Type: INNER; Conditions: ST_DWithin(geom, geom, 2500.0)
+                                    TABLE_SCAN: 70,000 rows (1 MiB), 0.00 s | Table: "temp".main."ref"; Type: Sequential Scan; Dynamic Filters: optional: st_intersects_extent(geom, 'POLYGON ((-1861.199951171875 -4924, -1861.199951171875 302379.5, 302428.5 302379.5, 302428.5 -4924, -1861.199951171875 -4924))'::GEOMETRY)
+                                    CTE_SCAN: 2,681 rows (0 MiB), 0.00 s | CTE Index: 40
+                  CTE_SCAN: 2,681 rows (0 MiB), 0.00 s | CTE Index: 40
+                UNGROUPED_AGGREGATE: 1 rows (0 MiB), 0.00 s | Aggregates: count_star()
+                  EMPTY_RESULT: 0 rows (0 MiB), 0.00 s
+RESULT profile-2.0.1 | peak RSS 693 MiB | cgroup peak 618 MiB | wall 0:03.94 | ok
+

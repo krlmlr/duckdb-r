@@ -1,0 +1,37 @@
+## cli-2.0.1-minimal: cli duckdb minimal.sql
+┌─────────────────┬─────────┐
+│ library_version │ threads │
+│     varchar     │  int64  │
+├─────────────────┼─────────┤
+│ v2.0.1          │       4 │
+└─────────────────┴─────────┘
+┌─────────────────┐
+│ setseed(0.3050) │
+│     "null"      │
+├─────────────────┤
+│ NULL            │
+└─────────────────┘
+Run Time (s): real 0.000 user 0.000377 sys 0.000060
+Run Time (s): real 0.000 user 0.000229 sys 0.000037
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2500 │ 2900000 │
+└──────────────┴─────────┘
+Run Time (s): real 0.277 user 0.856931 sys 0.168383
+Run Time (s): real 0.000 user 0.000384 sys 0.000069
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2500 │ 2809600 │
+└──────────────┴─────────┘
+Run Time (s): real 0.221 user 0.773508 sys 0.016252
+Run Time (s): real 0.001 user 0.000511 sys 0.000066
+RESULT cli-2.0.1-minimal | peak RSS 698 MiB | cgroup peak 671 MiB | wall 0:01.26 | ok
+./minimal-4096.json: peak buffer memory 613 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 0.73 s arg_min_nulls_last(#1, #2, #3)
+./minimal-5000.json: peak buffer memory 645 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 0.97 s arg_min_nulls_last(#1, #2, #3)
+

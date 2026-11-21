@@ -1,0 +1,25 @@
+## cli-2.0.1-rewrite: cli duckdb rewrite.sql
+Run Time (s): real 0.001 user 0.000417 sys 0.000057
+Run Time (s): real 0.001 user 0.000524 sys 0.000072
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2518 │ 3226383 │
+└──────────────┴─────────┘
+Run Time (s): real 1.147 user 1.273907 sys 0.118472
+Run Time (s): real 0.001 user 0.000509 sys 0.000053
+┌──────────────┬─────────┐
+│ count_star() │ sum(n)  │
+│    int64     │ int128  │
+├──────────────┼─────────┤
+│         2518 │ 3226383 │
+└──────────────┴─────────┘
+Run Time (s): real 1.410 user 1.537508 sys 0.143365
+Run Time (s): real 0.001 user 0.000519 sys 0.000051
+RESULT cli-2.0.1-rewrite | peak RSS 599 MiB | cgroup peak 556 MiB | wall 0:03.11 | ok
+./rewrite-geom.json: peak buffer memory 233 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 0.85 s arg_min_nulls_last(#1, #2, #3)
+./rewrite-obsid.json: peak buffer memory 327 MiB, peak temp dir 0 MiB
+  HASH_GROUP_BY: 0.96 s arg_min_nulls_last(#1, #2, #3)
+
