@@ -75,9 +75,9 @@ runs:
         max-size: 200M
         verbose: 1
 
-    # Compiles the glue with the clang that built the prebuilt libduckdb, and
-    # has covr read the coverage notes of that build with the llvm-cov of the
-    # same release (handbook/build/fast-paths/README.md says why).
+    # Compiles the glue with the clang that built the prebuilt libduckdb, or
+    # the image's clang where apt has no such version, and has covr read the
+    # coverage notes of that build with the llvm-cov of the same release (handbook/build/fast-paths/README.md says why).
     #
     # Here rather than in before-install, which installs the library: the
     # install action runs in between and appends ccache-wrapped compilers,
@@ -94,28 +94,70 @@ runs:
         major=$(readelf -p .comment "${lib}" | sed -n 's/.*clang version \([0-9][0-9]*\)\..*/\1/p' | head -n 1)
         echo "${lib} was built with clang ${major:-of an unknown version}."
 
-        # That major version where apt offers it, the image's clang otherwise,
-        # each with the llvm-cov of its release, which clang only recommends.
+        # Coverage is measured only where covr is installed (the smoke test).
+        # It needs llvm-cov and clang's profile runtime, which clang only
+        # recommends, so the other legs skip both.
+        if Rscript --vanilla -e 'quit(status = !requireNamespace("covr", quietly = TRUE))'; then
+          coverage=true
+        else
+          coverage=false
+        fi
+        echo "covr installed: ${coverage}"
+
+        # apt fails now and then for reasons of its own, a mirror in sync or a
+        # dropped connection, so each install is tried three times. There is
+        # no falling back to GCC, which is what breaks the glue (#2955).
+        apt_install() {
+          for attempt in 1 2 3; do
+            if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"; then
+              return 0
+            fi
+            echo "::warning::apt-get install $* failed (attempt ${attempt} of 3)."
+            sleep $((attempt * 15))
+            sudo apt-get update || true
+          done
+          echo "::error::Could not install $* with apt. The glue must be compiled with clang to link the prebuilt libduckdb (#2955); rerun the job."
+          return 1
+        }
+
+        # That major version where apt offers it, the image's clang otherwise:
+        # clang agrees with clang about the ABI across major versions.
         suffix=
         if [ -n "${major}" ]; then
           candidate=$(apt-cache policy "clang-${major}" | sed -n 's/^ *Candidate: *//p')
           if [ -n "${candidate}" ] && [ "${candidate}" != "(none)" ]; then
-            command -v "clang++-${major}" >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "clang-${major}"
-            command -v "llvm-cov-${major}" >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "llvm-${major}"
-          fi
-          if command -v "clang++-${major}" >/dev/null && command -v "llvm-cov-${major}" >/dev/null; then
+            command -v "clang++-${major}" >/dev/null || apt_install "clang-${major}"
+            if [ "${coverage}" = true ]; then
+              command -v "llvm-cov-${major}" >/dev/null || apt_install "llvm-${major}"
+              apt_install "libclang-rt-${major}-dev"
+            fi
             suffix="-${major}"
+          else
+            echo "apt offers no clang-${major}; using the image's clang, which is ABI-compatible."
           fi
         fi
         if [ -z "${suffix}" ]; then
-          command -v clang++ >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y clang
-          command -v llvm-cov >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y llvm
+          command -v clang++ >/dev/null || apt_install clang
+          if [ "${coverage}" = true ]; then
+            command -v llvm-cov >/dev/null || apt_install llvm
+            apt_install libclang-rt-dev
+          fi
         fi
         cc="clang${suffix}"
         cxx="clang++${suffix}"
-        cov="$(command -v "llvm-cov${suffix}")"
+        if ! command -v "${cxx}" >/dev/null || ! command -v "${cc}" >/dev/null; then
+          echo "::error::${cc} or ${cxx} is missing after the install."
+          exit 1
+        fi
+        "${cc}" --version
         "${cxx}" --version
-        "${cov}" --version
+        if [ "${coverage}" = true ]; then
+          if ! cov="$(command -v "llvm-cov${suffix}")"; then
+            echo "::error::llvm-cov${suffix} is missing after the install."
+            exit 1
+          fi
+          "${cov}" --version
+        fi
 
         # The one-word command R runs for a compiler: a ccache wrapper where
         # ccache is installed, the bare compiler otherwise.
@@ -133,9 +175,17 @@ runs:
         cc_cmd=$(wrap "${cc}")
         cxx_cmd=$(wrap "${cxx}")
 
-        # Never hand R a compiler that cannot build and link against libstdc++.
+        # Never hand R a compiler that cannot run, or a C++ compiler that cannot
+        # build and link against libstdc++, or, where covr runs, link the
+        # profile runtime that --coverage pulls in.
+        "${cc_cmd}" --version
+        "${cxx_cmd}" --version
+        probe_flags=
+        if [ "${coverage}" = true ]; then
+          probe_flags=--coverage
+        fi
         printf '#include <string>\nint main() { return std::string("ok").size() - 2; }\n' |
-          "${cxx_cmd}" -x c++ -std=gnu++17 - -o "${RUNNER_TEMP}/clang-probe"
+          "${cxx_cmd}" -x c++ -std=gnu++17 ${probe_flags} - -o "${RUNNER_TEMP}/clang-probe"
         "${RUNNER_TEMP}/clang-probe"
 
         # The glue warning gate is written for GCC, and clang rejects its
@@ -167,7 +217,9 @@ runs:
         # covr builds with this clang too, and GNU gcov cannot read its notes,
         # so covr runs `llvm-cov gcov` instead. The covr action's Rscript reads
         # the checkout's .Rprofile, which sources the ~/.Rprofile setup-r wrote.
-        echo "options(covr.gcov = '${cov}', covr.gcov_args = 'gcov')" | tee -a ~/.Rprofile
+        if [ "${coverage}" = true ]; then
+          echo "options(covr.gcov = '${cov}', covr.gcov_args = 'gcov')" | tee -a ~/.Rprofile
+        fi
       shell: bash
 
     # The vendored half of the compiler-warning gate
