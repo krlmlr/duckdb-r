@@ -268,7 +268,7 @@ static void AppendMapEntriesListColumnSegment(const RType &rtype, bool timestamp
 			len = (R_len_t)Rf_xlength(key_col);
 			for (R_len_t j = 0; j < len; ++j) {
 				child_list_t<Value> kv;
-				kv.push_back({"key", RApiTypes::SexpToValue(key_col, j)});
+				kv.push_back({"key", RApiTypes::SexpToValue(key_col, j, true, timestamptz)});
 				kv.push_back({"value", RApiTypes::SexpToValue(value_col, j, true, timestamptz)});
 				ListVector::PushBack(result, Value::STRUCT(std::move(kv)));
 			}
@@ -534,6 +534,7 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, bool t
 	}
 }
 
+// Options for the relational writers, naive like the rest of the relational path (handbook/usage/relational/README.md)
 identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 	const bool integer64 = false, experimental = false, timestamptz = false;
 	identifier_map_t<vector<Value>> output;
@@ -544,7 +545,7 @@ identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 	}
 	R_xlen_t input_idx = 0;
 	for (sexp parameter_sexp : input_sexps) {
-		auto rtype = RApiTypes::DetectRType(parameter_sexp, integer64);
+		auto rtype = RApiTypes::DetectRType(parameter_sexp, integer64, timestamptz);
 		auto coldata = GetColDataPtr(rtype, parameter_sexp);
 		auto size = RApiTypes::GetVecSize(parameter_sexp, integer64);
 		Vector v(RApiTypes::LogicalTypeFromRType(rtype, experimental));

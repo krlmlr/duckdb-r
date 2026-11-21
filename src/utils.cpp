@@ -191,7 +191,8 @@ R_len_t RApiTypes::GetVecSize(RType rtype, SEXP coldata) {
 }
 
 R_len_t RApiTypes::GetVecSize(SEXP coldata, bool integer64) {
-	auto rtype = DetectRType(coldata, integer64);
+	// The size does not depend on the POSIXct mapping
+	auto rtype = DetectRType(coldata, integer64, false);
 	return GetVecSize(rtype, coldata);
 }
 

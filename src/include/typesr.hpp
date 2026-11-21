@@ -125,8 +125,9 @@ private:
 
 struct RApiTypes {
 	// `timestamptz` picks the type a POSIXct column maps to: TIMESTAMP_TZ when set,
-	// TIMESTAMP otherwise. Handbook: handbook/usage/timestamps/README.md
-	static RType DetectRType(SEXP v, bool integer64, bool timestamptz = false);
+	// TIMESTAMP otherwise. No default, so that every caller decides.
+	// Handbook: handbook/usage/timestamps/README.md
+	static RType DetectRType(SEXP v, bool integer64, bool timestamptz);
 	static bool IsClassedArray(SEXP v);
 	static bool IsHighArray(SEXP v);
 	static string ArrayColumnError(SEXP v, const string &name);
@@ -135,7 +136,7 @@ struct RApiTypes {
 	static string DetectLogicalType(const LogicalType &stype, const char *caller);
 	static R_len_t GetVecSize(RType rtype, SEXP coldata);
 	static R_len_t GetVecSize(SEXP coldata, bool integer64 = false);
-	static Value SexpToValue(SEXP valsexp, R_len_t idx, bool typed_logical_null = true, bool timestamptz = false);
+	static Value SexpToValue(SEXP valsexp, R_len_t idx, bool typed_logical_null, bool timestamptz);
 	static SEXP ValueToSexp(const Value &val, const ConvertOpts &convert_opts);
 	// Children of a STRUCT or TUPLE, with positional names synthesized for the unnamed TUPLE members
 	static child_list_t<LogicalType> StructLikeChildTypes(const LogicalType &type);

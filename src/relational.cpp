@@ -740,7 +740,8 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 		if (RApiTypes::GetVecSize(parameter_sexp) < 1) {
 			stop("rel_from_table_function: Can't have zero-length parameter");
 		}
-		positional_parameters.push_back(RApiTypes::SexpToValue(parameter_sexp, 0));
+		// Naive, as the relational path keeps POSIXct on TIMESTAMP (handbook/usage/relational/README.md)
+		positional_parameters.push_back(RApiTypes::SexpToValue(parameter_sexp, 0, true, false));
 	}
 
 	named_parameter_map_t named_parameters;
@@ -754,8 +755,9 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 		if (RApiTypes::GetVecSize(parameter_sexp) != 1) {
 			stop("rel_from_table_function: Need scalar parameter");
 		}
+		// Naive, as for the positional parameters above
 		named_parameters[Identifier(std::string(names[named_parameter_idx]))] =
-		    RApiTypes::SexpToValue(parameter_sexp, 0);
+		    RApiTypes::SexpToValue(parameter_sexp, 0, true, false);
 		named_parameter_idx++;
 	}
 

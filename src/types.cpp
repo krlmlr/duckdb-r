@@ -276,7 +276,8 @@ static const char *ClassedArrayClass(SEXP v) {
 	if (!HasValuesBesideRows(v)) {
 		return nullptr;
 	}
-	switch (RApiTypes::DetectRType(v, false).id()) {
+	// Only the R class matters here, so the POSIXct mapping does not
+	switch (RApiTypes::DetectRType(v, false, false).id()) {
 	case RTypeId::FACTOR:
 		return "factor";
 	case RTypeId::DATE:
