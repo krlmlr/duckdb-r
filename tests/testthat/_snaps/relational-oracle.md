@@ -111,14 +111,6 @@
       Error:
       ! {"exception_type":"Binder","exception_message":"Invalid named parameter \"bogus\" for function repeat_row\nFunction does not accept any named parameters."}
 
-# build error: from sql text that does not bind
-
-    Code
-      rel_from_sql(con, "SELECT zz FROM range(3)")
-    Condition <rlang_error>
-      Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"range\"","name":"zz","location":"[7,2]","position":"7","candidates":"range","error_subtype":"COLUMN_NOT_FOUND"}
-
 # build error: distinct over a dropped table
 
     Code
@@ -1130,30 +1122,6 @@
       Error:
       ! {"exception_type":"Not implemented","exception_message":"Unrecognized option \"bogus\" for parquet\n\nCandidate options: \"row_group_size\", \"row_groups_per_file\", \"row_group_size_bytes\", \"debug_use_openssl\", \"bloom_filter_false_positive_ratio\""}
 
-# write: into a database attached read-only
-
-    Code
-      rel_insert(rel, "main", "ro")
-    Condition <rlang_error>
-      Error:
-      ! {"exception_type":"Invalid Input","exception_message":"Failed to insert into table 'ro': Cannot execute statement of type \"INSERT\" on database \"rodb\" which is attached in read-only mode!"}
-
----
-
-    Code
-      rel_to_table(rel, "main", "ro2", FALSE)
-    Condition <rlang_error>
-      Error:
-      ! {"exception_type":"Invalid Input","exception_message":"Failed to create table 'ro2': Cannot execute statement of type \"CREATE\" on database \"rodb\" which is attached in read-only mode!"}
-
----
-
-    Code
-      rel_to_view(rel, "main", "rov", FALSE)
-    Condition <rlang_error>
-      Error:
-      ! {"exception_type":"Invalid Input","exception_message":"Failed to create view 'rov': Cannot execute statement of type \"CREATE\" on database \"rodb\" which is attached in read-only mode!"}
-
 # an aggregate function with order_bys
 
     Code
@@ -1206,6 +1174,38 @@
     Condition <simpleError>
       Error:
       ! {"exception_type":"Connection","exception_message":"Connection has already been closed"}
+
+# build error: from sql text that does not bind
+
+    Code
+      rel_from_sql(con, "SELECT zz FROM range(3)")
+    Condition <rlang_error>
+      Error:
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"range\"","name":"zz","location":"[7,2]","position":"7","candidates":"range","error_subtype":"COLUMN_NOT_FOUND"}
+
+# write: into a database attached read-only
+
+    Code
+      rel_insert(rel, "main", "ro")
+    Condition <rlang_error>
+      Error:
+      ! {"exception_type":"Invalid Input","exception_message":"Failed to insert into table 'ro': Cannot execute statement of type \"INSERT\" on database \"rodb\" which is attached in read-only mode!"}
+
+---
+
+    Code
+      rel_to_table(rel, "main", "ro2", FALSE)
+    Condition <rlang_error>
+      Error:
+      ! {"exception_type":"Invalid Input","exception_message":"Failed to create table 'ro2': Cannot execute statement of type \"CREATE\" on database \"rodb\" which is attached in read-only mode!"}
+
+---
+
+    Code
+      rel_to_view(rel, "main", "rov", FALSE)
+    Condition <rlang_error>
+      Error:
+      ! {"exception_type":"Invalid Input","exception_message":"Failed to create view 'rov': Cannot execute statement of type \"CREATE\" on database \"rodb\" which is attached in read-only mode!"}
 
 # aborted transaction: a step builds, and reading it fails until the rollback
 
