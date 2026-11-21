@@ -76,7 +76,8 @@
 #'   The offset it drops is a [limitation](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations).
 #'   Its text writes it.
 #' * **`TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP`** (`DATETIME`) read as `POSIXct`.
-#'   Under `posixct = "timestamp"`, `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even, and `field.types` names the other precisions.
+#'   Under `posixct = "timestamp"`, `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even.
+#'   Under either setting, `field.types` names these precisions, and `dbAppendTable()` writes into such a column, with that same UTC wall clock whatever the session zone.
 #' * **`TIMESTAMP_NS`** reads as `POSIXct`.
 #'   `POSIXct` writes it to the microsecond through `field.types`, and Arrow writes it directly.
 #' * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.

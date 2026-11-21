@@ -76,7 +76,8 @@ Its text writes it, and so does Arrow.
 The offset it drops is a \href{https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations}{limitation}.
 Its text writes it.
 \item \strong{\code{TIMESTAMP_S}, \code{TIMESTAMP_MS}, \code{TIMESTAMP}} (\code{DATETIME}) read as \code{POSIXct}.
-Under \code{posixct = "timestamp"}, \code{POSIXct} writes \code{TIMESTAMP}, the instant in UTC to the nearest microsecond, a tie to even, and \code{field.types} names the other precisions.
+Under \code{posixct = "timestamp"}, \code{POSIXct} writes \code{TIMESTAMP}, the instant in UTC to the nearest microsecond, a tie to even.
+Under either setting, \code{field.types} names these precisions, and \code{dbAppendTable()} writes into such a column, with that same UTC wall clock whatever the session zone.
 \item \strong{\code{TIMESTAMP_NS}} reads as \code{POSIXct}.
 \code{POSIXct} writes it to the microsecond through \code{field.types}, and Arrow writes it directly.
 \item \strong{\code{TIMESTAMPTZ}} (\verb{TIMESTAMP WITH TIME ZONE}) reads as \code{POSIXct}.

@@ -72,6 +72,23 @@ the wider type mapping is
   The setting reaches `dbWriteTable()`, `dbAppendTable()`,
   `duckdb_register()`, bound parameters, `dbDataType()` and
   `dbQuoteLiteral()`, nested columns included.
+* **Written into a naive column, a `POSIXct` keeps the UTC wall clock.**
+  `dbAppendTable()` into an existing `TIMESTAMP`, `TIMESTAMP_S`,
+  `TIMESTAMP_MS` or `TIMESTAMP_NS` column,
+  `dbWriteTable(append = TRUE)`, and `dbWriteTable()` with
+  `field.types` naming one of these
+  store what `posixct = "timestamp"` stores,
+  whatever the session zone and whether icu is loaded:
+  they convert by epoch, not by the engine's cast,
+  which would take the wall clock in the session `TimeZone`
+  once icu is loaded.
+* **A bound or quoted `POSIXct` meets a naive column in the session zone.**
+  A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
+  so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,
+  and `?::date` gives the date in that zone rather than in UTC;
+  both match the older mapping only while the session zone is UTC.
+  `dbConnect(posixct = "timestamp")` keeps the older behavior,
+  or cast the column with `timezone('UTC', …)` in the query.
 * **Two paths stay on `TIMESTAMP` whatever the setting says.**
   A data frame picked up by name under
   `duckdb(environment_scan = TRUE)` follows the connection's `map` and `experimental`
