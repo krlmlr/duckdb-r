@@ -17,11 +17,15 @@ dbFetchArrow__duckdb_result_arrow <- function(res, ..., chunk_size = 1000000) {
   pending <- res@env$pending_query_results
   if (is.null(pending) || length(pending) == 0L) {
     # Single execution: hand the streaming wrapper over to nanoarrow directly.
+    # The stream keeps the connection reachable, so that collecting a
+    # connection nothing else refers to does not close a stream still being
+    # read (handbook/architecture/glue/objects/README.md).
     stream <- nanoarrow::nanoarrow_allocate_array_stream()
     rethrow_rapi_fetch_arrow_stream_into(
       res@env$query_result,
       stream,
-      chunk_size
+      chunk_size,
+      res@connection@conn_ref
     )
     res@env$completed <- TRUE
     return(stream)

@@ -93,12 +93,55 @@ test_that("a stream handed over by dbFetchArrow() reports the closed connection 
   stream <- dbFetchArrow(res, chunk_size = 10)
   expect_equal(stream$get_next()$length, 10L)
 
-  expect_warning(dbDisconnect(con), "1 result was still open")
+  # The stream counts on its own: clearing the result does not release it.
+  expect_warning(dbDisconnect(con), "2 results were still open")
 
   closed <- "connection this result was sent on has been closed"
   expect_error(stream$get_next(), closed)
   expect_error(stream$get_next(), closed)
   expect_no_warning(dbClearResult(res))
+})
+
+test_that("a stream keeps a connection nothing else refers to from being collected", {
+  skip_if_not_installed("nanoarrow")
+
+  # The connection's finalizer closes its streams, as dbDisconnect() does,
+  # so a stream still being read keeps the connection reachable.
+  stream <- suppressWarnings(dbGetQueryArrow(
+    dbConnect(duckdb()),
+    "SELECT * FROM range(10) t(i)"
+  ))
+  expect_equal(stream$get_next()$length, 10L)
+  gc()
+  expect_null(stream$get_next())
+
+  # Released, the stream lets go of the connection, which is collected.
+  rm(stream)
+  expect_no_error(gc())
+})
+
+test_that("a record batch reader keeps its connection from being collected", {
+  skip_if_not_installed("arrow")
+
+  reader <- local({
+    con <- dbConnect(duckdb())
+    res <- dbSendQuery(con, "SELECT * FROM range(10) t(i)", arrow = TRUE)
+    duckdb_fetch_record_batch(res, chunk_size = 4)
+  })
+  gc()
+  expect_equal(as.data.frame(reader$read_table())$i, 0:9)
+})
+
+test_that("dbDisconnect() counts and closes a stream from dbGetQueryArrow()", {
+  skip_if_not_installed("nanoarrow")
+
+  con <- connect_here()
+  stream <- dbGetQueryArrow(con, "SELECT * FROM range(100000) t(a)")
+  expect_warning(dbDisconnect(con), "1 result was still open")
+  expect_error(
+    stream$get_next(),
+    "connection this result was sent on has been closed"
+  )
 })
 
 test_that("a record batch reader from the legacy arrow route reports the closed connection", {
@@ -109,7 +152,7 @@ test_that("a record batch reader from the legacy arrow route reports the closed 
   reader <- duckdb_fetch_record_batch(res, chunk_size = 10)
   expect_equal(reader$read_next_batch()$num_rows, 10L)
 
-  expect_warning(dbDisconnect(con), "1 result was still open")
+  expect_warning(dbDisconnect(con), "2 results were still open")
 
   expect_error(reader$read_next_batch(), "closed")
   expect_no_warning(dbClearResult(res))

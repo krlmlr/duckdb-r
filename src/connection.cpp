@@ -49,19 +49,29 @@ mutex &duckdb::StreamsLock() {
 	return *lock;
 }
 
-// The callbacks of displays destroyed off R's thread, where R must not be called:
-// the next display, built on R's thread, releases them.
-static std::mutex orphaned_callbacks_lock;
-static std::vector<SEXP> orphaned_callbacks;
+// Objects kept with R_PreserveObject() whose owner was destroyed off R's thread, where R must not be called:
+// the callbacks of progress displays, and the connections that Arrow streams keep reachable.
+// The next entry point on R's thread releases them.
+static std::mutex orphaned_objects_lock;
+static std::vector<SEXP> orphaned_objects;
 
-static void ReleaseOrphanedCallbacks() {
-	std::vector<SEXP> callbacks;
-	{
-		std::lock_guard<std::mutex> guard(orphaned_callbacks_lock);
-		callbacks.swap(orphaned_callbacks);
+void duckdb::ReleaseOnRThread(SEXP object) {
+	if (OnRThread()) {
+		R_ReleaseObject(object);
+		return;
 	}
-	for (auto callback : callbacks) {
-		R_ReleaseObject(callback);
+	std::lock_guard<std::mutex> guard(orphaned_objects_lock);
+	orphaned_objects.push_back(object);
+}
+
+void duckdb::ReleaseOrphanedObjects() {
+	std::vector<SEXP> objects;
+	{
+		std::lock_guard<std::mutex> guard(orphaned_objects_lock);
+		objects.swap(orphaned_objects);
+	}
+	for (auto object : objects) {
+		R_ReleaseObject(object);
 	}
 }
 
@@ -89,7 +99,7 @@ void RProgressBarDisplay::Initialize() {
 
 // The engine builds the display when a query starts, on the thread that issues it, which is R's.
 RProgressBarDisplay::RProgressBarDisplay() : ProgressBarDisplay() {
-	ReleaseOrphanedCallbacks();
+	ReleaseOrphanedObjects();
 	Initialize();
 }
 
@@ -97,12 +107,7 @@ RProgressBarDisplay::~RProgressBarDisplay() {
 	if (progress_callback == R_NilValue) {
 		return;
 	}
-	if (OnRThread()) {
-		R_ReleaseObject(progress_callback);
-		return;
-	}
-	std::lock_guard<std::mutex> guard(orphaned_callbacks_lock);
-	orphaned_callbacks.push_back(progress_callback);
+	ReleaseOnRThread(progress_callback);
 }
 
 void RProgressBarDisplay::Update(double percentage) {
@@ -164,16 +169,27 @@ static void SetDefaultConfigArguments(ClientContext &context) {
 
 // Closes the connection, and with it the results still open on it (~ConnWrapper), and says how many there were:
 // DBI asks for a warning when a connection closes with results uncleared (dbDisconnect__duckdb_connection.R).
+// A stream handed over to nanoarrow or arrow and not read to its end or to an error counts on its own,
+// since clearing its result does not release it: dbGetQueryArrow() clears the result as it returns the stream.
 [[cpp11::register]] int rapi_disconnect(duckdb::conn_eptr_t conn) {
 	// An object parked during the last R callback holds its client context, and with it the database:
 	// destroy it before letting go of the connection, or the file stays open (#2934).
 	// A no-op inside a callback, as everywhere: a finalizer may disconnect there.
 	RCallbackScope::Drain();
+	ReleaseOrphanedObjects();
 	auto conn_wrapper = conn.release();
 	if (!conn_wrapper) {
 		return 0;
 	}
 	auto open_results = static_cast<int>(conn_wrapper->statements.size());
+	{
+		lock_guard<mutex> guard(StreamsLock());
+		for (auto stream : conn_wrapper->streams) {
+			if (stream->handed_over && !stream->ended) {
+				open_results++;
+			}
+		}
+	}
 	delete conn_wrapper;
 	return open_results;
 }

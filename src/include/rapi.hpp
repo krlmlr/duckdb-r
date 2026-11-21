@@ -24,6 +24,8 @@
 #include "convert.hpp"
 
 #include <atomic>
+#include <mutex>
+#include <thread>
 
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
@@ -275,6 +277,12 @@ void RecordRThread();
 //! Guards ConnWrapper::streams, and each stream's pointer back to its connection (connection.cpp)
 mutex &StreamsLock();
 
+//! Releases an object kept with R_PreserveObject(): at once on R's thread, otherwise at the next entry point
+//! on R's thread, where ReleaseOrphanedObjects() runs (connection.cpp)
+void ReleaseOnRThread(SEXP object);
+//! Releases what ReleaseOnRThread() was handed off R's thread; called on R's thread only
+void ReleaseOrphanedObjects();
+
 // A prepared statement and its bound parameters, behind a duckdb_result or a duckdb_result_arrow.
 // The prepared statement holds the client context it was prepared on only weakly; the result stays open
 // until dbClearResult() releases it, or until the connection closes and closes the result with it.
@@ -404,8 +412,13 @@ struct RArrowArrayStreamWrapper {
 	RArrowArrayStreamWrapper(duckdb::shared_ptr<ClientContext> context, duckdb::unique_ptr<QueryResult> result,
 	                         idx_t batch_size, bool invalidated, ConnWrapper *conn_p);
 	~RArrowArrayStreamWrapper();
-	// The connection is closing: let go of the query result, and of the context (arrow_export.cpp)
+	// The connection is closing: let go of the query result, and of the context (arrow_export.cpp).
+	// Called on R's thread with StreamsLock() held; never waits for a read in flight, which finishes the close itself.
 	void Close();
+	// Handed over to nanoarrow or arrow: keeps `conn_ref`, the R connection's external pointer, reachable for as long
+	// as the stream lives, so that collecting the connection does not close a stream still being read.
+	// Called on R's thread.
+	void HandOver(SEXP conn_ref);
 
 	ArrowArrayStream stream;
 	// The engine's callbacks read the result's client context through a raw pointer,
@@ -416,9 +429,35 @@ struct RArrowArrayStreamWrapper {
 	ErrorData last_error;
 	// The connection the stream reads on, null once that connection has closed it
 	ConnWrapper *conn;
-	bool closed = false;
+	// Set by Close(), which may run while another thread reads (handbook/architecture/glue/threading/)
+	std::atomic<bool> closed {false};
+	// Whether a consumer holds the stream rather than the query result, so that it counts on its own
+	// when its connection closes with it
+	bool handed_over = false;
+	// Read to its end, or to an error: such a stream no longer counts as open when its connection closes
+	std::atomic<bool> ended {false};
 
 private:
+	// Taken by every read, so that Close() never tears the query result down under one.
+	// Lock order: StreamsLock(), then read_lock, then the client context lock;
+	// Close() only ever tries read_lock, so R's thread never waits for a read.
+	std::mutex read_lock;
+	// The thread inside a read, so that Close() reached from underneath that read (a progress callback on R's
+	// thread) does not try a lock its own thread holds
+	std::atomic<std::thread::id> reader {};
+	// A close that found a read in flight, finished by that read as it ends
+	std::atomic<bool> close_pending {false};
+	// The R connection kept reachable, R_NilValue unless handed over
+	SEXP keep_alive = R_NilValue;
+	struct ReadGuard {
+		explicit ReadGuard(RArrowArrayStreamWrapper &wrapper);
+		~ReadGuard();
+		RArrowArrayStreamWrapper &wrapper;
+	};
+	void TearDown();
+	void FinishPendingClose();
+	int ReadSchema(ArrowSchema *out);
+	int ReadNext(ArrowArray *out);
 	static int GetSchema(ArrowArrayStream *stream, ArrowSchema *out);
 	static int GetNext(ArrowArrayStream *stream, ArrowArray *out);
 	static const char *GetLastError(ArrowArrayStream *stream);
@@ -584,7 +623,7 @@ void rapi_unregister_arrow(duckdb::conn_eptr_t, SEXP namesexp);
 
 SEXP rapi_execute_arrow(duckdb::rqry_eptr_t, int);
 
-SEXP rapi_record_batch(duckdb::rqry_eptr_t, int);
+SEXP rapi_record_batch(duckdb::rqry_eptr_t, int, cpp11::sexp);
 
 cpp11::r_string rapi_ptr_to_str(SEXP extptr);
 

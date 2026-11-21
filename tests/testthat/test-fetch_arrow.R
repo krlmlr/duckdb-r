@@ -116,7 +116,8 @@ test_that("duckdb_fetch_record_batch() closes with its connection", {
   )
   reader <- duckdb_fetch_record_batch(res)
   dbClearResult(res)
-  expect_no_warning(dbDisconnect(con))
+  # The reader counts on its own: clearing the result does not release it.
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
   expect_error(

@@ -200,7 +200,12 @@ duckdb_fetch_record_batch <- function(res, chunk_size = 1000000) {
   if (chunk_size <= 0) {
     abort("Chunk Size must be higher than 0")
   }
-  rethrow_rapi_record_batch(res@query_result, chunk_size)
+  # The reader keeps the connection reachable, as dbFetchArrow()'s stream does.
+  rethrow_rapi_record_batch(
+    res@query_result,
+    chunk_size,
+    res@connection@conn_ref
+  )
 }
 
 tz_force <- function(x, timezone) {

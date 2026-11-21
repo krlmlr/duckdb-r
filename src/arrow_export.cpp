@@ -383,23 +383,78 @@ RArrowArrayStreamWrapper::RArrowArrayStreamWrapper(duckdb::shared_ptr<ClientCont
 }
 
 // The lock is let go of before the members are destroyed, which ends the stream's query.
+// The consumer releases a stream only once no read is in flight, so no read holds read_lock here.
 RArrowArrayStreamWrapper::~RArrowArrayStreamWrapper() {
-	lock_guard<mutex> guard(StreamsLock());
-	if (conn) {
-		conn->streams.erase(this);
+	{
+		lock_guard<mutex> guard(StreamsLock());
+		if (conn) {
+			conn->streams.erase(this);
+		}
+	}
+	if (keep_alive != R_NilValue) {
+		ReleaseOnRThread(keep_alive);
 	}
 }
 
-// Called with StreamsLock() held. The source goes first, since it reads the context; inside a callback,
-// both are parked, as Release() parks the whole stream.
+void RArrowArrayStreamWrapper::HandOver(SEXP conn_ref) {
+	handed_over = true;
+	if (keep_alive == R_NilValue && conn_ref != R_NilValue) {
+		R_PreserveObject(conn_ref);
+		keep_alive = conn_ref;
+	}
+}
+
+// Called with StreamsLock() held, on R's thread, from ~ConnWrapper().
+// A stream handed over may be read on another thread at the same time: a duckdb scan of a registered Arrow reader
+// pulls from it on a worker thread, and arrow's own readers pull on arrow's pool. Tearing the query result down under
+// such a read frees what it reads, so every read holds read_lock, and the close is finished by whoever holds it last.
+// Close() only tries the lock: if a read is in flight, it marks the stream closed and leaves the teardown to that
+// read, which finishes it as it ends (FinishPendingClose()). It never waits, because R's thread may be inside a
+// callback under some client context lock that the read in flight needs, and because a read may be in flight
+// underneath this very call, on R's thread, when a progress callback closes the connection that read is fetching.
+// Lock order: StreamsLock(), then read_lock, then the client context lock (handbook/architecture/glue/threading/).
 void RArrowArrayStreamWrapper::Close() {
+	conn = nullptr;
+	closed = true;
+	close_pending = true;
+	if (reader.load() == std::this_thread::get_id()) {
+		return;
+	}
+	std::unique_lock<std::mutex> guard(read_lock, std::try_to_lock);
+	if (guard.owns_lock() && close_pending.exchange(false)) {
+		TearDown();
+	}
+}
+
+// Whichever of Close() and the read in flight comes second sees close_pending and tears down, once.
+void RArrowArrayStreamWrapper::FinishPendingClose() {
+	if (!close_pending.load()) {
+		return;
+	}
+	lock_guard<std::mutex> guard(read_lock);
+	if (close_pending.exchange(false)) {
+		TearDown();
+	}
+}
+
+// Called with read_lock held. The source goes first, since it reads the context; inside a callback,
+// both are parked, as Release() parks the whole stream.
+void RArrowArrayStreamWrapper::TearDown() {
 	engine.source.Close();
 	if (context && RCallbackScope::Active()) {
 		RCallbackScope::Defer(std::move(context));
 	}
 	context.reset();
-	conn = nullptr;
-	closed = true;
+}
+
+RArrowArrayStreamWrapper::ReadGuard::ReadGuard(RArrowArrayStreamWrapper &wrapper_p) : wrapper(wrapper_p) {
+	wrapper.read_lock.lock();
+	wrapper.reader = std::this_thread::get_id();
+}
+
+RArrowArrayStreamWrapper::ReadGuard::~ReadGuard() {
+	wrapper.reader = std::thread::id();
+	wrapper.read_lock.unlock();
 }
 
 // Only the glue ends a result for another statement, and marks it so. The engine's own interrupt state is
@@ -420,30 +475,55 @@ int RArrowArrayStreamWrapper::ReportClosed() {
 	return EINVAL;
 }
 
+int RArrowArrayStreamWrapper::ReadSchema(ArrowSchema *out) {
+	if (closed) {
+		return ReportClosed();
+	}
+	auto status = engine.stream.get_schema(&engine.stream, out);
+	// The engine's own message for an invalidated result says only that it is closed.
+	if (status != 0 && Invalidated()) {
+		return ReportInvalidated();
+	}
+	return status;
+}
+
+int RArrowArrayStreamWrapper::ReadNext(ArrowArray *out) {
+	if (closed) {
+		return ReportClosed();
+	}
+	// The engine reports an invalidated result as the end of the stream,
+	// which reads as a complete result (#2772).
+	if (Invalidated()) {
+		return ReportInvalidated();
+	}
+	auto status = engine.stream.get_next(&engine.stream, out);
+	// An error ends the stream as surely as its end does: every later read reports it again.
+	if (status != 0 || !out->release) {
+		ended = true;
+	}
+	return status;
+}
+
 int RArrowArrayStreamWrapper::GetSchema(ArrowArrayStream *stream, ArrowSchema *out) {
 	auto wrapper = reinterpret_cast<RArrowArrayStreamWrapper *>(stream->private_data);
-	if (wrapper->closed) {
-		return wrapper->ReportClosed();
+	int status;
+	{
+		ReadGuard guard(*wrapper);
+		status = wrapper->ReadSchema(out);
 	}
-	auto status = wrapper->engine.stream.get_schema(&wrapper->engine.stream, out);
-	// The engine's own message for an invalidated result says only that it is closed.
-	if (status != 0 && wrapper->Invalidated()) {
-		return wrapper->ReportInvalidated();
-	}
+	wrapper->FinishPendingClose();
 	return status;
 }
 
 int RArrowArrayStreamWrapper::GetNext(ArrowArrayStream *stream, ArrowArray *out) {
 	auto wrapper = reinterpret_cast<RArrowArrayStreamWrapper *>(stream->private_data);
-	if (wrapper->closed) {
-		return wrapper->ReportClosed();
+	int status;
+	{
+		ReadGuard guard(*wrapper);
+		status = wrapper->ReadNext(out);
 	}
-	// The engine reports an invalidated result as the end of the stream,
-	// which reads as a complete result (#2772).
-	if (wrapper->Invalidated()) {
-		return wrapper->ReportInvalidated();
-	}
-	return wrapper->engine.stream.get_next(&wrapper->engine.stream, out);
+	wrapper->FinishPendingClose();
+	return status;
 }
 
 const char *RArrowArrayStreamWrapper::GetLastError(ArrowArrayStream *stream) {
@@ -476,8 +556,10 @@ void RArrowArrayStreamWrapper::Release(ArrowArrayStream *stream) {
 // `nanoarrow::nanoarrow_allocate_array_stream()`. After this call, the
 // stream owns the underlying QueryResult; the wrapper deletes itself when
 // nanoarrow's finalizer invokes `stream->release()`.
+// `conn_ref` is the R connection's external pointer, which the stream keeps reachable (HandOver()).
 [[cpp11::register]] void rapi_fetch_arrow_stream_into(duckdb::rqry_eptr_t qry_res, cpp11::sexp stream_xptr,
-                                                      int chunk_size) {
+                                                      int chunk_size, cpp11::sexp conn_ref) {
+	ReleaseOrphanedObjects();
 	CheckQueryResult(qry_res, "rapi_fetch_arrow_stream_into");
 	if (chunk_size <= 0) {
 		rapi_error_with_context("rapi_fetch_arrow_stream_into", "Chunk Size must be higher than 0");
@@ -504,6 +586,7 @@ void RArrowArrayStreamWrapper::Release(ArrowArrayStream *stream) {
 		rapi_error_with_context("rapi_fetch_arrow_stream_into", "Result has already been consumed");
 	}
 
+	wrapper->HandOver(conn_ref);
 	// POD-copy the wired-up stream; the wrapper deletes itself via the release
 	// callback when nanoarrow's finalizer runs on `out`.
 	*out = wrapper->stream;
@@ -610,8 +693,10 @@ void RArrowArrayStreamWrapper::Release(ArrowArrayStream *stream) {
 	qry_res->TakeResult().reset();
 }
 
-// Turn a DuckDB result set into an RecordBatchReader
-[[cpp11::register]] SEXP rapi_record_batch(duckdb::rqry_eptr_t qry_res, int chunk_size) {
+// Turn a DuckDB result set into an RecordBatchReader.
+// `conn_ref` is the R connection's external pointer, which the stream keeps reachable (HandOver()).
+[[cpp11::register]] SEXP rapi_record_batch(duckdb::rqry_eptr_t qry_res, int chunk_size, cpp11::sexp conn_ref) {
+	ReleaseOrphanedObjects();
 	CheckQueryResult(qry_res, "rapi_record_batch");
 	if (!qry_res->result) {
 		rapi_error_with_context("rapi_record_batch", "Result has already been consumed");
@@ -627,6 +712,7 @@ void RArrowArrayStreamWrapper::Release(ArrowArrayStream *stream) {
 	// though not its connection.
 	auto result_stream = new RArrowArrayStreamWrapper(qry_res->context, qry_res->TakeResult(), chunk_size,
 	                                                  qry_res->Invalidated(), qry_res->conn);
+	result_stream->HandOver(conn_ref);
 
 	cpp11::sexp stream_ptr_sexp(
 	    Rf_ScalarReal(static_cast<double>(reinterpret_cast<uintptr_t>(&result_stream->stream))));
