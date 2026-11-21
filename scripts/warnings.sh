@@ -63,6 +63,21 @@ warnings_of() {
   echo $w
 }
 
+# The scope's flags for a C compile: the same set without the ones that only
+# C++ has, which GCC would otherwise answer with a `cc1: warning:` per file.
+# `ride` cannot split them, because R hands CPPFLAGS to both languages.
+c_warnings_of() {
+  local f out=
+  for f in $(warnings_of "$1"); do
+    case "$f" in
+      -Wno-redundant-move | -Wnon-virtual-dtor | -Woverloaded-virtual | \
+        -Wsuggest-override | -Wextra-semi) ;;
+      *) out="$out $f" ;;
+    esac
+  done
+  echo $out
+}
+
 # Which scope owns the file a diagnostic points at. Paths arrive three ways --
 # relative to src/ (our own compile), absolute (an R CMD INSTALL log), and
 # relative to the *engine's* own root, where a `#line` in a generated file
@@ -306,7 +321,7 @@ run_scope() {
     echo 'obj=$(echo "$1" | tr / _)'
     echo 'case "$1" in'
     printf '  *.c) eval %s ;;\n' \
-      "\"$cc $c_flags $(warnings_of "$scope") -fdiagnostics-plain-output -c '\$1' -o '$work/\$obj.o'\""
+      "\"$cc $c_flags $(c_warnings_of "$scope") -fdiagnostics-plain-output -c '\$1' -o '$work/\$obj.o'\""
     printf '  *) eval %s ;;\n' \
       "\"$cxx $base_flags $(warnings_of "$scope") -fdiagnostics-plain-output -c '\$1' -o '$work/\$obj.o'\""
     echo 'esac'
