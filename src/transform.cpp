@@ -114,6 +114,10 @@ void duckdb_r_check_period_arrays(const LogicalType &type, const string &name, c
 		}
 		return;
 	case LogicalTypeId::ARRAY: {
+		// Without `array = "matrix"` no array reaches R, and duckdb_r_allocate() says how to enable them
+		if (convert_opts.array != ConvertOpts::ArrayConversion::MATRIX) {
+			return;
+		}
 		auto &child_type = ArrayType::GetChildType(type);
 		if (child_type.id() == LogicalTypeId::INTERVAL) {
 			rapi_error_with_context(caller, "Column `" + name +

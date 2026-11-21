@@ -341,6 +341,18 @@ test_that("`interval = \"Period\"` refuses an array of INTERVAL", {
   expect_error(rel_to_altrep(rel), "can't be returned to R", fixed = TRUE)
 })
 
+test_that("`interval = \"Period\"` without `array = \"matrix\"` asks for arrays first", {
+  skip_if_not_installed("lubridate")
+
+  con <- local_con(interval = "Period")
+
+  expect_error(
+    dbGetQuery(con, "SELECT [INTERVAL 1 DAY]::INTERVAL[1] AS a"),
+    "array = \"matrix\"",
+    fixed = TRUE
+  )
+})
+
 test_that("`interval = \"Period\"` round-trips months and days at the ends of their range", {
   skip_if_not_installed("lubridate")
 
