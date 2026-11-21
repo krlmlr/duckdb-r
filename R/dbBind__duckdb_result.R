@@ -11,6 +11,11 @@
 #' @usage NULL
 dbBind__duckdb_result <- function(res, params, ...) {
   check_result_open(res)
+  # Reset before anything can fail, as before the deferral:
+  # a refused `dbBind()` leaves an empty result, not the previous bind.
+  res@env$rows_fetched <- 0
+  res@env$resultset <- data.frame()
+  res@env$pending_params <- NULL
 
   params <- as.list(params)
   if (!is.null(names(params))) {
@@ -25,9 +30,6 @@ dbBind__duckdb_result <- function(res, params, ...) {
   # with the class and `context` the glue gives it (`?duckdb_error`).
   rethrow_rapi_bind_check(res@stmt_lst$ref, params)
 
-  res@env$rows_fetched <- 0
-  res@env$pending_params <- NULL
-
   if (!res@arrow) {
     # Defer execution to the first use of the result: dbFetch() or
     # dbGetRowsAffected(). Known limitation, per the DBI spec flows:
@@ -39,7 +41,6 @@ dbBind__duckdb_result <- function(res, params, ...) {
     res@env$resultset <- NULL
     res@env$pending_params <- params
   } else {
-    res@env$resultset <- data.frame()
     out <- rethrow_rapi_bind(
       res@stmt_lst$ref,
       params,

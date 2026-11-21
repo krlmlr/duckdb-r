@@ -129,6 +129,25 @@ test_that("structural bind errors surface at dbBind(), before execution", {
   expect_equal(err$context, "rapi_bind")
 })
 
+test_that("a refused dbBind() leaves an empty result, not the previous bind", {
+  con <- local_con()
+
+  # A pending bind is dropped
+  rs <- dbSendQuery(con, "SELECT ?::INT AS a, ?::INT AS b")
+  dbBind(rs, list(1, 2))
+  expect_error(dbBind(rs, list(1:2, 3)), "same length")
+  expect_equal(nrow(dbFetch(rs)), 0)
+  dbClearResult(rs)
+
+  # So are the rows an executed bind has left unfetched
+  rs <- dbSendQuery(con, "SELECT ?::INT AS a")
+  dbBind(rs, list(1:3))
+  expect_equal(dbFetch(rs, 1)$a, 1L)
+  expect_error(dbBind(rs, list(1:2, 3)), "list of length 1")
+  expect_equal(nrow(dbFetch(rs)), 0)
+  dbClearResult(rs)
+})
+
 test_that("various error cases for dbBind()", {
   con <- local_con()
 
