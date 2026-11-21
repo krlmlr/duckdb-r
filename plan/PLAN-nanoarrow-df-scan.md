@@ -129,10 +129,18 @@ can do rather than assume it can filter.
   ([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)).
   What `as_nanoarrow_array_stream()` builds over R vectors is read without R,
   and so is what arrow and polars export.
-  The batches it builds over R vectors borrow them rather than copy them,
-  so they are released on whichever engine thread is done with them;
-  nanoarrow releases its hold on an R object only on R's thread,
-  and queues a release from any other thread until R's thread empties the queue.
+  Its batches borrow the data of integer and double columns rather than copy it,
+  and build new buffers for character and logical ones;
+  a borrowing batch holds its R vector until it is released,
+  and the engine releases it on whichever thread is done with it.
+  nanoarrow 0.9.0 releases its hold on an R object only on R's thread.
+  A release from any other thread goes into a queue that only the unexported `nanoarrow:::preserved_empty()` empties,
+  and nothing calls that on its own, so the R vector stays alive for the rest of the session.
+  The plan keeps releases on R's thread instead:
+  the glue wraps each batch's `release` so that one called off R's thread is deferred,
+  as `RCallbackScope::Defer()` already does for a result's stream wrapper,
+  and runs the deferred releases on R's thread when the query returns.
+  Calling `nanoarrow:::preserved_empty()` after a scan is the rejected alternative, since it is not exported.
   `duckdb_register_nanoarrow()` cannot tell the two apart from the outside,
   so the reference page says which sources qualify,
   and names `dbAppendTableArrow()` as the route for a stream that does not
@@ -155,9 +163,12 @@ the way the bind of a data frame scan already does for an ALTREP column
 ([`src/scan.cpp`](/src/scan.cpp)):
 the threading leaf's rule is that no R error may long-jump past the engine's frames.
 The helper also checks `OnRThread()` before it calls R at all, and raises an engine error when it is off R's thread.
-For a streaming result, the query's tasks run on the thread that fetches it, which can be a thread of arrow's pool
-([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)),
-so the scheduling thread the export runs on is not R's thread in every case,
+`INITIALIZE_ON_SCHEDULE` runs the export when the query's pipelines are scheduled,
+which is when the query is issued on R's thread (`ResetSource(true)` in the engine's `executor.cpp`).
+That is not guaranteed for every query, though:
+a recursive CTE reschedules its pipelines from inside a task
+(`ScheduleRecursivePlan()` in the engine's `physical_recursive_cte_runtime.cpp`),
+so a scan inside one exports on whichever thread runs that task,
 and catching the R error does not make calling R from another thread safe.
 
 Standalone: it improves the existing arrow path on its own,
@@ -200,8 +211,10 @@ The R surface and the C++ entry point behind it.
   pushdown.
   It pads them into the five-element list the factory indexes,
   with `NULL` in the three expression slots,
-  so the factory's `VECTOR_ELT(export_fun, 0)` and `VECTOR_ELT(export_fun, 4)` stay as they are;
-  `TransformFilter()`, the only reader of the other three, is never reached without pushdown.
+  so the factory's reads stay as they are:
+  `ProduceStream()` reads slot 0 and `GetSchema()` slot 4.
+  Slots 1 to 3 are read only by `CallArrowFactory()`, which only `TransformFilter()`'s helpers reach,
+  and that is never reached without pushdown.
 * Regenerate `src/cpp11.cpp`, `R/cpp11.R`, `R/rethrow-gen.R`.
 * `R/register.R`: `duckdb_register_nanoarrow(conn, name, x)`,
   building the two closures over
