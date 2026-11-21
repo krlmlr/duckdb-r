@@ -129,10 +129,14 @@ duckdb_execute <- function(res) {
 
 # Execute a statement whose parameters were bound by dbBind() but whose
 # execution was deferred to the first use of the result.
+# The pending parameters are taken before the run,
+# so a run that fails is not repeated by the next use of the result.
 duckdb_execute_pending_bind <- function(res) {
+  params <- res@env$pending_params
+  res@env$pending_params <- NULL
   out <- rethrow_rapi_bind(
     res@stmt_lst$ref,
-    res@env$pending_params,
+    params,
     duckdb_convert_opts_impl(res@connection@convert_opts, arrow = res@arrow)
   )
   if (length(out) == 1) {
@@ -143,7 +147,6 @@ duckdb_execute_pending_bind <- function(res) {
     out <- do.call(rbind, out)
   }
   duckdb_post_execute(res, out)
-  res@env$pending_params <- NULL
 }
 
 duckdb_post_execute <- function(res, out) {

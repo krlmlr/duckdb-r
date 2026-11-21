@@ -105,3 +105,17 @@ test_that("dbGetRowsAffected returns 0 for SELECT queries", {
   expect_identical(dbGetRowsAffected(rs), 0)
   dbClearResult(rs)
 })
+
+test_that("a deferred execution that fails is not repeated by the next use", {
+  con <- local_con()
+  dbExecute(con, "CREATE TABLE u (a INT)")
+
+  rs <- dbSendQuery(con, "INSERT INTO u VALUES (?::INT)")
+  withr::defer(dbClearResult(rs))
+  dbBind(rs, list(c("1", "x")))
+
+  expect_error(dbFetch(rs))
+  expect_error(dbFetch(rs), "dbBind")
+  expect_identical(dbGetRowsAffected(rs), NA_integer_)
+  expect_equal(dbGetQuery(con, "SELECT count(*) AS n FROM u")$n, 1)
+})
