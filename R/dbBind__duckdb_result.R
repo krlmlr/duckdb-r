@@ -26,7 +26,6 @@ dbBind__duckdb_result <- function(res, params, ...) {
   rethrow_rapi_bind_check(res@stmt_lst$ref, params)
 
   res@env$rows_fetched <- 0
-  res@env$resultset <- NULL
   res@env$pending_params <- NULL
 
   if (!res@arrow) {
@@ -37,8 +36,10 @@ dbBind__duckdb_result <- function(res, params, ...) {
     # (duckdb/duckdb-r#2565) and the plan in duckdb/duckdb-r#2583 will
     # take care of that: warn on dbSendStatement() + dbBind() +
     # dbClearResult(), or eagerly start the work in background threads.
+    res@env$resultset <- NULL
     res@env$pending_params <- params
   } else {
+    res@env$resultset <- data.frame()
     out <- rethrow_rapi_bind(
       res@stmt_lst$ref,
       params,
