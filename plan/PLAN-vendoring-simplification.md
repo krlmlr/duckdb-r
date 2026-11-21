@@ -457,6 +457,13 @@ a dedicated `each-rcc` context whose `target_url` names an `each.yaml` run,
 so that a reader tells the per-commit verdict from the ordinary check's;
 `pending` and absent both reading as undecided;
 and a failure read from the tail of its log, last stage first.
+It also starts from the three measurements above, taken in the fork on 2026-08-09 before the decline
+and kept, with the script that re-runs them, in
+[`experiments/2026-08-rcc2-read-path/`](/experiments/2026-08-rcc2-read-path/README.md):
+the status read agreed with the record on 250 of 250 decided commits,
+the branch then held 223 MB packed with `rcc-consolidate.yaml` never run,
+and a stale `R-CMD-check.yaml` on `v1.4-andium-build` had already written the `rcc` context on a series ref,
+which is the case the dedicated `each-rcc` context exists for.
 
 ### 3.4 Human-facing lag: compare URLs and badges
 
