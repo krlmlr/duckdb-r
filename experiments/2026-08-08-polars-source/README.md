@@ -56,8 +56,8 @@ What the run compresses to:
   until [#2819](https://github.com/duckdb/duckdb-r/pull/2819) made `r_dataframe_scan` write `BIGINT` as well.
   The mapping through Arrow is [`usage/arrow-types/`](/handbook/usage/arrow-types/README.md)'s.
 * **The export is not the bottleneck.**
-  Summing a column of a five-million-row frame takes
-  0.014 s through `r_dataframe_scan`, 0.015 s through an eager Polars producer, and 0.016 s through a lazy one.
+  Summing a column of a five-million-row frame takes 0.014 s through `r_dataframe_scan`,
+  0.015 s through an eager Polars producer, and 0.016 s through a lazy one.
 * **What the pushdown changes is the volume, not the clock.**
   The source is ten numeric columns and two million rows, on disk as an 89 MB Parquet file,
   and the query needs one column and ten rows.

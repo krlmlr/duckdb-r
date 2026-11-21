@@ -3,7 +3,7 @@
 **Open.** The frame-library situation as it stands today is [`usage/integrations/`](/handbook/usage/integrations/README.md)'s.
 This file is a proposal, and where the two disagree the leaf is right.
 
-The third step towards [#98](https://github.com/duckdb/duckdb-r/issues/98), and the one the issue actually names.
+The third step toward [#98](https://github.com/duckdb/duckdb-r/issues/98), and the one the issue actually names.
 Its author asked for one registration function because they wanted to register "a nanoarrow array or polars DataFrame".
 [#642](https://github.com/duckdb/duckdb-r/issues/642) asks the same from the other side.
 
@@ -14,7 +14,7 @@ Measured evidence: [`experiments/2026-08-08-polars-source/`](/experiments/2026-0
 polars is not on CRAN.
 CRAN would accept it in `Suggests` with an `Additional_repositories` field,
 but the check farm would not install it, so its tests would never run there.
-It takes the better part of an hour to build from source, so CI here does not install it either.
+Installing it from r-universe means a source build, so CI here does not install it either.
 Code that names polars would therefore ship untested.
 So the design cannot be "add a Polars method".
 It has to be "make registration extensible enough that Polars needs no method here".
@@ -50,17 +50,22 @@ A generic that a package outside CRAN can implement is an interface.
   What stays here is a test that exercises it with a stub rather than with polars.
 * **`duckdb_register()` becomes an S3 generic**, as #98 asks.
   `duckdb_register.data.frame()` keeps today's `r_dataframe_scan` behavior byte for byte.
-  `duckdb_register.default()` registers a source through `duckdb_arrow_producer()`, below.
-* **The default producer takes an allowlist,
-  as `rel_from_arrow()` ([krlmlr/duckdb-r#226](https://github.com/krlmlr/duckdb-r/pull/226)) does.**
-  It accepts a `nanoarrow_array`, whose stream it builds over memory, so that the stream never calls R.
-  Any other class is refused on R's thread at registration, with an error that names `duckdb_arrow_producer()` as the way in.
+  `duckdb_register.default()` keeps today's fallback for every other class:
+  it runs `as.data.frame()` on the source and registers the result as a data frame,
+  which is what `dbWriteTable()` and `dbAppendTable()` rely on when they pass `value` through.
+  It takes the Arrow-stream route, below, only for a `nanoarrow_array` and for a class with its own `duckdb_arrow_producer()` method.
+  A `nanoarrow_array` therefore moves from `as.data.frame()` to the stream route, and its columns map through Arrow rather than through R.
+* **On the Arrow-stream route, only an allowlist, refused by class.**
+  That refusal by class is what matches `rel_from_arrow()` ([krlmlr/duckdb-r#226](https://github.com/krlmlr/duckdb-r/pull/226)).
+  `duckdb_arrow_producer.default()` builds a stream for a `nanoarrow_array`, over memory, so that the stream never calls R.
+  It refuses any other class on R's thread, with an error that names `duckdb_arrow_producer()` as the way in.
   `as_nanoarrow_array_stream()` accepting a class is not enough:
   nanoarrow's reader over an R connection calls R for every batch, and the engine pulls batches on its own threads
   ([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md),
   [`usage/memory/writing/`](/handbook/usage/memory/writing/README.md)).
   Only the class's own producer method can promise that its stream does not call R.
-  So a Polars frame reaches `duckdb_register()` through the method polars supplies, not through the default.
+  So a Polars frame takes the stream route through the method polars supplies.
+  Without that method it keeps the `as.data.frame()` path it takes today.
 * **A source opts in by supplying a producer.**
   A second generic, `duckdb_arrow_producer(x)`, returns the closure list plus a capability flag.
   A package that has a query engine, such as polars and in principle arrow, implements it to get the filter.
@@ -74,6 +79,9 @@ A generic that a package outside CRAN can implement is an interface.
 * **Pushdown capability is declared, never inferred.**
   Not from the Arrow layout, since the `string_view` accident is exactly what a design must not depend on, and not from the class.
   The producer says so, and the C++ binds `arrow_scan` or `arrow_scan_dumb` accordingly.
+  Today the glue names `"arrow_scan"` for every registered Arrow source
+  (`ArrowScanReplacement()` in [`src/register.cpp`](/src/register.cpp)),
+  so binding `arrow_scan_dumb` depends on the nanoarrow scan ([krlmlr/duckdb-r#229](https://github.com/krlmlr/duckdb-r/pull/229)).
 * **A producer that declares pushdown must take every filter it is given.**
   The glue degrades only one case on its own:
   an optional filter whose translation throws a C++ `NotImplementedException` becomes a `TRUE` literal
@@ -81,6 +89,7 @@ A generic that a package outside CRAN can implement is an interface.
   An error raised by an R expression factory, or by the producer applying the filter, fails the query,
   as the recorded run shows for a producer that cannot apply it.
   So a producer that cannot translate some filters declares no pushdown, and DuckDB applies every filter above the scan.
+  That costs projection pushdown too, since `arrow_scan_dumb` takes neither, and the producer exports every column.
   Declaring pushdown per filter kind is left open below.
 * **The export runs on R's thread; the stream it returns does not.**
   The export call is moved onto the scheduling thread,
@@ -89,9 +98,12 @@ A generic that a package outside CRAN can implement is an interface.
   so the contract requires a stream that does not call R.
   The experiment's producer collects the `LazyFrame` inside the export and hands over the collected frame's stream for that reason:
   a reader that still had R work to do would be asked for it from the wrong thread.
-* **The relational side comes along for free.**
-  `rel_from_arrow()` ([krlmlr/duckdb-r#226](https://github.com/krlmlr/duckdb-r/pull/226)) takes the same producer,
-  so a Polars frame is a relation as well as a view, and duckplyr can build on one.
+* **The relational side needs one more step.**
+  `rel_from_arrow()` ([krlmlr/duckdb-r#226](https://github.com/krlmlr/duckdb-r/pull/226)) picks its closures by class
+  and refuses a class outside its arrow-package and nanoarrow routes, so it never calls `duckdb_arrow_producer()`.
+  For a Polars frame to be a relation as well as a view, `rel_from_arrow()` has to dispatch to `duckdb_arrow_producer()`
+  for a class outside its routes that has a method of its own.
+  That is commit 3 below, which depends on krlmlr/duckdb-r#226.
 
 ## Commits
 
@@ -105,6 +117,7 @@ This plan assumes them rather than restating them, and its own commits start aft
 * `R/register.R`: an S3 generic `duckdb_arrow_producer(x, ...)`,
   returning `list(export = , schema = , expr = , col = , lit = , pushdown = )`.
   The default method builds the nanoarrow producer with `pushdown = FALSE` for a `nanoarrow_array`, and refuses any other class.
+  It binds `arrow_scan_dumb` for `pushdown = FALSE` through the binding krlmlr/duckdb-r#229 adds.
   A `data.frame` method is *not* added, so the data frame path stays on `r_dataframe_scan`.
 * Exported and documented, because a package outside CRAN has to be able to implement it.
   The documentation states the contract: a stream that does not call R, and every filter taken when `pushdown = TRUE`.
@@ -117,21 +130,32 @@ This plan assumes them rather than restating them, and its own commits start aft
 
 * `duckdb_register()` becomes `UseMethod("duckdb_register", df)`.
   `duckdb_register.data.frame()` is today's body, unchanged.
-  `duckdb_register.default()` resolves a producer through `duckdb_arrow_producer()` and registers it.
+  `duckdb_register.default()` resolves a producer through `duckdb_arrow_producer()` and registers it,
+  for a `nanoarrow_array` or a class with its own method;
+  for any other class it runs today's `as.data.frame()` and registers the result as a data frame.
   `duckdb_unregister()` drops either kind.
 * The argument is still named `df`, since renaming it would break callers who name it.
   The documentation says what it now accepts.
-* Tests: `duckdb_register()` on a nanoarrow array and on the stub producer, the refusal of another class,
-  the data frame path unchanged, and `duckdb_unregister()` for both.
+* Tests: `duckdb_register()` on a nanoarrow array and on the stub producer,
+  on a class that `as.data.frame()` converts as today, the data frame path unchanged, and `duckdb_unregister()` for both.
 
-### 3. docs: state the extension point and what implements it
+### 3. feat(relational): let `rel_from_arrow()` take a producer
+
+Depends on krlmlr/duckdb-r#226.
+`rel_from_arrow()` keeps its arrow-package and nanoarrow routes.
+For a class outside both, it calls `duckdb_arrow_producer()` when the class has a method of its own.
+It refuses any other class, as before.
+The producer's `pushdown` flag picks the scan, as it does for `duckdb_register()`.
+Tests: `rel_from_arrow()` on the stub producer, and the refusal of a class without a method.
+
+### 4. docs: state the extension point and what implements it
 
 `handbook/usage/integrations/README.md` gains the inbound direction for frame libraries.
 A package that implements `duckdb_arrow_producer()` is a source, with pushdown if it declares it.
 The frame library entry, which takes a result into Polars, data.table and collapse, gets its counterpart.
 data.table and collapse operate on data frames and need nothing; Polars is the case that needed an interface.
 
-### 4. A worked producer, outside this repository
+### 5. A worked producer, outside this repository
 
 The Polars-side method belongs in polars, or in a small bridge package.
 This plan's obligation is to make it writable in about forty lines; the experiment's `register_polars_lazy()` is what it looks like.
@@ -140,7 +164,7 @@ Filing it as an issue on the polars side, with a link to the experiment, is the 
 ## Out of scope
 
 * **Adding polars to `Suggests` or to CI.**
-  CRAN would not install it, and building it from source takes the better part of an hour.
+  CRAN would not install it, and CI would need a source build.
   The stub producer is what the suite tests.
 * **A Polars *writer*.**
   Results already leave as a nanoarrow stream that `polars::as_polars_df()` consumes

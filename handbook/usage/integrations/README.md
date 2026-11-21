@@ -230,7 +230,8 @@ Measured on data.table 1.18.6.1, collapse 2.1.8 and the development version of p
 ([`experiments/2026-09-28-frame-libraries/`](/experiments/2026-09-28-frame-libraries/README.md)).
 
 The other direction, a Polars frame as a table, is the one [#98](https://github.com/duckdb/duckdb-r/issues/98) names.
-No supported function registers it: `duckdb_register()` takes a data frame, and `duckdb_register_arrow()` takes what the `arrow` package owns.
+No supported function scans it as Arrow:
+`duckdb_register()` converts its argument with `as.data.frame()` first, and `duckdb_register_arrow()` takes what the `arrow` package owns.
 The only route today is the unexported `duckdb:::rapi_register_arrow()`, which is internal and not supported.
 polars implements `as_nanoarrow_array_stream()` for its eager and lazy frames, so the closures that function takes can export one.
 They are ordinary R functions, which is also how a `LazyFrame` can be handed the filter DuckDB pushes down
