@@ -98,8 +98,7 @@ so the paths differ by which copies they hold and when each is freed.
   `dbSendQuery()` warns when user code or a test asks for it,
   not when another package's code does, as `arrow::to_arrow()` still does
   (`deprecate_soft()`, [`R/dbSendQuery__duckdb_connection_character.R`](/R/dbSendQuery__duckdb_connection_character.R)).
-  [#2587](https://github.com/duckdb/duckdb-r/pull/2587)
-  refuses to combine it with `stream = TRUE` and names the migration.
+  `duckdb_fetch_arrow()` and `duckdb_fetch_record_batch()` do not warn themselves: they only take a result from the deprecated route, whose `dbSendQuery()` call has already warned.
 * **`dbSendQueryArrow()` + `dbFetchArrow()` /
   `dbFetchArrowChunk()`.**
   The one DBI route that streams today.
