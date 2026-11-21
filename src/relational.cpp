@@ -13,6 +13,7 @@
 #include "duckdb/parser/expression/window_expression.hpp"
 #include "duckdb/parser/query_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "rapi.hpp"
 #include "reltoaltrep.hpp"
 #include "rrelation.hpp"
@@ -720,7 +721,14 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 	if (!con || !con.get() || !con->conn) {
 		stop("rel_from_table: Invalid connection");
 	}
-	auto table_info = con->conn->TableInfo(Identifier(schema_name), Identifier(table_name));
+	// As Connection::Table() did: a schema name that names an attached database means that database's default schema
+	auto catalog = Identifier::InvalidCatalog();
+	auto schema = Identifier(schema_name);
+	if (!IsInvalidSchema(schema)) {
+		auto &context = *con->conn->context;
+		context.RunFunctionInTransaction([&]() { Binder::BindSchemaOrCatalog(context, catalog, schema); });
+	}
+	auto table_info = con->conn->TableInfo(catalog, schema, Identifier(table_name));
 	if (!table_info) {
 		throw CatalogException("Table %s does not exist!",
 		                       QualifiedName(Identifier(), Identifier(schema_name), Identifier(table_name))

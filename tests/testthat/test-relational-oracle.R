@@ -529,6 +529,16 @@ test_that("from table: a table that does not exist, a view, a missing schema", {
   })
 })
 
+test_that("from table: a schema name that names an attached database reads its default schema", {
+  attach_con <- local_con()
+  dbExecute(attach_con, "ATTACH ':memory:' AS oracle_other")
+  dbExecute(attach_con, "CREATE TABLE oracle_other.t AS SELECT 1 AS a")
+
+  rel <- rel_from_table(attach_con, "t", schema_name = "oracle_other")
+
+  expect_equal(as.data.frame(rel), data.frame(a = 1L), ignore_attr = TRUE)
+})
+
 # Printed tree and SQL text
 
 test_that("printed tree and sql text: data frame source", {
