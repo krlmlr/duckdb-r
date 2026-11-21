@@ -171,7 +171,11 @@ pass unchanged. No new R-visible behaviour.
 - Pulls chunks until accumulated rows >= `n` or EOF. Splits the
   trailing chunk if necessary so the returned data.frame has exactly
   `min(n, remaining)` rows.
-- `n = -1` exhausts the stream.
+- `n = -1` exhausts the stream. Any other `n` must be a whole number
+  from 0 to 2^53; other negatives, fractions, `NA` and infinities are
+  refused with a classed error rather than read as "all".
+- `rapi_stream_close()` ends the query at once, or, while an R callback
+  runs inside the engine, defers that the way the finalizer does.
 - Returns a list with two elements: the data.frame and an `eof`
   logical, so the R side can flip `stream_eof` without a second call.
 - Uses `convert_chunks_to_df` from T2.
@@ -382,9 +386,18 @@ recorded here as the T1 deliverable.
 - **Interrupts.**
   `rapi_execute_impl()` wraps `Execute()` in `ScopedInterruptHandler`.
   With streaming, execution continues inside `Fetch()`,
-  so the streaming fetch entrypoint installs the same handler
-  (stream results expose their `ClientContext`;
-  materialized results need none — their chunks are already in memory).
+  so `rapi_stream_fetch()` installs the same handler,
+  on a completed result as well, and keeps it from the first row it
+  takes off the result until the converted rows are ready to return:
+  an interrupt in that span drops rows the result has moved past.
+  An interrupt the handler catches marks the result before it is raised,
+  and the next fetch fails ("interrupted, and the rows it had read are
+  lost") instead of serving later rows, or none with `eof = TRUE`.
+  The one window C++ cannot close is an interrupt after the handler is
+  removed, between `.Call()` returning and R binding the value:
+  R raises it and drops the list. **Remaining step (T5):** the R-level
+  fetch wraps the call so that an interrupt escaping it marks the
+  result tainted, and the next `dbFetch()` fails the same way.
 
 ## Effort estimate
 
