@@ -1,4 +1,4 @@
-Package: duckdb
+Package: duckdb.2.0.dev
 Title: DBI Package for the DuckDB Database Management System
 Version: 2.0.1
 Config/duckdb/upstream: 8d78114e90a53823803660bf821f6073ac87da8c
