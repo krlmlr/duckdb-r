@@ -362,7 +362,8 @@ private:
 };
 
 // The glue's own Arrow stream over a query result (`RResultArrowStream`), behind one that reports a streaming result
-// invalidated by another statement on its connection as an error, where the engine reports the end of the stream
+// invalidated by another statement on its connection as an error,
+// where the glue's `RArrowChunkSource::LoadNextChunk()` finds the result closed and reports the end of the stream
 // (handbook/usage/integrations/README.md).
 struct RArrowArrayStreamWrapper {
 	RArrowArrayStreamWrapper(duckdb::shared_ptr<ClientContext> context, duckdb::unique_ptr<QueryResult> result,
