@@ -100,8 +100,11 @@ ConvertOpts::ConvertOpts(cpp11::sexp options_nullable) {
 	// Extract map
 	map = string_to_map_shape(as_cpp<std::string>(options["map"]));
 
-	// Extract posixct
-	posixct = string_to_posixct_type(as_cpp<std::string>(options["posixct"]));
+	// Extract posixct; absent, it keeps the documented default, as `duckdb_posixct_type()` does on the R side
+	SEXP posixct_sexp = options["posixct"];
+	if (posixct_sexp != R_NilValue) {
+		posixct = string_to_posixct_type(as_cpp<std::string>(posixct_sexp));
+	}
 
 	// Extract arrow
 	arrow = bool_to_arrow_conversion(as_cpp<bool>(options["arrow"]));

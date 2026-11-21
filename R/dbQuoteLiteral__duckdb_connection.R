@@ -22,7 +22,7 @@ dbQuoteLiteral__duckdb_connection <- function(conn, x, ...) {
 
     # A `TIMESTAMPTZ` literal without an offset is read in the session zone,
     # so spell the offset out; that much parses without the icu extension.
-    if (identical(conn@convert_opts$posixct, "timestamptz")) {
+    if (duckdb_posixct_type(conn@convert_opts) == "timestamptz") {
       text <- timestamp_literal_text(x)
       # `paste0()` would spell an `NA` as the string "NA+00:00"
       present <- !is.na(text)

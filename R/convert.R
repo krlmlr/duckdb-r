@@ -58,6 +58,16 @@ duckdb_convert_opts <- function(
   )
 }
 
+# The type a `POSIXct` is sent as.
+# A `convert_opts` list without the field, such as one built by `duckdb_convert_opts_impl()` alone,
+# falls back to the `dbConnect(posixct = )` default, as `ConvertOpts` does in C++.
+duckdb_posixct_type <- function(convert_opts) {
+  if (is.null(convert_opts$posixct)) {
+    return("timestamptz")
+  }
+  convert_opts$posixct
+}
+
 duckdb_convert_opts_impl <- function(
   x = list(),
   ...,

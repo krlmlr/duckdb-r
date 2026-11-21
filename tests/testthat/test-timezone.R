@@ -822,3 +822,18 @@ test_that("dbCreateTable() and dbAppendTable() into a naive timestamp column ign
   )
   expect_equal(dbReadTable(con, "t")$z, instant, ignore_attr = TRUE)
 })
+
+test_that("convert_opts without posixct falls back to the default everywhere (#2574)", {
+  con <- local_con()
+  con@convert_opts$posixct <- NULL
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  duckdb_register(con, "df", data.frame(a = instant))
+
+  expect_equal(
+    dbGetQuery(con, "DESCRIBE FROM df")$column_type,
+    "TIMESTAMP WITH TIME ZONE"
+  )
+  expect_equal(dbDataType(con, instant), "TIMESTAMPTZ")
+  expect_match(dbQuoteLiteral(con, instant), "::timestamptz$")
+})
