@@ -55,8 +55,12 @@ using namespace duckdb;
 	auto interval_period = convert_opts.interval == ConvertOpts::IntervalConversion::PERIOD;
 	// Checked on R's thread before the engine binds the scan, so that the error can name the column
 	for (R_xlen_t col_idx = 0; col_idx < value.size(); col_idx++) {
-		auto invalid =
-		    RApiTypes::FindInvalidValue(value[col_idx], string(df_names[col_idx]), time_hms, interval_period);
+		string r_error;
+		auto invalid = RApiTypes::FindInvalidValueCaught(value[col_idx], string(df_names[col_idx]), time_hms,
+		                                                 interval_period, r_error);
+		if (!r_error.empty()) {
+			rapi_error_with_context("rapi_register_df", r_error);
+		}
 		if (!invalid.empty()) {
 			rapi_error_with_context("rapi_register_df", "Column " + invalid);
 		}
@@ -163,11 +167,24 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	}
 
 	// The data frame writes as with duckdb_register() on the connection the query runs on:
-	// with its `time` and `interval`, and refused where rapi_register_df() refuses it
+	// with its `time` and `interval`, and refused where rapi_register_df() refuses it.
+	// The columns are touched first, as DataFrameScanBind() touches them, so that a lazy data frame
+	// of this connection is refused before the search below would start its query on the busy connection.
+	try {
+		TouchColumnsOrThrow(context, df);
+	} catch (...) {
+		UNPROTECT(1);
+		throw;
+	}
 	string invalid;
-	for (R_xlen_t col_idx = 0; col_idx < Rf_xlength(df) && invalid.empty(); col_idx++) {
-		invalid = RApiTypes::FindInvalidValue(VECTOR_ELT(df, col_idx), CHAR(STRING_ELT(names, col_idx)), time_hms,
-		                                      interval_period);
+	string r_error;
+	for (R_xlen_t col_idx = 0; col_idx < Rf_xlength(df) && invalid.empty() && r_error.empty(); col_idx++) {
+		invalid = RApiTypes::FindInvalidValueCaught(VECTOR_ELT(df, col_idx), CHAR(STRING_ELT(names, col_idx)), time_hms,
+		                                            interval_period, r_error);
+	}
+	if (!r_error.empty()) {
+		UNPROTECT(1);
+		throw InvalidInputException(r_error);
 	}
 	if (!invalid.empty()) {
 		UNPROTECT(1);

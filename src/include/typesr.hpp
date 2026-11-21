@@ -151,6 +151,9 @@ struct RApiTypes {
 	                         bool period_interval = false);
 	static string FindInvalidValue(SEXP v, const string &path, bool hms_time, bool period_interval,
 	                               bool in_list = false);
+	// FindInvalidValue() with an R error it raises reading an ALTREP vector caught and returned in `r_error`
+	static string FindInvalidValueCaught(SEXP v, const string &path, bool hms_time, bool period_interval,
+	                                     string &r_error);
 	static SEXP ValueToSexp(const Value &val, const ConvertOpts &convert_opts);
 	// Children of a STRUCT or TUPLE, with positional names synthesized for the unnamed TUPLE members
 	static child_list_t<LogicalType> StructLikeChildTypes(const LogicalType &type);

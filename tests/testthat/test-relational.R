@@ -2601,6 +2601,25 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
       ))
       after <- DBI::dbGetQuery(con, "SELECT 42 AS answer")$answer
 
+      # A column the conversion options look into is refused the same way,
+      # before that search reads it, and the connection stays usable
+      lazy_sql <- function(con, sql) {
+        ns$rel_to_altrep(ns$rel_from_sql(con, sql))
+      }
+      df <- lazy_sql(con, "SELECT [1, 2] AS t FROM range(10)")
+      scan_list <- message_of(DBI::dbGetQuery(con, "SELECT count(*) FROM df"))
+      after_list <- DBI::dbGetQuery(con, "SELECT 43 AS answer")$answer
+
+      hms_con <- DBI::dbConnect(drv, time = "hms")
+      df <- lazy_sql(hms_con, "SELECT TIME '12:34:56' AS t FROM range(10)")
+      scan_hms <- message_of(DBI::dbGetQuery(
+        hms_con,
+        "SELECT count(*) FROM df"
+      ))
+      after_hms <- DBI::dbGetQuery(hms_con, "SELECT 44 AS answer")$answer
+      DBI::dbDisconnect(hms_con)
+      df <- lazy()
+
       # Another connection runs the frame's query on its own connection, which is free
       from_other <- as.integer(
         ns$rel_to_altrep(ns$rel_from_df(other, lazy()))$i
@@ -2624,6 +2643,10 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
         rel = rel,
         scan = scan,
         after = after,
+        scan_list = scan_list,
+        after_list = after_list,
+        scan_hms = scan_hms,
+        after_hms = after_hms,
         from_other = from_other,
         from_sibling = from_sibling,
         own_after_run = own_after_run
@@ -2638,6 +2661,10 @@ test_that("a lazy data frame scanned on its own connection before its query ran 
     writeLines(out$scan)
   })
   expect_equal(out$after, 42)
+  expect_identical(out$scan_list, out$scan)
+  expect_equal(out$after_list, 43)
+  expect_identical(out$scan_hms, out$scan)
+  expect_equal(out$after_hms, 44)
   expect_equal(out$from_other, 0:9)
   expect_equal(out$from_sibling, 0:9)
   expect_equal(out$own_after_run, 45L)

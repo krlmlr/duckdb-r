@@ -328,8 +328,12 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 	bool interval_period = convert_opts.interval == ConvertOpts::IntervalConversion::PERIOD;
 	// Checked for every parameter, since without `interval = "Period"` a Period with more than seconds is refused
 	for (R_xlen_t param_idx = 0; param_idx < params.size(); param_idx++) {
-		auto invalid = RApiTypes::FindInvalidValue(params[param_idx], "params[[" + std::to_string(param_idx + 1) + "]]",
-		                                           time_hms, interval_period);
+		string r_error;
+		auto invalid = RApiTypes::FindInvalidValueCaught(
+		    params[param_idx], "params[[" + std::to_string(param_idx + 1) + "]]", time_hms, interval_period, r_error);
+		if (!r_error.empty()) {
+			rapi_error_with_context("rapi_bind", r_error);
+		}
 		if (!invalid.empty()) {
 			rapi_error_with_context("rapi_bind", invalid);
 		}

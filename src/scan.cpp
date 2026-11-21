@@ -201,7 +201,7 @@ static SEXP TouchColumnsError(SEXP cond, void *data_p) {
 // That error must not long-jump across the binder's frames: their destructors would not run,
 // and the client context lock and the interrupt handler would stay held for the rest of the session.
 // So it is caught here and rethrown as an exception, and so is any other jump, which is dropped.
-static void TouchColumnsOrThrow(ClientContext &context, SEXP df) {
+void duckdb::TouchColumnsOrThrow(ClientContext &context, SEXP df) {
 	TouchColumnsData data {context, df, string()};
 	try {
 		cpp11::unwind_protect([&]() { R_tryCatchError(TouchColumns, &data, TouchColumnsError, &data); });

@@ -885,6 +885,51 @@ string RApiTypes::FindInvalidValue(SEXP v, const string &path, bool hms_time, bo
 	return FindInvalidValueAt(v, ValuePath {path, nullptr, R_NilValue, 0}, hms_time, period_interval, in_list);
 }
 
+namespace {
+
+struct FindInvalidValueData {
+	SEXP v;
+	const string &path;
+	bool hms_time;
+	bool period_interval;
+	string invalid;
+	string r_error;
+};
+
+} // namespace
+
+static SEXP FindInvalidValueBody(void *data_p) {
+	auto &data = *static_cast<FindInvalidValueData *>(data_p);
+	data.invalid = RApiTypes::FindInvalidValue(data.v, data.path, data.hms_time, data.period_interval);
+	return R_NilValue;
+}
+
+static SEXP FindInvalidValueError(SEXP cond, void *data_p) {
+	auto &r_error = static_cast<FindInvalidValueData *>(data_p)->r_error;
+	SEXP message = TYPEOF(cond) == VECSXP && Rf_xlength(cond) > 0 ? VECTOR_ELT(cond, 0) : R_NilValue;
+	if (TYPEOF(message) == STRSXP && Rf_xlength(message) > 0) {
+		r_error = CHAR(STRING_ELT(message, 0));
+	} else {
+		r_error = "Reading `" + static_cast<FindInvalidValueData *>(data_p)->path + "` failed with an R error";
+	}
+	return R_NilValue;
+}
+
+// Reading an ALTREP vector runs its class's code, which reports a failure as an R error.
+// That error must not long-jump across the caller's C++ frames, the binder's among them,
+// so it is caught here and returned in `r_error`, and so is any other jump, which is dropped.
+string RApiTypes::FindInvalidValueCaught(SEXP v, const string &path, bool hms_time, bool period_interval,
+                                         string &r_error) {
+	FindInvalidValueData data {v, path, hms_time, period_interval, string(), string()};
+	try {
+		cpp11::unwind_protect([&]() { R_tryCatchError(FindInvalidValueBody, &data, FindInvalidValueError, &data); });
+	} catch (cpp11::unwind_exception &) {
+		data.r_error = "Reading `" + path + "` was interrupted";
+	}
+	r_error = std::move(data.r_error);
+	return data.invalid;
+}
+
 interval_t RIntervalSecondsType::Convert(double val) {
 	return Interval::FromMicro(RoundMicros(val * Interval::MICROS_PER_SEC));
 }

@@ -428,6 +428,10 @@ unique_ptr<TableRef> ArrowScanReplacement(ClientContext &context, ReplacementSca
 unique_ptr<TableRef> EnvironmentScanReplacement(ClientContext &context, ReplacementScanInput &input,
                                                 optional_ptr<ReplacementScanData> data);
 
+// Reads every column of a data frame on R's thread, materializing an ALTREP one,
+// and throws an exception for an R error that raises (src/scan.cpp)
+void TouchColumnsOrThrow(ClientContext &context, SEXP df);
+
 struct ReplacementDataDBWrapper : public ReplacementScanData {
 	DBWrapper *wrapper;
 };
