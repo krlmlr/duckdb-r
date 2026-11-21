@@ -281,6 +281,9 @@ so the local verdict is CI's verdict, not an approximation of it.
 Run the full gate when time allows,
 or the stages the repair touches when it does not;
 `git clean -fdx -- src/` first either way.
+Its `roxygen` gate documents each tree with the roxygen2 that tree's `Config/roxygen2/version` records,
+and installs the patched build ([`scripts/roxygen2-fork.sh`](/scripts/roxygen2-fork.sh)) or a stock one for the run when the default library holds the other,
+so nothing has to be set up for it.
 A CI round trip costs ~35 minutes plus queue;
 a local pass costs ~10.
 One local pass that catches a bad repair saves a full cycle,

@@ -40,10 +40,15 @@ Little of this is codified; what is settled:
   because commonmark drops the whitespace a line break stands for;
   so prose written one sentence per line renders single-spaced.
   `DESCRIPTION` records the build in `Config/roxygen2/version`, and explains the suffix in `Config/cynkra/roxygen2`.
-  CI runs the same script before every roxygen run:
-  in the `rcc` smoke test ([`.github/workflows/custom/after-install/action.yml`](/.github/workflows/custom/after-install/action.yml))
-  and in the per-commit legs ([`.github/workflows/each.yaml`](/.github/workflows/each.yaml)),
-  so both document with the same build.
+  It builds roxygen2 from source, so on macOS and Windows it needs the C++ toolchain R packages are built with.
+  Which build documents a tree is that tree's call: a `Config/roxygen2/version` ending in `.9100` asks for the patched one, anything else for a stock one.
+  CI follows it per tree:
+  the `rcc` smoke test installs the patched build when the tree asks for it
+  ([`.github/workflows/custom/after-install/action.yml`](/.github/workflows/custom/after-install/action.yml)),
+  and the per-commit legs ([`.github/workflows/each.yaml`](/.github/workflows/each.yaml)) install it beside the stock one,
+  so that the `roxygen` gate of [`scripts/rcc-one.sh`](/scripts/rcc-one.sh) picks per commit and a commit older than the patch is not read as drift.
+  Run locally, that gate installs whichever build the tree asks for when the default library holds the other.
+  A branch whose tooling predates the patch documents with the stock build, as its tooling was written to.
 * A script only ever run on a CI runner may assume GNU tools;
   one a contributor may run on their own machine will meet macOS,
   where `sed` is BSD.

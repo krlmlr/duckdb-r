@@ -115,14 +115,21 @@ runs:
         ccache -s
       shell: bash
 
-    # The smoke test roxygenizes and commits the result, and does so with the
-    # patched roxygen2 that keeps the gap after a sentence ending a line
-    # (handbook/contributors/workflow/README.md). It replaces the r-lib/roxygen2
-    # the install action put in, before anything loads it. The other entries
-    # do not roxygenize, so they keep what they have.
+    # The smoke test roxygenizes and commits the result, with the roxygen2 the
+    # tree's DESCRIPTION records (handbook/contributors/workflow/README.md):
+    # a Config/roxygen2/version ending in .9100 asks for the patched build that
+    # keeps the gap after a sentence ending a line, which replaces the
+    # r-lib/roxygen2 the install action put in, before anything loads it. The
+    # other entries do not roxygenize, so they keep what they have.
     - name: Install roxygen2 with the sentence-spacing patch
-      if: github.job == 'rcc-smoke'
-      run: scripts/roxygen2-fork.sh
+      if: github.job == 'rcc-smoke' && hashFiles('scripts/roxygen2-fork.sh') != ''
+      run: |
+        ## -- Install roxygen2 with the sentence-spacing patch --
+        if grep -Eq '^Config/roxygen2/version: *[0-9.]+[.]9100$' DESCRIPTION; then
+          scripts/roxygen2-fork.sh
+        else
+          echo "DESCRIPTION records a stock roxygen2; keeping the one installed."
+        fi
       shell: bash
 
     # The glue half of the compiler-warning gate

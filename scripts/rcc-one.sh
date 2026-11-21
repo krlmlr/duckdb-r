@@ -61,6 +61,11 @@
 #   DUCKDB_R_RUN_TESTS    - read by tests/testthat.R; the `check` gate defaults
 #                           it to true so the suite runs outside Actions too,
 #                           and never overrides a value the caller set
+#   EACH_ROXYGEN2_FORK_LIB - a library holding the patched roxygen2 that gate
+#                           `roxygen` uses for a tree recording x.y.z.9100
+#                           (default: the default library when it holds that
+#                           build, else one scripts/roxygen2-fork.sh installs)
+#   EACH_ROXYGEN2_STOCK_LIB - the same for a stock roxygen2, for any other tree
 #   EACH_TIMEOUT_<STAGE>  - seconds a stage may take before it is presumed stuck
 #                           and killed (see stage_budget below); 0 disables the
 #                           bound for that stage
@@ -524,9 +529,50 @@ EOF
   return "${rc}"
 }
 
-# Mirrors .github/workflows/roxygenize/action.yml.
+# Which roxygen2 documents a tree is the tree's own call: a
+# `Config/roxygen2/version` ending in .9100 asks for the patched build
+# scripts/roxygen2-fork.sh installs, anything else for a stock one
+# (handbook/contributors/workflow/README.md). Judging a commit with the other
+# build would show every sentence gap as drift. Prints the library to put first
+# on .libPaths(), or nothing when the default libraries already serve the tree:
+# EACH_ROXYGEN2_FORK_LIB / EACH_ROXYGEN2_STOCK_LIB when set (each.yaml sets the
+# first), else the default library when its roxygen2 is the right kind, else a
+# build installed for this run.
+roxygen_lib() {
+  local want kind lib have have_kind
+  want="$(sed -n 's/^Config\/roxygen2\/version: *//p' DESCRIPTION)"
+  case "${want}" in
+    *.9100) kind=fork lib="${EACH_ROXYGEN2_FORK_LIB:-}" ;;
+    *) kind=stock lib="${EACH_ROXYGEN2_STOCK_LIB:-}" ;;
+  esac
+  if [ -n "${lib}" ] && [ -d "${lib}/roxygen2" ]; then
+    echo "${lib}"
+    return 0
+  fi
+  have="$(Rscript -e 'cat(format(packageVersion("roxygen2")))' 2>/dev/null || true)"
+  case "${have}" in
+    *.9100) have_kind=fork ;;
+    *) have_kind=stock ;;
+  esac
+  if [ -n "${have}" ] && [ "${have_kind}" = "${kind}" ]; then
+    return 0
+  fi
+  lib="${rscript_dir}/roxygen2-${kind}"
+  local args=(--lib "${lib}")
+  [ "${kind}" = stock ] && args+=(--stock)
+  echo "Tree records roxygen2 ${want:-none}, default library has ${have:-none}: installing a ${kind} build." >&2
+  "$(dirname "${self}")/roxygen2-fork.sh" "${args[@]}" >&2 || return 1
+  echo "${lib}"
+}
+
+# Mirrors .github/workflows/roxygenize/action.yml, with the roxygen2 the tree asks for.
 gate_roxygen() {
-  rscript <<'EOF'
+  local lib
+  lib="$(roxygen_lib)" || return 1
+  ROXYGEN2_LIB="${lib}" rscript <<'EOF'
+lib <- Sys.getenv("ROXYGEN2_LIB")
+if (nzchar(lib)) .libPaths(c(lib, .libPaths()))
+message("roxygen2 ", packageVersion("roxygen2"), " from ", dirname(find.package("roxygen2")))
 roxygen2::roxygenize()
 EOF
 }

@@ -8,7 +8,7 @@ git clone https://github.com/duckdb/duckdb-r.git
 cd duckdb-r
 R -q -e 'pak::pak()'                    # R-level dependencies
 R -q -e 'pak::pak("r-lib/roxygen2")'    # roxygen2, from GitHub,
-scripts/roxygen2-fork.sh                # patched as CI documents with
+scripts/roxygen2-fork.sh                # patched as CI documents with; from source
 
 scripts/install-libduckdb.sh            # prebuilt engine, matching
 export DUCKDB_R_USE_SYSTEM_LIB=1        # the vendored commit

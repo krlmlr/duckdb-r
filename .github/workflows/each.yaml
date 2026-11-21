@@ -230,11 +230,24 @@ jobs:
           needs: build, check, website, roxygen2
           extra-packages: any::rcmdcheck r-lib/roxygen2 any::decor r-lib/pkgdown deps::.
 
-      # The `roxygen` gate must document with the build `rcc` documents with,
-      # or every commit would show the sentence gaps as drift
-      # (handbook/contributors/workflow/README.md).
-      - name: Install roxygen2 with the sentence-spacing patch
-        run: scripts/roxygen2-fork.sh
+      # Each commit is documented with the roxygen2 its own DESCRIPTION records
+      # (handbook/contributors/workflow/README.md): the stock build the install
+      # step put into the default library, or the patched one installed here
+      # into a library of its own. scripts/rcc-one.sh picks per commit, so a
+      # commit older than the patch is still judged with the stock build, and
+      # a commit whose rcc-one.sh predates this ignores the variable and uses
+      # the stock build too, as it was written for. A tip without the script
+      # (a dispatch on a line that never took it) skips this step.
+      - name: Install roxygen2 with the sentence-spacing patch beside the stock one
+        run: |
+          ## -- Install roxygen2 with the sentence-spacing patch beside the stock one --
+          if [ ! -x scripts/roxygen2-fork.sh ]; then
+            echo "::notice title=roxygen2 fork::scripts/roxygen2-fork.sh not on this tip; every commit is documented with the stock roxygen2."
+            exit 0
+          fi
+          lib="${RUNNER_TEMP}/roxygen2-fork"
+          scripts/roxygen2-fork.sh --lib "${lib}"
+          echo "EACH_ROXYGEN2_FORK_LIB=${lib}" | tee -a "${GITHUB_ENV}"
         shell: bash
 
       # Deliberately not custom/after-install: its ccache-action caps the cache
