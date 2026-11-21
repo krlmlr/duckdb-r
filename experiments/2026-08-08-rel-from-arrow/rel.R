@@ -65,8 +65,10 @@ con <- new_con()
 rel_df <- duckdb:::rel_from_df(con, tbl)
 duckdb:::rel_tostring(rel_df)
 
-# rel_from_table_function() cannot express arrow_scan: its arguments are
-# three POINTER values, and the R side only builds scalars.
+# rel_from_table_function() cannot express arrow_scan. On the 1.5.x engine
+# of the recorded run, its arguments were three POINTER values, and the R
+# side only builds scalars. On the v2.0 engine it takes no arguments, and
+# the factory travels as bind_info, which this function cannot pass.
 try(duckdb:::rel_from_table_function(con, "arrow_scan", list(0, 0, 0)))
 
 # --- 2. rel_from_sql() over a registered name --------------------------

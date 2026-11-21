@@ -31,8 +31,9 @@ and the engine never parses a string the caller built.
 No constructor starts from an Arrow source.
 `rel_from_df()` reaches one only through `as.data.frame()`,
 which materializes it,
-and `rel_from_table_function()` cannot express `arrow_scan` —
-its arguments are `POINTER` values that the R side does not build.
+and `rel_from_table_function()` cannot express `arrow_scan`:
+that function takes its stream factory as the table reference's `bind_info` rather than as an argument,
+and `rel_from_table_function()` has no way to pass one.
 What does work is `rel_from_sql()` over a name registered with
 `duckdb_register_arrow()`, and it binds by name:
 the scan is resolved again at materialization, so re-registering the
