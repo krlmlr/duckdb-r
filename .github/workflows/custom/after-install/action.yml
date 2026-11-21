@@ -97,12 +97,17 @@ runs:
         # Coverage is measured only where covr is installed (the smoke test).
         # It needs llvm-cov and clang's profile runtime, which clang only
         # recommends, so the other legs skip both.
+        # The smoke test always measures it, so it gets the tools even when covr
+        # is not found, and a warning, because its upload would be near empty.
         if Rscript --vanilla -e 'quit(status = !requireNamespace("covr", quietly = TRUE))'; then
+          coverage=true
+        elif [ "${GITHUB_JOB:-}" = rcc-smoke ]; then
+          echo "::warning::covr is not installed in rcc-smoke, which measures coverage."
           coverage=true
         else
           coverage=false
         fi
-        echo "covr installed: ${coverage}"
+        echo "Coverage tools needed: ${coverage}"
 
         # apt fails now and then for reasons of its own, a mirror in sync or a
         # dropped connection, so each install is tried three times. There is
@@ -113,8 +118,10 @@ runs:
               return 0
             fi
             echo "::warning::apt-get install $* failed (attempt ${attempt} of 3)."
-            sleep $((attempt * 15))
-            sudo apt-get update || true
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 15))
+              sudo apt-get update || true
+            fi
           done
           echo "::error::Could not install $* with apt. The glue must be compiled with clang to link the prebuilt libduckdb (#2955); rerun the job."
           return 1
