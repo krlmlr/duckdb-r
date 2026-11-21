@@ -843,7 +843,7 @@ static bool MayHoldInvalidValue(SEXP v, bool hms_time) {
 
 static string FindInvalidValueAt(SEXP v, const ValuePath &path, bool hms_time, bool period_interval, bool in_list) {
 	if (TYPEOF(v) == VECSXP) {
-		auto is_df = Rf_inherits(v, "data.frame");
+		auto is_df = InheritsInPlace(v, "data.frame");
 		SEXP names = is_df ? DataFrameNames(v) : R_NilValue;
 		if (is_df && names == R_NilValue) {
 			// Not a data frame DetectRType() takes, which refuses it
