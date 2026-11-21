@@ -230,6 +230,13 @@ jobs:
           needs: build, check, website, roxygen2
           extra-packages: any::rcmdcheck r-lib/roxygen2 any::decor r-lib/pkgdown deps::.
 
+      # The `roxygen` gate must document with the build `rcc` documents with,
+      # or every commit would show the sentence gaps as drift
+      # (handbook/contributors/workflow/README.md).
+      - name: Install roxygen2 with the sentence-spacing patch
+        run: scripts/roxygen2-fork.sh
+        shell: bash
+
       # Deliberately not custom/after-install: its ccache-action caps the cache
       # at 200 MB and its duckdb.tar archive is keyed on the whole vendored tree,
       # so both are per-commit constructs a multi-commit job cannot use. This job

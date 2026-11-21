@@ -33,10 +33,17 @@ Little of this is codified; what is settled:
 * Never edit generated or vendored files
   ([`architecture/`](/handbook/architecture/README.md),
   [`operations/vendoring/`](/handbook/operations/vendoring/README.md)).
-* Regenerate `man/*.Rd` with roxygen2 installed from GitHub, `pak::pak("r-lib/roxygen2")`, not with the CRAN release.
-  `DESCRIPTION` records the development version in `Config/roxygen2/version`,
-  and CI's roxygen step installs `r-lib/roxygen2` too
-  ([`.github/workflows/R-CMD-check.yaml`](/.github/workflows/R-CMD-check.yaml)).
+* Regenerate `man/*.Rd` with the patched roxygen2 that CI documents with, not with the CRAN release or a stock development build.
+  Install `pak::pak("r-lib/roxygen2")` for its dependencies, then run [`scripts/roxygen2-fork.sh`](/scripts/roxygen2-fork.sh),
+  which installs upstream roxygen2 with the `R/` changes of `krlmlr/roxygen2@f-sentence-spacing` on top and stamps it `x.y.z.9100`.
+  Without it, a sentence that ends a line loses the gap after it in the text help `?topic` shows,
+  because commonmark drops the whitespace a line break stands for;
+  so prose written one sentence per line renders single-spaced.
+  `DESCRIPTION` records the build in `Config/roxygen2/version`, and explains the suffix in `Config/cynkra/roxygen2`.
+  CI runs the same script before every roxygen run:
+  in the `rcc` smoke test ([`.github/workflows/custom/after-install/action.yml`](/.github/workflows/custom/after-install/action.yml))
+  and in the per-commit legs ([`.github/workflows/each.yaml`](/.github/workflows/each.yaml)),
+  so both document with the same build.
 * A script only ever run on a CI runner may assume GNU tools;
   one a contributor may run on their own machine will meet macOS,
   where `sed` is BSD.

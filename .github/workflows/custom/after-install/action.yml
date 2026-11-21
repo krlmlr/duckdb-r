@@ -115,6 +115,16 @@ runs:
         ccache -s
       shell: bash
 
+    # The smoke test roxygenizes and commits the result, and does so with the
+    # patched roxygen2 that keeps the gap after a sentence ending a line
+    # (handbook/contributors/workflow/README.md). It replaces the r-lib/roxygen2
+    # the install action put in, before anything loads it. The other entries
+    # do not roxygenize, so they keep what they have.
+    - name: Install roxygen2 with the sentence-spacing patch
+      if: github.job == 'rcc-smoke'
+      run: scripts/roxygen2-fork.sh
+      shell: bash
+
     # The glue half of the compiler-warning gate
     # (handbook/build/warnings/README.md). It compiles the ~15 translation units
     # in src/ with the glue warning set and fails on anything the glue owns;

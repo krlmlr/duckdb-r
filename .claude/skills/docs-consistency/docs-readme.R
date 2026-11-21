@@ -167,6 +167,10 @@ groups <- list(
     globs = c("types-rd.R")
   ),
   list(
+    owner = "handbook/contributors/workflow",
+    globs = c("roxygen2-fork.sh")
+  ),
+  list(
     owner = "handbook/branches/flavors",
     globs = c("flavor*", "reflavor*")
   ),

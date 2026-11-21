@@ -73,6 +73,12 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 |---|---|
 | [`warnings.sh`](warnings.sh) | The compiler-warning gate: what each scope is held to, and the check itself. |
 
+## [`contributors/workflow/`](/handbook/contributors/workflow/README.md)
+
+| File | Purpose |
+|---|---|
+| [`roxygen2-fork.sh`](roxygen2-fork.sh) | Install roxygen2 from upstream with the `R/` part of a fork branch applied on top, stamped as a `.9100` build. |
+
 ## [`meta/handbook/`](/handbook/meta/handbook/README.md)
 
 | File | Purpose |

@@ -7,7 +7,8 @@ each step is explained by the leaf that owns it, not here.
 git clone https://github.com/duckdb/duckdb-r.git
 cd duckdb-r
 R -q -e 'pak::pak()'                    # R-level dependencies
-R -q -e 'pak::pak("r-lib/roxygen2")'    # roxygen2, from GitHub
+R -q -e 'pak::pak("r-lib/roxygen2")'    # roxygen2, from GitHub,
+scripts/roxygen2-fork.sh                # patched as CI documents with
 
 scripts/install-libduckdb.sh            # prebuilt engine, matching
 export DUCKDB_R_USE_SYSTEM_LIB=1        # the vendored commit
