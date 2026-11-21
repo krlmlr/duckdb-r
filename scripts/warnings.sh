@@ -250,13 +250,17 @@ prepare_compile() {
 
 # The roster src/Makevars links, spelled as sources. A vendored `.o` resolves to
 # whichever of .cpp/.cc/.c is on disk, the way R's implicit rules do.
+#
+# Only the SOURCES line: the SOURCES_JEMALLOC line beneath it is C, compiled
+# only where ./configure enables jemalloc and with the include path and define
+# that Makevars.jemalloc adds, none of which this standalone compile has.
 sources_of() {
   case "$1" in
     glue)
       sed 's/^GLUE=//' src/include/glue.mk | tr ' ' '\n' | sed 's/\.o$/.cpp/' | grep .
       ;;
     vendored)
-      sed 's/^SOURCES=//' src/include/sources.mk | tr ' ' '\n' | grep . |
+      sed -n 's/^SOURCES=//p' src/include/sources.mk | tr ' ' '\n' | grep . |
         while read -r o; do
           for ext in cpp cc c; do
             if [ -f "src/${o%.o}.$ext" ]; then
