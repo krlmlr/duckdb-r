@@ -19,6 +19,10 @@ duckdb_align_session_timezone <- function(conn) {
   if (!isTRUE(conn@driver@allow_extensions)) {
     return(invisible(FALSE))
   }
+  # A zone named in `duckdb(config = )` is the user's choice, and stays
+  if ("timezone" %in% tolower(names(conn@driver@config))) {
+    return(invisible(FALSE))
+  }
 
   icu <- dbGetQuery(
     conn,

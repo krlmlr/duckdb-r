@@ -132,7 +132,7 @@ set to \code{\link[=Sys.timezone]{Sys.timezone()}} or \code{""}.
 \code{TIMESTAMPTZ} columns follow the session's \code{TimeZone} setting instead,
 which \code{dbConnect()} sets to \code{"UTC"} where the icu extension is available,
 so that both timestamp types read a naive wall clock the same way.
-Run \verb{SET TimeZone} on the connection to choose another.}
+Run \verb{SET TimeZone} on the connection, or name \code{TimeZone} in the \code{config} of \code{\link[=duckdb]{duckdb()}}, to choose another.}
 
 \item{tz_out_convert}{How to convert timestamp columns to the timezone specified in \code{timezone_out}.
 There are two options: \code{"with"}, and \code{"force"}.

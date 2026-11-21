@@ -912,3 +912,16 @@ test_that("a connection still opens where icu cannot be loaded (#2646)", {
   expect_true(dbIsValid(con))
   expect_equal(dbGetQuery(con, "SELECT 1 AS a")$a, 1)
 })
+
+test_that("a TimeZone named in duckdb(config =) is kept (#2646)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+
+  con <- local_con(drv = duckdb(config = list(TimeZone = "Asia/Tokyo")))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Asia/Tokyo"
+  )
+})
