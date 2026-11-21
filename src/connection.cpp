@@ -65,6 +65,11 @@ void duckdb::ReleaseOnRThread(SEXP object) {
 }
 
 void duckdb::ReleaseOrphanedObjects() {
+	// Reached from the progress display's constructor, which runs on whichever thread issues the query,
+	// not always R's (rapi_query_off_r_thread()); the next entry point on R's thread releases them instead.
+	if (!OnRThread()) {
+		return;
+	}
 	std::vector<SEXP> objects;
 	{
 		std::lock_guard<std::mutex> guard(orphaned_objects_lock);
@@ -97,7 +102,7 @@ void RProgressBarDisplay::Initialize() {
 	}
 }
 
-// The engine builds the display when a query starts, on the thread that issues it, which is R's.
+// The engine builds the display when a query starts, on the thread that issues it, which is usually R's.
 RProgressBarDisplay::RProgressBarDisplay() : ProgressBarDisplay() {
 	ReleaseOrphanedObjects();
 	Initialize();

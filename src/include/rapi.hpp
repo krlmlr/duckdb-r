@@ -280,7 +280,7 @@ mutex &StreamsLock();
 //! Releases an object kept with R_PreserveObject(): at once on R's thread, otherwise at the next entry point
 //! on R's thread, where ReleaseOrphanedObjects() runs (connection.cpp)
 void ReleaseOnRThread(SEXP object);
-//! Releases what ReleaseOnRThread() was handed off R's thread; called on R's thread only
+//! Releases what ReleaseOnRThread() was handed off R's thread; does nothing off R's thread
 void ReleaseOrphanedObjects();
 
 // A prepared statement and its bound parameters, behind a duckdb_result or a duckdb_result_arrow.

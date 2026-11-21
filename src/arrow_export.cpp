@@ -712,10 +712,13 @@ void RArrowArrayStreamWrapper::Release(ArrowArrayStream *stream) {
 	// though not its connection.
 	auto result_stream = new RArrowArrayStreamWrapper(qry_res->context, qry_res->TakeResult(), chunk_size,
 	                                                  qry_res->Invalidated(), qry_res->conn);
-	result_stream->HandOver(conn_ref);
 
 	cpp11::sexp stream_ptr_sexp(
 	    Rf_ScalarReal(static_cast<double>(reinterpret_cast<uintptr_t>(&result_stream->stream))));
 	cpp11::sexp record_batch_reader(Rf_lang2(RStrings::get().ImportRecordBatchReader_sym, stream_ptr_sexp));
-	return cpp11::safe[Rf_eval](record_batch_reader, arrow_namespace);
+	cpp11::sexp reader(cpp11::safe[Rf_eval](record_batch_reader, arrow_namespace));
+	// Only once the import has succeeded: a wrapper leaked by a failing import must not keep its connection
+	// reachable, so that collecting the connection still closes it.
+	result_stream->HandOver(conn_ref);
+	return reader;
 }
