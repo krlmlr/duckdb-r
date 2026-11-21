@@ -93,10 +93,15 @@ Measured evidence:
   today's glue names only `arrow_scan`,
   though the engine registers both.
   The source's class picks the closures, and `pushdown` picks only the scan.
+  The class check runs first,
+  so a class outside both routes gets the class refusal below whatever `pushdown` says, `TRUE` included.
+  The default, `pushdown = NULL`, binds `arrow_scan` for an arrow-package object
+  and `arrow_scan_dumb` for a nanoarrow source.
   `pushdown = FALSE` on an arrow-package object keeps the arrow-package closures
   and binds `arrow_scan_dumb`, so `ProduceStream()` is never asked for a projection or a filter;
   it never moves such an object onto the nanoarrow route.
-  `pushdown = TRUE` on a nanoarrow source is an error, since nanoarrow's closures cannot filter.
+  `pushdown = TRUE` on a nanoarrow source is an error, since nanoarrow's closures cannot filter;
+  `pushdown = FALSE` on one is allowed and changes nothing.
 * **Only sources whose stream does not call R.**
   The stream is pulled by engine threads,
   and nanoarrow's reader over an R connection calls R and refuses any thread but R's
@@ -173,12 +178,14 @@ No behavior change on its own, since nothing binds `arrow_scan_dumb` yet.
   still materializes after `duckdb_unregister_arrow()` of that name,
   and registering different data under that name does not change the relation's rows.
 
-### 4. feat(relational): route filters honestly for a pushdown-free source
+### 4. feat(relational): route filters honestly for a pushdown-free scan
 
-With `pushdown = FALSE` the scan is `arrow_scan_dumb`,
+With `pushdown = FALSE`, or for a nanoarrow source, the scan is `arrow_scan_dumb`,
 so `rel_filter()` is applied by the engine.
-Add the test that pins it: the same filter over the same data returns
-the same rows through both producers.
+Add the test that pins it: the same filter returns the same rows
+over one arrow table through `arrow_scan` (the default) and through `arrow_scan_dumb` (`pushdown = FALSE`),
+and over the same data as a data frame through nanoarrow.
+The second case is what pins an arrow-package object with `pushdown = FALSE` to the arrow-package closures.
 
 ### 5. docs: state the constructor and its binding
 
