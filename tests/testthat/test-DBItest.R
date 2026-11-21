@@ -171,8 +171,6 @@ if (rlang::is_installed("DBItest")) {
     "constructor", # wontfix
     "send_query_only_one_result_set", # wontfix
     "send_statement_only_one_result_set", # wontfix
-    "send_query_stale_warning", # wontfix
-    "send_statement_stale_warning", # wontfix
 
     if (packageVersion("DBItest") < "1.7.0.9004") "roundtrip_timestamp", # broken test
 
@@ -205,7 +203,6 @@ if (rlang::is_installed("DBItest")) {
     "append_roundtrip_factor",
     "bind_factor",
     "arrow_bind_factor",
-    "arrow_send_query_stale_warning", # wontfix
     "arrow_send_query_only_one_result_set", # wontfix
     "arrow_write_table_arrow_roundtrip_timestamp_extended", # precision
     "arrow_append_table_arrow_roundtrip_timestamp_extended", # precision
