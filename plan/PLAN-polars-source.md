@@ -50,11 +50,25 @@ A generic that a package outside CRAN can implement is an interface.
   What stays here is a test that exercises it with a stub rather than with polars.
 * **`duckdb_register()` becomes an S3 generic**, as #98 asks.
   `duckdb_register.data.frame()` keeps today's `r_dataframe_scan` behavior byte for byte.
+  It wins for every `data.frame` subclass, one with its own `duckdb_arrow_producer()` method included,
+  so S3 dispatch alone decides and a tibble or a data.table never changes route.
+  A subclass that wants the producer route says so with a `duckdb_register()` method of its own.
   `duckdb_register.default()` keeps today's fallback for every other class:
-  it runs `as.data.frame()` on the source and registers the result as a data frame,
-  which is what `dbWriteTable()` and `dbAppendTable()` rely on when they pass `value` through.
-  It takes the Arrow-stream route, below, only for a `nanoarrow_array` and for a class with its own `duckdb_arrow_producer()` method.
-  A `nanoarrow_array` therefore moves from `as.data.frame()` to the stream route, and its columns map through Arrow rather than through R.
+  it runs `as.data.frame()` on the source and registers the result as a data frame.
+  `dbWriteTable()` converts `value` with `as.data.frame()` itself before it registers it
+  ([`R/dbWriteTable__duckdb_connection_character_data.frame.R`](/R/dbWriteTable__duckdb_connection_character_data.frame.R)),
+  so it is unaffected.
+  `dbAppendTable()` passes `value` through to `duckdb_register()`
+  ([`R/dbAppendTable__duckdb_connection.R`](/R/dbAppendTable__duckdb_connection.R)),
+  so it relies on the fallback,
+  and a Polars frame given to it moves to the stream route once polars ships a producer method.
+  The default takes the Arrow-stream route, below,
+  only for a `nanoarrow_array` and for a class with its own `duckdb_arrow_producer()` method.
+  It tells the latter by looking for a method for any of `class(x)` other than the default,
+  with `utils::getS3method("duckdb_arrow_producer", cl, optional = TRUE)`,
+  which also finds a method registered from another package's `.onLoad()`.
+  A `nanoarrow_array` therefore moves from `as.data.frame()` to the stream route, and its columns map through Arrow rather than through R:
+  an `int64` column becomes `BIGINT` rather than the `DOUBLE` that `as.data.frame()` converts it to.
 * **On the Arrow-stream route, only an allowlist, refused by class.**
   That refusal by class is what matches `rel_from_arrow()` ([krlmlr/duckdb-r#226](https://github.com/krlmlr/duckdb-r/pull/226)).
   `duckdb_arrow_producer.default()` builds a stream for a `nanoarrow_array`, over memory, so that the stream never calls R.
@@ -131,13 +145,17 @@ This plan assumes them rather than restating them, and its own commits start aft
 * `duckdb_register()` becomes `UseMethod("duckdb_register", df)`.
   `duckdb_register.data.frame()` is today's body, unchanged.
   `duckdb_register.default()` resolves a producer through `duckdb_arrow_producer()` and registers it,
-  for a `nanoarrow_array` or a class with its own method;
+  for a `nanoarrow_array` or a class with its own method, found with `utils::getS3method(optional = TRUE)` over `class(x)`;
   for any other class it runs today's `as.data.frame()` and registers the result as a data frame.
+* `NEWS.md` gains a bullet for the one change a caller can see:
+  a `nanoarrow_array` registers through Arrow, so an `int64` column reads as `BIGINT` instead of `DOUBLE`.
   `duckdb_unregister()` drops either kind.
 * The argument is still named `df`, since renaming it would break callers who name it.
   The documentation says what it now accepts.
 * Tests: `duckdb_register()` on a nanoarrow array and on the stub producer,
   on a class that `as.data.frame()` converts as today, the data frame path unchanged, and `duckdb_unregister()` for both.
+  A `nanoarrow_array` with an `int64` column registers it as `BIGINT`.
+  A `data.frame` subclass with a stub producer method stays on `r_dataframe_scan`.
 
 ### 3. feat(relational): let `rel_from_arrow()` take a producer
 
@@ -145,7 +163,17 @@ Depends on krlmlr/duckdb-r#226.
 `rel_from_arrow()` keeps its arrow-package and nanoarrow routes.
 For a class outside both, it calls `duckdb_arrow_producer()` when the class has a method of its own.
 It refuses any other class, as before.
-The producer's `pushdown` flag picks the scan, as it does for `duckdb_register()`.
+The caller's `pushdown` argument of `rel_from_arrow()` combines with the producer's flag:
+
+* `NULL`, the default, defers to the producer's flag.
+* `TRUE` binds `arrow_scan` when the producer's flag is `TRUE`, and is an error when it is `FALSE`,
+  since a producer that declines filters must not be handed one.
+* `FALSE` binds `arrow_scan_dumb` whatever the producer's flag says.
+
+Whether the argument should exist at all, or the choice should travel with the source,
+is the open question in krlmlr/duckdb-r#226 on a `supports_pushdown` attribute.
+The producer's flag is such an attribute for producers.
+This step keeps the argument as krlmlr/duckdb-r#226 has it, and follows whatever that plan decides.
 Tests: `rel_from_arrow()` on the stub producer, and the refusal of a class without a method.
 
 ### 4. docs: state the extension point and what implements it
