@@ -62,7 +62,8 @@ What the run compresses to:
   work — the whole source crosses the boundary either way.
 * **A one-shot stream is not a table.**
   Registering a `nanoarrow_array_stream` rather than something that
-  produces one fails on the first projection —
+  produces one fails on the first query, a `count(*)`,
+  with `Invalid Error: std::exception` —
   the source has no columns to subset and nothing to replay.
 * **Type fidelity differs in both directions.**
   nanoarrow is better on `hms` (`TIME`, not `INTERVAL`)

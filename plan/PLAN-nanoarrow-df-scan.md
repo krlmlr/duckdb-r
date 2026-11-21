@@ -54,8 +54,8 @@ is [`usage/memory/writing/`](/handbook/usage/memory/writing/README.md)'s.
   cannot filter: `arrow_scan_dumb`, registered alongside `arrow_scan`
   with `projection_pushdown`, `filter_pushdown` and `filter_prune`
   all false.
-  The v2.0 engine keeps both, flags included, and so does the v2.1 engine `main` carries since the v2.1 landing;
-  what it changes is how the factory reaches them,
+  The v2.0 engine keeps both, flags included, and so does the v2.1 engine `main` carries since the v2.1 landing.
+  What v2.0 changed, and v2.1 keeps, is how the factory reaches them:
   as the table reference's `bind_info` rather than as three `POINTER` arguments.
 * Type fidelity differs in both directions:
   better for `hms` and `POSIXct`,
@@ -103,8 +103,8 @@ can do rather than assume it can filter.
 * **A source consumed on read is refused at registration.**
   A bare `nanoarrow_array_stream` cannot back a view —
   it has nothing to replay for the second scan.
-  Detect it and say so, rather than failing on the first projection
-  with a message about subsetting.
+  Detect it and say so, rather than failing on the first query
+  with `Invalid Error: std::exception`, as the recorded `count(*)` does.
   A query result's stream is the same case with a worse failure:
   registered on its own connection, a query over it fails with the invalidation error,
   because starting the query ends the stream,
@@ -129,6 +129,10 @@ can do rather than assume it can filter.
   ([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)).
   What `as_nanoarrow_array_stream()` builds over R vectors is read without R,
   and so is what arrow and polars export.
+  The batches it builds over R vectors borrow them rather than copy them,
+  so they are released on whichever engine thread is done with them;
+  nanoarrow releases its hold on an R object only on R's thread,
+  and queues a release from any other thread until R's thread empties the queue.
   `duckdb_register_nanoarrow()` cannot tell the two apart from the outside,
   so the reference page says which sources qualify,
   and names `dbAppendTableArrow()` as the route for a stream that does not
@@ -150,6 +154,11 @@ Route both through a helper that evaluates the call with
 the way the bind of a data frame scan already does for an ALTREP column
 ([`src/scan.cpp`](/src/scan.cpp)):
 the threading leaf's rule is that no R error may long-jump past the engine's frames.
+The helper also checks `OnRThread()` before it calls R at all, and raises an engine error when it is off R's thread.
+For a streaming result, the query's tasks run on the thread that fetches it, which can be a thread of arrow's pool
+([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)),
+so the scheduling thread the export runs on is not R's thread in every case,
+and catching the R error does not make calling R from another thread safe.
 
 Standalone: it improves the existing arrow path on its own,
 and every later commit depends on the diagnostics.
@@ -165,8 +174,12 @@ The factory is the table reference's `bind_info` since the v2.0 landing,
 a `shared_ptr<ArrowScanFactory>` that `arrow_scan` takes in place of arguments,
 so the flag travels with it:
 `ArrowScanReplacement()` reads it and names `arrow_scan_dumb` instead of `arrow_scan`
-when it is false,
-in which case `ProduceStream()` is never called with a projection or a filter.
+when it is false.
+`arrow_scan_dumb` still hands `ProduceStream()` a projection, every column of the source,
+since `ArrowScanInitGlobal()` passes the scan's `column_ids` whatever the pushdown flags say;
+it only never hands it a filter, so the exporter would be called with every column and `filters = TRUE`.
+So `ProduceStream()` reads the flag too and calls the exporter with its two arguments alone when it is false,
+and a producer that cannot push down never sees a projection or a filter argument.
 `arrow_scan_dumb` takes the factory through the same bind, so it needs nothing else from the engine.
 `rapi_startup()` ([`src/database.cpp`](/src/database.cpp)) sets `INITIALIZE_ON_SCHEDULE` on `arrow_scan` alone,
 so this commit extends it to `arrow_scan_dumb`:
@@ -185,6 +198,10 @@ The R surface and the C++ entry point behind it.
   It takes two closures rather than five — an exporter and a schema
   exporter — since the expression factories are unreachable without
   pushdown.
+  It pads them into the five-element list the factory indexes,
+  with `NULL` in the three expression slots,
+  so the factory's `VECTOR_ELT(export_fun, 0)` and `VECTOR_ELT(export_fun, 4)` stay as they are;
+  `TransformFilter()`, the only reader of the other three, is never reached without pushdown.
 * Regenerate `src/cpp11.cpp`, `R/cpp11.R`, `R/rethrow-gen.R`.
 * `R/register.R`: `duckdb_register_nanoarrow(conn, name, x)`,
   building the two closures over
@@ -246,9 +263,8 @@ on `usage/integrations/`.
   with a message that explains why.
   A single-scan query would then work,
   and the failure would be legible rather than incidental.
-* Whether the type differences that favour nanoarrow —
-  `BIGINT` for `integer64`, `TIME` for `hms`,
-  `TIMESTAMP WITH TIME ZONE` for `POSIXct` —
+* Whether the type differences that favor nanoarrow —
+  `TIME` for `hms` and `TIMESTAMP WITH TIME ZONE` for `POSIXct` —
   are bugs in `r_dataframe_scan` worth filing separately.
 * Whether the nanoarrow route changes the memory peak of a lazy source.
   arrow's `Scanner` reads ahead on Arrow's own pool and buffers a lazy source whole,
