@@ -75,6 +75,7 @@ The [date](https://duckdb.org/docs/current/sql/data_types/date), [time](https://
 [timestamp](https://duckdb.org/docs/current/sql/data_types/timestamp) and [interval](https://duckdb.org/docs/current/sql/data_types/interval) types:
 
 * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
+  A `POSIXct` that `dbAppendTable()` or `field.types` writes into it, or into a `TIME`, keeps its UTC date or time of day whatever the session zone.
 * **`TIME`** reads as `difftime` in seconds.
   Its text writes it through `field.types`, and so does Arrow ([`arrow-types/`](/handbook/usage/arrow-types/README.md)).
 * **`TIME_NS`** reads through Arrow, and to the microsecond through a cast to `TIME` in the query.

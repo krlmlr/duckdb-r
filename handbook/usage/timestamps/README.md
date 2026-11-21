@@ -73,15 +73,24 @@ the wider type mapping is
   `duckdb_register()`, bound parameters, `dbDataType()` and
   `dbQuoteLiteral()`, nested columns included.
 * **Written into a naive column, a `POSIXct` keeps the UTC wall clock.**
-  `dbAppendTable()` into an existing `TIMESTAMP`, `TIMESTAMP_S`,
-  `TIMESTAMP_MS` or `TIMESTAMP_NS` column,
-  `dbWriteTable(append = TRUE)`, and `dbWriteTable()` with
-  `field.types` naming one of these
-  store what `posixct = "timestamp"` stores,
-  whatever the session zone and whether icu is loaded:
-  they convert by epoch, not by the engine's cast,
-  which would take the wall clock in the session `TimeZone`
-  once icu is loaded.
+  `dbAppendTable()`, `dbWriteTable(append = TRUE)`, and `dbWriteTable()`
+  with `field.types` register a column as `TIMESTAMP`, as
+  `posixct = "timestamp"` does, when its target holds
+  `TIMESTAMP`, `TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP_NS`, `DATE`
+  or `TIME` and no zoned type,
+  at the top or nested in a `STRUCT`, a `LIST` or a `MAP`.
+  They store the UTC wall clock, date or time of day
+  whatever the session zone and whether icu is loaded,
+  where the engine's cast from `TIMESTAMPTZ` would take them
+  in the session `TimeZone` once icu is loaded.
+  Three targets take the session zone.
+  A `TIME_NS` does, as the engine casts only a `TIMESTAMPTZ` into it.
+  A nested one that mixes a naive field with a zoned one or a `TIME_NS`
+  scans as `TIMESTAMPTZ` for that field's sake,
+  so its naive field gets the session's wall clock.
+  A `VARCHAR` gets the text of a `TIMESTAMPTZ`,
+  which carries the session offset, `2024-01-11 03:03:12+14`
+  where the older mapping wrote `2024-01-10 13:03:12`.
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,

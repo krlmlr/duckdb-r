@@ -49,14 +49,45 @@ duckdb_register <- function(
   overwrite = FALSE,
   experimental = FALSE
 ) {
+  duckdb_register_impl(
+    conn,
+    name,
+    df,
+    overwrite,
+    experimental,
+    call = parent.frame()
+  )
+}
+
+# `posixct_naive_columns` names the columns whose `POSIXct` scans as `TIMESTAMP`
+# whatever `dbConnect(posixct = )` says,
+# for `dbAppendTable()` and `dbWriteTable()` to write a column going into a naive temporal type.
+# Handbook: handbook/usage/timestamps/README.md
+duckdb_register_impl <- function(
+  conn,
+  name,
+  df,
+  overwrite = FALSE,
+  experimental = FALSE,
+  posixct_naive_columns = NULL,
+  call = parent.frame()
+) {
   stopifnot(dbIsValid(conn))
   df <- encode_values(as.data.frame(df))
+  convert_opts <- duckdb_convert_opts_impl(
+    conn@convert_opts,
+    experimental = experimental
+  )
+  if (length(posixct_naive_columns) > 0) {
+    convert_opts$posixct_naive_columns <- enc2utf8(posixct_naive_columns)
+  }
   rethrow_rapi_register_df(
     conn@conn_ref,
     enc2utf8(as.character(name)),
     df,
-    duckdb_convert_opts_impl(conn@convert_opts, experimental = experimental),
-    overwrite
+    convert_opts,
+    overwrite,
+    call = call
   )
   invisible(TRUE)
 }

@@ -106,6 +106,14 @@ ConvertOpts::ConvertOpts(cpp11::sexp options_nullable) {
 		posixct = string_to_posixct_type(as_cpp<std::string>(posixct_sexp));
 	}
 
+	// Extract posixct_naive_columns; set only for a registration that dbAppendTable() or dbWriteTable() makes
+	SEXP posixct_naive_columns_sexp = options["posixct_naive_columns"];
+	if (posixct_naive_columns_sexp != R_NilValue) {
+		for (auto column : cpp11::strings(posixct_naive_columns_sexp)) {
+			posixct_naive_columns.push_back(std::string(column));
+		}
+	}
+
 	// Extract arrow
 	arrow = bool_to_arrow_conversion(as_cpp<bool>(options["arrow"]));
 
