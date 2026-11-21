@@ -11,13 +11,16 @@ in rows crossing the boundary, not only in seconds.
 `DUCKDB_R_USE_SYSTEM_LIB=1`),
 polars 1.14.0.9000 (r-universe, built from source),
 nanoarrow 0.9.0, R 4.5.3, Linux.
-Not repeated on the v1.5.6 or v2.0 engines;
-both keep `arrow_scan`, `arrow_scan_dumb` and the view-type gate the record turns on
+Not repeated on the v1.5.6, v2.0 or v2.1 engines.
+All three keep `arrow_scan`, `arrow_scan_dumb` and the view-type gate the record turns on
 (vendored `src/duckdb/src/function/table/arrow.cpp`).
+In the v2.1 engine the gate is `TableHasUnfilterableTypes()`, whose comment says one such column turns pushdown off for the table.
 
 *What it supports:*
 [`plan/PLAN-polars-source.md`](/plan/PLAN-polars-source.md),
-and the frame-library section of [`usage/integrations/`](/handbook/usage/integrations/README.md).
+and the frame library entry in [`usage/integrations/`](/handbook/usage/integrations/README.md).
+[`2026-09-28-frame-libraries/`](/experiments/2026-09-28-frame-libraries/README.md) measures the other direction,
+a query result taken into Polars, and does not overlap with this record.
 
 Run [`polars.R`](polars.R); the recorded run is [`polars.md`](polars.md),
 rendered with `reprex::reprex(si = TRUE)`.

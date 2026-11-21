@@ -144,8 +144,8 @@ this plan assumes them rather than restating them.
 `handbook/usage/integrations/README.md` gains the inbound direction for
 frame libraries: any package that can produce an Arrow C stream is a
 source, with pushdown if it implements `duckdb_arrow_producer()`.
-The data.table and collapse paragraph gets its counterpart —
-those libraries operate on data frames and need nothing;
+The frame library entry, which takes a result into Polars, data.table and collapse, gets its counterpart —
+data.table and collapse operate on data frames and need nothing;
 Polars is the case that needed an interface.
 
 ### 4. A worked producer, outside this repository
@@ -164,7 +164,8 @@ experiment, is the last step here.
 * **A Polars *writer*.**
   Results already leave as a nanoarrow stream that
   `polars::as_polars_df()` consumes
-  ([`usage/integrations/`](/handbook/usage/integrations/README.md)),
+  ([`usage/integrations/`](/handbook/usage/integrations/README.md),
+  [`experiments/2026-09-28-frame-libraries/`](/experiments/2026-09-28-frame-libraries/README.md)),
   and [#642](https://github.com/duckdb/duckdb-r/issues/642) is
   answered on that side already.
 * **Translating everything DuckDB can push.**
