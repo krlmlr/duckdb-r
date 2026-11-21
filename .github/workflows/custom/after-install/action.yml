@@ -122,8 +122,9 @@ runs:
     # allocator_jemalloc.cpp compiles to nothing at all without the define, so
     # the name is in the library when jemalloc is in it and not otherwise.
     # GitHub's Linux runners are 64-bit glibc, so RUNNER_OS decides what to
-    # expect. A system-libduckdb build compiled none of this and has nothing to
-    # read.
+    # expect, unless an entry sets DUCKDB_R_DISABLE_JEMALLOC, which configure
+    # honors with the same spellings. A system-libduckdb build compiled none of
+    # this and has nothing to read.
     #
     # The package name comes from DESCRIPTION and the library is whatever shared
     # object sits under its libs/, because a flavored branch installs as
@@ -143,11 +144,16 @@ runs:
           exit 1
         fi
 
-        if [ "${RUNNER_OS}" = "Linux" ]; then
-          expected=jemalloc
-        else
-          expected=standard
-        fi
+        case "${DUCKDB_R_DISABLE_JEMALLOC:-}" in
+          1 | true | TRUE | yes | YES) expected=standard ;;
+          *)
+            if [ "${RUNNER_OS}" = "Linux" ]; then
+              expected=jemalloc
+            else
+              expected=standard
+            fi
+            ;;
+        esac
 
         if grep -q -a duckdb_je_ "${lib}"; then
           found=jemalloc
