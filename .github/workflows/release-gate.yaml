@@ -87,7 +87,8 @@ jobs:
     name: "Soft checks"
 
     env:
-      # Left off everywhere else, because the recency and frequency checks cannot be disabled with it.
+      # The remote part, which asks CRAN, is left off everywhere else (see custom/before-install),
+      # because the recency and frequency checks cannot be disabled with it.
       _R_CHECK_CRAN_INCOMING_: "true"
       _R_CHECK_CRAN_INCOMING_REMOTE_: "true"
 

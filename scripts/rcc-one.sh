@@ -548,15 +548,18 @@ gate_clean() {
 }
 
 # Mirrors r-lib/actions/check-r-package@v2 as invoked by
-# .github/workflows/check/action.yml.
+# .github/workflows/check/action.yml, with the environment that
+# .github/workflows/custom/before-install sets before it.
 gate_check() {
   local rc=0
   RCMDCHECK_ERROR_ON="${RCMDCHECK_ERROR_ON:-note}" rscript <<'EOF' || rc=1
-# The action's own defaults, set before the check and only when unset.
-# `--as-cran` otherwise turns the CRAN incoming checks on, and a flavored
-# package is not on CRAN, so every commit picks up a "New submission" NOTE.
+# The action's own defaults and before-install's, set before the check and only
+# when unset. The CRAN incoming checks run offline, as in CI: the local part
+# (tarball size, DESCRIPTION spelling) only. The remote part asks CRAN, and a
+# flavored package is not on CRAN, so it would add a "New submission" NOTE.
 if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
-if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "true")
+if (Sys.getenv("_R_CHECK_CRAN_INCOMING_REMOTE_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_REMOTE_" = "false")
 # `tests/testthat.R` falls back to GITHUB_ACTIONS / MY_UNIVERSE when this is
 # unset, so the suite runs in CI and silently does not run anywhere else. Opt in
 # here, without overriding a value the caller already set: the versions matrix
