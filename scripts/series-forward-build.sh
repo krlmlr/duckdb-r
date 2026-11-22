@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-dev`,
 # and then of the old `<S>-build` above it, onto HEAD, which must be the
 # freshly flavored seed on current `main` (.claude/skills/series-forward/SKILL.md).

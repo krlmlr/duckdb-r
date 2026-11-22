@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Land a series on `main`: build `<L>-land-dev`, every vendor commit of the
 # series replayed without its flavor onto the `main` it will fast-forward
 # (.claude/skills/series-land/SKILL.md).
