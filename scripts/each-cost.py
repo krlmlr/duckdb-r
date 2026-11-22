@@ -9,7 +9,7 @@ reach is bimodal: a narrow header pulls in a couple of dozen objects, a widely
 included one more than half the build (measured in
 `plan/history/vendoring-loop.md`, Appendix A.2).
 
-`scripts/each-plan.sh` uses this to weigh commits before partitioning them into
+The each-plan action uses this to weigh commits before partitioning them into
 matrix shards, so that a wide-header commit is isolated instead of being packed
 next to nineteen cheap ones.
 

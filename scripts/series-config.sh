@@ -4,7 +4,7 @@
 # and nothing else.
 #
 # Every scripts/series-*.sh that reads the engine, scripts/vendor-one.sh and
-# scripts/each-plan.sh read its names from here, through scripts/series-lib.sh
+# the each-plan action read its names from here, through scripts/series-lib.sh
 # or scripts/vendor-lib.sh, and from nowhere else; scripts/vendor.sh, the
 # manual bulk vendoring, keeps its own copy and reads only the generator, the
 # release tag and the older vendor subjects from here. A repository that
@@ -238,7 +238,7 @@ series_version_before() { # <engine> <version>
 # The subject is the anchor every seed-relative walk reads.
 series_seed_subject='chore: Add fifth version component'
 
-# The estimator scripts/each-plan.sh weighs commits with: a command whose `map`
+# The estimator the each-plan action weighs commits with: a command whose `map`
 # and `batch` forms print the unity objects a commit invalidates
 # (scripts/each-cost.py). A repository without an include graph worth reading
 # names a command that answers a constant weight.
