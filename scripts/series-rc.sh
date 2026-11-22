@@ -24,6 +24,11 @@
 #   <S> is the source series, `v2.0-cyanoptera-fwd` for `v2.0-cyanoptera-fwd-rc-*`.
 #   --push writes the strand, leased on what the remote held when this run read it.
 
+# inherit_errexit needs bash 4.4, and macOS's /bin/bash is 3.2: say so rather than fail on the shopt.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: $(basename "$0") needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+  exit 1
+fi
 set -euo pipefail
 # A failure inside `$(...)` stops the run too, rather than minting an empty SHA.
 shopt -s inherit_errexit

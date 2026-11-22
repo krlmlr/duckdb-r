@@ -86,18 +86,19 @@ run() { # <command>...: run it, or print it on a dry run
 
 # --- 1. READY ----------------------------------------------------------------
 st=0
-# Run by this bash, which passed the guard above, not by the shebang's /bin/bash, which is 3.2 on macOS.
-status=$("$BASH" "$(dirname "$0")/series-land.sh" "$L" --status --remote origin --canonical upstream 2>&1) || st=$?
-printf '%s\n' "$status" | sed -n '1,/^READY/p' | sed 's/^/  | /'
+status=$("$(dirname "$0")/series-land.sh" "$L" --status --remote origin --canonical upstream 2>&1) || st=$?
 push_re='^  git push upstream ([0-9a-f]{40}):refs/heads/(main|v[0-9]+\.[0-9]+-[a-z]+)$'
 sha='' B=''
 while IFS= read -r line; do
   [[ $line =~ $push_re ]] && { sha=${BASH_REMATCH[1]}; B=${BASH_REMATCH[2]}; break; }
 done <<<"$status"
 if [ "$st" -ne 0 ] || ! grep -q '^READY' <<<"$status" || [ -z "$sha" ]; then
-  echo "Error: 'scripts/series-land.sh $L --status' does not print READY; nothing is pushed" >&2
+  # Its own words first, the last of them where it said much, so that an error of its own is not hidden.
+  printf '%s\n' "$status" | tail -n 20 | sed 's/^/  | /' >&2
+  echo "Error: 'scripts/series-land.sh $L --status' does not print READY (exit status $st); nothing is pushed" >&2
   exit 1
 fi
+printf '%s\n' "$status" | sed -n '1,/^READY/p' | sed 's/^/  | /'
 
 # --- 2. the fork's branch ----------------------------------------------------
 git fetch -q --no-tags upstream "+refs/heads/$B:$tmp/upstream"
