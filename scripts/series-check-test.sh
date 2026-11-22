@@ -415,8 +415,11 @@ hasnt "and the canonical bound draws no warning" "$out" "readiness may over-coun
 # included, and each is said to be one.
 git push -q -f origin "$RB0:refs/heads/main"
 out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)
-has "the fork's main as the bound is warned about" "$out" "warning: main read from origin's copy"
-has "and so is the fork's copy of the release branch" "$out" "v9.9-r-fwd: warning: origin/rbr is the fork's copy"
+has "the fork's copy of the release branch as the bound is warned about" "$out" "v9.9-r-fwd: warning: origin/rbr is the fork's copy"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z-fwd --canonical '' 2>&1)
+has "and so is the fork's main" "$out" "v9.9-z-fwd: warning: origin/main is the fork's copy"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z --canonical '' 2>&1)
+hasnt "and a series that is no forward draws no warning" "$out" "is the fork's copy"
 git push -q origin :refs/heads/rbr
 git update-ref -d refs/remotes/origin/rbr
 out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)

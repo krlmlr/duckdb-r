@@ -539,10 +539,6 @@ main_ref=''
 for r in ${canonical:+"refs/remotes/$canonical/main"} "refs/remotes/$remote/main"; do
   if git rev-parse -q --verify "$r" >/dev/null; then main_ref=$r; break; fi
 done
-if [ -n "$main_ref" ] && [ "$main_ref" = "refs/remotes/$remote/main" ]; then
-  echo "warning: main read from $remote's copy, not the canonical repository's;"
-  echo "         a forward's cutover readiness may over-count (handbook/branches/mirrors/README.md)"
-fi
 
 # The branch a series releases from, as the declaration names it; `main` when
 # it names none. A forward is seeded on that branch (series-forward/SKILL.md).
@@ -559,7 +555,8 @@ releases_from_of() { # <series> -> branch
 
 # The mainline a forward's coverage is counted above: the canonical copy of the
 # branch its series releases from, the fork's copy where the canonical one
-# cannot be read, said on stdout as `warning`, and empty when neither is.
+# cannot be read, and empty when neither is. The caller warns about a fork's
+# copy and reports an empty bound as missing data.
 coverage_bound() { # <series> -> ref, empty when none
   local rf
   rf=$(releases_from_of "$1")
@@ -631,8 +628,7 @@ for S in "${series[@]}"; do
       else
         case "$bound" in
           "refs/remotes/$remote/"*)
-            [ "$bound" = "refs/remotes/$remote/main" ] ||
-              echo "$S: warning: ${bound#refs/remotes/} is the fork's copy, which nothing keeps level; readiness may over-count" ;;
+            echo "$S: warning: ${bound#refs/remotes/} is the fork's copy, which nothing keeps level; readiness may over-count" ;;
         esac
         fwd_vendored=$(git log --format=%s "$bound..$green" -- "$series_scan_dir" | grep -E "$series_vendor_ere" || true)
       fi
