@@ -823,6 +823,123 @@ test_that("dbCreateTable() and dbAppendTable() into a naive timestamp column ign
   expect_equal(dbReadTable(con, "t")$z, instant, ignore_attr = TRUE)
 })
 
+test_that("dbAppendTable() into zoned columns keeps the instant under posixct = 'timestamp' (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con(posixct = "timestamp")
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  dbExecute(
+    con,
+    "CREATE TABLE t (z TIMESTAMPTZ, tt TIMETZ, s STRUCT(z TIMESTAMPTZ), l TIMESTAMPTZ[])"
+  )
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(z = instant, tt = instant)
+  df$s <- data.frame(z = instant)
+  df$l <- list(c(instant, instant))
+  dbAppendTable(con, "t", df)
+
+  expect_equal(
+    unlist(dbGetQuery(con, "SELECT epoch(z), epoch(s.z), epoch(l[2]) FROM t")),
+    rep(as.numeric(instant), 3),
+    ignore_attr = TRUE
+  )
+  # 13:03:12 UTC is 08:03:12 in New York
+  expect_equal(
+    dbGetQuery(con, "SELECT tt::VARCHAR AS tt FROM t")$tt,
+    "08:03:12-05"
+  )
+})
+
+test_that("dbWriteTable(append = TRUE) into zoned columns keeps the instant under posixct = 'timestamp' (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con(posixct = "timestamp")
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  dbExecute(con, "CREATE TABLE t (z TIMESTAMPTZ, s STRUCT(z TIMESTAMPTZ))")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(z = instant)
+  df$s <- data.frame(z = instant)
+  dbWriteTable(con, "t", df, append = TRUE)
+
+  expect_equal(
+    unlist(dbGetQuery(con, "SELECT epoch(z), epoch(s.z) FROM t")),
+    rep(as.numeric(instant), 2),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbWriteTable(field.types =) to zoned types keeps the instant under posixct = 'timestamp' (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con(posixct = "timestamp")
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(z = instant, a = instant)
+  df$l <- list(c(instant, instant))
+  dbWriteTable(
+    con,
+    "t",
+    df,
+    field.types = c(
+      z = "TIMESTAMPTZ",
+      a = "TIMESTAMP",
+      l = "TIMESTAMP WITH TIME ZONE[]"
+    )
+  )
+
+  expect_equal(
+    dbGetQuery(con, "DESCRIBE t")$column_type,
+    c("TIMESTAMP WITH TIME ZONE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE[]")
+  )
+  expect_equal(
+    unlist(dbGetQuery(con, "SELECT epoch(z), epoch(l[1]) FROM t")),
+    rep(as.numeric(instant), 2),
+    ignore_attr = TRUE
+  )
+  # A naive target keeps the UTC wall clock, as before
+  expect_equal(
+    dbGetQuery(con, "SELECT a::VARCHAR AS a FROM t")$a,
+    "2024-01-10 13:03:12"
+  )
+})
+
+test_that("posixct = 'timestamp' into naive columns still stores the UTC wall clock (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con(posixct = "timestamp")
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP, d DATE, s STRUCT(a TIMESTAMP))")
+  instant <- as.POSIXct("2024-01-10 23:03:12", tz = "UTC")
+  df <- data.frame(a = instant, d = instant)
+  df$s <- data.frame(a = instant)
+  dbAppendTable(con, "t", df)
+  dbWriteTable(con, "t", df, append = TRUE)
+
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT a::VARCHAR, d::VARCHAR, s.a::VARCHAR FROM t"
+    )),
+    rep(
+      c("2024-01-10 23:03:12", "2024-01-10", "2024-01-10 23:03:12"),
+      each = 2
+    ),
+    ignore_attr = TRUE
+  )
+})
+
 test_that("convert_opts without posixct falls back to the default everywhere (#2574)", {
   con <- local_con()
   con@convert_opts$posixct <- NULL
@@ -1166,4 +1283,38 @@ test_that("a connection opens and leaves icu alone where it is not installed (#2
     )$installed,
     FALSE
   )
+})
+
+test_that("only a POSIXct going into a zoned temporal type scans zoned (#2574)", {
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  value <- data.frame(
+    a = instant,
+    b = instant,
+    c = 1L,
+    d = instant,
+    e = instant,
+    f = instant,
+    g = instant,
+    h = instant
+  )
+  value$s <- data.frame(x = instant)
+  value$m <- data.frame(x = instant)
+  target_types <- c(
+    a = "TIMESTAMP",
+    b = "TIMESTAMP WITH TIME ZONE",
+    c = "TIMESTAMPTZ",
+    d = "STRUCT(\"TIMESTAMPTZ\" INTEGER)",
+    e = "TIME_NS",
+    f = "TIME WITH TIME ZONE[]",
+    g = "VARCHAR",
+    h = "ENUM('WITH TIME ZONE')",
+    s = "STRUCT(x TIMESTAMPTZ)",
+    m = "STRUCT(x TIMESTAMP, y TIMESTAMP WITH TIME ZONE)"
+  )
+
+  expect_equal(
+    duckdb_posixct_tz_columns(value, target_types),
+    c("b", "f", "s")
+  )
+  expect_equal(duckdb_posixct_naive_columns(value, target_types), "a")
 })

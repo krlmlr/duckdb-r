@@ -34,7 +34,8 @@ dbAppendTable__duckdb_connection <- function(
       conn,
       view_name,
       value,
-      posixct_naive_columns = duckdb_posixct_naive_columns(value, target_types)
+      posixct_naive_columns = duckdb_posixct_naive_columns(value, target_types),
+      posixct_tz_columns = duckdb_posixct_tz_columns(value, target_types)
     )
 
     select_exprs <- duckdb_select_exprs_for_target(
@@ -111,37 +112,71 @@ duckdb_is_map_type <- function(type) {
 # from `TIMESTAMP` it takes the UTC wall clock either way, as `posixct = "timestamp"` writes it.
 # Handbook: handbook/usage/timestamps/README.md
 duckdb_posixct_naive_columns <- function(value, target_types) {
+  duckdb_posixct_columns_into(value, target_types, "naive")
+}
+
+# The counterpart for a type that holds a zoned temporal type and no naive one.
+# `dbAppendTable()` and `dbWriteTable()` register these to scan as `TIMESTAMPTZ`
+# whatever `dbConnect(posixct = )` says,
+# since the cast from `TIMESTAMP` into a zoned type reads the wall clock in the session `TimeZone`.
+duckdb_posixct_tz_columns <- function(value, target_types) {
+  duckdb_posixct_columns_into(value, target_types, "zoned")
+}
+
+duckdb_posixct_columns_into <- function(value, target_types, kind) {
   col_names <- intersect(names(value), names(target_types))
-  naive <- vapply(
+  match <- vapply(
     col_names,
     function(col_name) {
-      duckdb_is_naive_temporal_type(target_types[[col_name]]) &&
+      identical(duckdb_temporal_type_kind(target_types[[col_name]]), kind) &&
         duckdb_has_posixct(value[[col_name]])
     },
     logical(1)
   )
-  col_names[naive]
+  col_names[match]
 }
 
 # Returns TRUE if `type`, as `DESCRIBE` or `typeof()` spell it,
 # holds `TIMESTAMP`, `TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP_NS`, `DATE` or `TIME`, at the top or nested,
 # and none of `TIMESTAMP WITH TIME ZONE`, `TIME WITH TIME ZONE` or `TIME_NS`,
-# which only a `TIMESTAMPTZ` casts into.
+# which the engine casts no `POSIXct` into.
 duckdb_is_naive_temporal_type <- function(type) {
+  identical(duckdb_temporal_type_kind(type), "naive")
+}
+
+# Classifies the temporal types that `type`, as `DESCRIBE` or `typeof()` spell it, holds at the top or nested:
+# "naive" for `TIMESTAMP`, `TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP_NS`, `DATE` or `TIME` only,
+# "zoned" for `TIMESTAMP WITH TIME ZONE` or `TIME WITH TIME ZONE` only
+# (`TIMESTAMPTZ` and `TIMETZ` as aliases),
+# and NA for none or a mix.
+# A `TIME_NS` counts as neither but keeps a type from being "naive",
+# since the engine casts no `TIMESTAMP` into it.
+duckdb_temporal_type_kind <- function(type) {
   # A quoted field name holds no type
   bare <- gsub('"([^"]|"")*"', "", type)
+  # and neither does a single-quoted literal, such as an `ENUM` value
+  bare <- gsub("'([^']|'')*'", "", bare)
   # A type ends at a comma, a parenthesis, a bracket or the end,
   # where a field name such as `date` in `STRUCT(date INTEGER)` is followed by its type
   type_pattern <- function(names) {
     paste0("(?<![A-Za-z0-9_])(", names, ")(?=$|[,)[])")
   }
-  if (
-    grepl("WITH TIME ZONE", bare, fixed = TRUE) ||
-      grepl(type_pattern("TIME_NS"), bare, perl = TRUE)
-  ) {
-    return(FALSE)
+  zoned <- grepl("WITH TIME ZONE", bare, fixed = TRUE) ||
+    grepl(type_pattern("TIMESTAMPTZ|TIMETZ"), bare, perl = TRUE)
+  # `TIMESTAMP WITH TIME ZONE` is followed by a space, so it does not count as naive
+  naive <- grepl(
+    type_pattern("TIMESTAMP(_S|_MS|_NS)?|DATE|TIME"),
+    bare,
+    perl = TRUE
+  )
+  time_ns <- grepl(type_pattern("TIME_NS"), bare, perl = TRUE)
+  if (naive && !zoned && !time_ns) {
+    "naive"
+  } else if (zoned && !naive) {
+    "zoned"
+  } else {
+    NA_character_
   }
-  grepl(type_pattern("TIMESTAMP(_S|_MS|_NS)?|DATE|TIME"), bare, perl = TRUE)
 }
 
 # Returns TRUE if `x` is a `POSIXct` or a `POSIXlt`, or a data frame or list that holds one at any depth.
