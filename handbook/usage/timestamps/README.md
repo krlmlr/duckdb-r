@@ -37,7 +37,13 @@ the wider type mapping is
   It is a starting point, not a lock: `SET TimeZone` on the connection
   wins, and such a comparison stops matching once it does,
   because only one side of the pair moved.
-  A `TimeZone` named in `duckdb(config = )` wins too, and the alignment leaves it alone.
+  A `TimeZone` named in `duckdb(config = )` wins too, and the alignment leaves it alone,
+  as it does one set with `SET GLOBAL` on another connection to the same instance:
+  a session setting would mask it, so the alignment asks the engine whether the global setting
+  holds a chosen value or its default, which SQL cannot tell apart
+  (`duckdb_settings()` reports both as `GLOBAL`).
+  A `TimeZone` named in the `config` of `dbConnect()` on an instance that exists already,
+  which can no longer take it, becomes the new session's.
 * **The session `TimeZone` is the icu extension's setting,
   so the alignment reaches exactly as far as icu does.**
   `SET TimeZone` needs icu for any value, `'UTC'` included.

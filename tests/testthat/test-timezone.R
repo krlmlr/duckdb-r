@@ -1096,6 +1096,51 @@ test_that("a TimeZone named in duckdb(config =) is kept (#2646)", {
   )
 })
 
+test_that("a TimeZone named in dbConnect(config =) on a live instance is kept (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  setup <- local_con(drv = drv)
+  dbExecute(setup, "INSTALL icu")
+
+  # The instance exists already and cannot take the setting,
+  # so the session does
+  con <- dbConnect(drv, config = list(TimeZone = "Europe/Paris"))
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Europe/Paris"
+  )
+})
+
+test_that("SET GLOBAL TimeZone survives later connections (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  first <- local_con(drv = drv)
+  dbExecute(first, "INSTALL icu")
+  dbExecute(first, "LOAD icu")
+  dbExecute(first, "SET GLOBAL TimeZone = 'Asia/Tokyo'")
+
+  # A session `SET TimeZone = 'UTC'` on the next connection would mask
+  # the global choice, so the alignment leaves that connection alone
+  con <- dbConnect(drv)
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Asia/Tokyo"
+  )
+
+  # Until the global setting goes back to its default
+  dbExecute(first, "RESET GLOBAL TimeZone")
+  again <- dbConnect(drv)
+  withr::defer(dbDisconnect(again))
+  expect_equal(
+    dbGetQuery(again, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "UTC"
+  )
+})
+
 test_that("a connection opens and leaves icu alone where it is not installed (#2646)", {
   skip_if_no_icu()
 

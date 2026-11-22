@@ -226,3 +226,20 @@ static void SetDefaultConfigArguments(ClientContext &context) {
 	// All checks passed - connection appears valid
 	return true;
 }
+
+// Whether a setting an extension registered holds a database-global value someone chose,
+// with `SET GLOBAL` or in the startup config, rather than its default.
+// SQL cannot tell: `duckdb_settings()` reports a default with scope `GLOBAL` as well.
+// False for a setting no loaded extension registered.
+// Explained in handbook/usage/timestamps/README.md.
+[[cpp11::register]] bool rapi_extension_setting_set_globally(duckdb::conn_eptr_t conn, std::string name) {
+	if (!rapi_connection_valid(conn)) {
+		rapi_error_with_context("rapi_extension_setting_set_globally", "Invalid connection");
+	}
+	auto &user_settings = DBConfig::GetConfig(*conn->conn->context).user_settings;
+	auto setting_index = user_settings.TryGetExtensionSettingIndex(Identifier(name));
+	if (!setting_index.IsValid()) {
+		return false;
+	}
+	return user_settings.IsSet(setting_index.GetIndex());
+}
