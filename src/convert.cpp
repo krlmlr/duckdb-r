@@ -115,6 +115,14 @@ ConvertOpts::ConvertOpts(cpp11::sexp options_nullable) {
 		}
 	}
 
+	// Extract posixct_tz_columns, the counterpart for a column going into a zoned temporal type
+	SEXP posixct_tz_columns_sexp = options["posixct_tz_columns"];
+	if (posixct_tz_columns_sexp != R_NilValue) {
+		for (auto column : cpp11::strings(posixct_tz_columns_sexp)) {
+			posixct_tz_columns.push_back(std::string(column));
+		}
+	}
+
 	// Extract arrow
 	arrow = bool_to_arrow_conversion(as_cpp<bool>(options["arrow"]));
 

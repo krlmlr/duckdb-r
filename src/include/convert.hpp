@@ -54,6 +54,9 @@ struct ConvertOpts {
 	// set by dbAppendTable() and dbWriteTable() for a column going into a naive temporal type.
 	// Handbook: handbook/usage/timestamps/README.md
 	vector<string> posixct_naive_columns;
+	// Columns whose `POSIXct` scans as TIMESTAMPTZ whatever `posixct` says,
+	// set by dbAppendTable() and dbWriteTable() for a column going into a zoned temporal type.
+	vector<string> posixct_tz_columns;
 
 	// Constructor with defaults
 	ConvertOpts() = default;

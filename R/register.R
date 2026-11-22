@@ -60,7 +60,8 @@ duckdb_register <- function(
 
 # `posixct_naive_columns` names the columns whose `POSIXct` scans as `TIMESTAMP`
 # whatever `dbConnect(posixct = )` says,
-# for `dbAppendTable()` and `dbWriteTable()` to write a column going into a naive temporal type.
+# for `dbAppendTable()` and `dbWriteTable()` to write a column going into a naive temporal type;
+# `posixct_tz_columns` names those that scan as `TIMESTAMPTZ`, for one going into a zoned type.
 # Handbook: handbook/usage/timestamps/README.md
 duckdb_register_impl <- function(
   conn,
@@ -68,7 +69,8 @@ duckdb_register_impl <- function(
   df,
   overwrite = FALSE,
   experimental = FALSE,
-  posixct_naive_columns = NULL
+  posixct_naive_columns = NULL,
+  posixct_tz_columns = NULL
 ) {
   stopifnot(dbIsValid(conn))
   df <- encode_values(as.data.frame(df))
@@ -78,6 +80,9 @@ duckdb_register_impl <- function(
   )
   if (length(posixct_naive_columns) > 0) {
     convert_opts$posixct_naive_columns <- enc2utf8(posixct_naive_columns)
+  }
+  if (length(posixct_tz_columns) > 0) {
+    convert_opts$posixct_tz_columns <- enc2utf8(posixct_tz_columns)
   }
   rethrow_rapi_register_df(
     conn@conn_ref,

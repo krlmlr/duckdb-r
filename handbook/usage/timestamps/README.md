@@ -86,11 +86,20 @@ the wider type mapping is
   Three targets take the session zone.
   A `TIME_NS` does, as the engine casts only a `TIMESTAMPTZ` into it.
   A nested one that mixes a naive field with a zoned one or a `TIME_NS`
-  scans as `TIMESTAMPTZ` for that field's sake,
-  so its naive field gets the session's wall clock.
+  scans as `dbConnect(posixct = )` says,
+  so under the default its naive field gets the session's wall clock,
+  and under `posixct = "timestamp"` its zoned field reads the UTC wall clock in the session zone.
   A `VARCHAR` gets the text of a `TIMESTAMPTZ`,
   which carries the session offset, `2024-01-11 03:03:12+14`
   where the older mapping wrote `2024-01-10 13:03:12`.
+* **Written into a zoned column, a `POSIXct` keeps the instant under either setting.**
+  The same three paths register a column as `TIMESTAMPTZ`
+  when its target holds `TIMESTAMP WITH TIME ZONE` or `TIME WITH TIME ZONE`
+  and no naive type, at the top or nested,
+  also under `posixct = "timestamp"`,
+  where the cast from `TIMESTAMP` would read the UTC wall clock in the session `TimeZone`.
+  The target type decides only where it is known:
+  `duckdb_register()` and a data frame picked up by name scan as the setting says.
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,

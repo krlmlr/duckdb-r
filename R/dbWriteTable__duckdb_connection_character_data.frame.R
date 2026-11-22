@@ -74,14 +74,16 @@ dbWriteTable__duckdb_connection_character_data.frame <- function(
 
     view_name <- sprintf("_duckdb_write_view_%s", duckdb_random_string())
     on.exit(duckdb_unregister(conn, view_name))
+    resolved_types <- duckdb_resolve_field_types(conn, value, field.types)
     duckdb_register_impl(
       conn,
       view_name,
       value,
       posixct_naive_columns = duckdb_posixct_naive_columns(
         value,
-        duckdb_resolve_field_types(conn, value, field.types)
-      )
+        resolved_types
+      ),
+      posixct_tz_columns = duckdb_posixct_tz_columns(value, resolved_types)
     )
 
     temp_str <- ""

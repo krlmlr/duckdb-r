@@ -596,10 +596,12 @@ static bool get_timestamptz_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
-// The columns whose POSIXct scans as TIMESTAMP whatever `timestamptz` says
-static unordered_set<string> get_timestamp_columns_param(named_argument_map_t &named_parameters) {
+// The columns named by the VARCHAR list parameter `name`:
+// `timestamp_columns`, whose POSIXct scans as TIMESTAMP whatever `timestamptz` says,
+// or `timestamptz_columns`, whose POSIXct scans as TIMESTAMPTZ whatever it says
+static unordered_set<string> get_columns_param(named_argument_map_t &named_parameters, const char *name) {
 	unordered_set<string> result;
-	auto entry = named_parameters.find("timestamp_columns");
+	auto entry = named_parameters.find(name);
 	if (entry != named_parameters.end() && !entry->second.IsNull()) {
 		for (auto &column : ListValue::GetChildren(entry->second)) {
 			result.insert(StringValue::Get(column));
@@ -685,7 +687,7 @@ struct DataFrameScanBindData : public TableFunctionData {
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
-	// Per column, as `timestamp_columns` can exempt a column from `timestamptz`
+	// Per column, as `timestamp_columns` and `timestamptz_columns` override `timestamptz` for a column
 	vector<bool> timestamptz;
 	idx_t rows_per_task = 1000000;
 	bool integer64 = false;
@@ -726,7 +728,8 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	auto experimental = get_experimental_param(input.named_parameters);
 	auto map_list_of = get_map_list_of_param(input.named_parameters);
 	auto scan_timestamptz = get_timestamptz_param(input.named_parameters);
-	auto timestamp_columns = get_timestamp_columns_param(input.named_parameters);
+	auto timestamp_columns = get_columns_param(input.named_parameters, "timestamp_columns");
+	auto timestamptz_columns = get_columns_param(input.named_parameters, "timestamptz_columns");
 
 	auto df_names = df.names();
 	vector<RType> rtypes;
@@ -759,8 +762,9 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		if (!error.empty()) {
 			throw InvalidInputException(error);
 		}
+		const string col_name(df_names[col_idx]);
 		const bool timestamptz =
-		    scan_timestamptz && timestamp_columns.find(string(df_names[col_idx])) == timestamp_columns.end();
+		    timestamptz_columns.count(col_name) > 0 || (scan_timestamptz && timestamp_columns.count(col_name) == 0);
 		timestamptz_by_column.push_back(timestamptz);
 		auto rtype = RApiTypes::DetectRType(coldata, integer64, timestamptz);
 
@@ -893,6 +897,8 @@ DataFrameScanFunction::DataFrameScanFunction()
 	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("timestamptz", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("timestamp_columns", LogicalType::LIST(LogicalType::VARCHAR),
+	                    Value::LIST(LogicalType::VARCHAR, vector<Value>()))
+	    .AddKeywordOnly("timestamptz_columns", LogicalType::LIST(LogicalType::VARCHAR),
 	                    Value::LIST(LogicalType::VARCHAR, vector<Value>()));
 	projection_pushdown = true;
 	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
