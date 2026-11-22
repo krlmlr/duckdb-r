@@ -52,11 +52,13 @@ the wider type mapping is
   where icu cannot be had, the engine reports `UTC` for want of the
   setting, which is the zone the alignment would have set, so the two
   cases agree on the answer and differ only in how they reach it.
-  What the alignment removes is the state in between, where icu is
+  What the alignment narrows is the state in between, where icu is
   installed but unloaded and the zone changes under a session:
   `SET TimeZone` and `current_setting('TimeZone')` both autoload icu,
   and before the alignment the label went from `UTC` to the machine's
-  zone the moment anything touched the setting
+  zone the moment anything touched the setting.
+  A session that finds icu installed at connect never sees that switch;
+  one that installs icu only after it connected still can
   ([`experiments/2026-08-09-rel-from-df-posixct/`](/experiments/2026-08-09-rel-from-df-posixct/README.md)).
   `duckdb_extensions()` loads nothing, and is how to tell which state
   a session is in.

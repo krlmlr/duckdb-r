@@ -130,7 +130,7 @@ The default of this setting may change in a future version.}
 If you want to display datetime values in the local timezone,
 set to \code{\link[=Sys.timezone]{Sys.timezone()}} or \code{""}.
 \code{TIMESTAMPTZ} columns follow the session's \code{TimeZone} setting instead,
-which \code{dbConnect()} sets to \code{"UTC"} where the icu extension is available,
+which \code{dbConnect()} sets to \code{"UTC"} where the icu extension is installed,
 so that both timestamp types read a naive wall clock the same way.
 Run \verb{SET TimeZone} on the connection, or name \code{TimeZone} in the \code{config} of \code{\link[=duckdb]{duckdb()}}, to choose another.
 A \code{TimeZone} set with \verb{SET GLOBAL} stays for later connections to the same instance,

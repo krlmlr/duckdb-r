@@ -16,7 +16,7 @@
 #'   If you want to display datetime values in the local timezone,
 #'   set to [Sys.timezone()] or `""`.
 #'   `TIMESTAMPTZ` columns follow the session's `TimeZone` setting instead,
-#'   which `dbConnect()` sets to `"UTC"` where the icu extension is available,
+#'   which `dbConnect()` sets to `"UTC"` where the icu extension is installed,
 #'   so that both timestamp types read a naive wall clock the same way.
 #'   Run `SET TimeZone` on the connection, or name `TimeZone` in the `config` of [duckdb()], to choose another.
 #'   A `TimeZone` set with `SET GLOBAL` stays for later connections to the same instance,
