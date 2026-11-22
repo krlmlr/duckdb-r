@@ -596,6 +596,18 @@ static bool get_timestamptz_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
+// The columns whose POSIXct scans as TIMESTAMP whatever `timestamptz` says
+static unordered_set<string> get_timestamp_columns_param(named_argument_map_t &named_parameters) {
+	unordered_set<string> result;
+	auto entry = named_parameters.find("timestamp_columns");
+	if (entry != named_parameters.end() && !entry->second.IsNull()) {
+		for (auto &column : ListValue::GetChildren(entry->second)) {
+			result.insert(StringValue::Get(column));
+		}
+	}
+	return result;
+}
+
 // Returns true when `coldata` is a list column whose non-NULL cells are all
 // named lists (and not data frames or blobs) that the caller has opted into
 // scanning as MAP entries via `dbConnect(map = "list_of")`. The cells'
@@ -661,21 +673,23 @@ static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, bool timestam
 
 struct DataFrameScanBindData : public TableFunctionData {
 	DataFrameScanBindData(SEXP df_p, idx_t row_count_p, vector<RType> &rtypes_p, vector<data_ptr_t> &dataptrs_p,
-	                      vector<bool> &named_list_map_p, named_argument_map_t &named_parameters)
-	    : df(df_p), row_count(row_count_p), rtypes(rtypes_p), data_ptrs(dataptrs_p), named_list_map(named_list_map_p) {
+	                      vector<bool> &named_list_map_p, vector<bool> &timestamptz_p,
+	                      named_argument_map_t &named_parameters)
+	    : df(df_p), row_count(row_count_p), rtypes(rtypes_p), data_ptrs(dataptrs_p), named_list_map(named_list_map_p),
+	      timestamptz(timestamptz_p) {
 		integer64 = get_integer64_param(named_parameters);
 		experimental = get_experimental_param(named_parameters);
-		timestamptz = get_timestamptz_param(named_parameters);
 	}
 	data_frame df;
 	idx_t row_count;
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
+	// Per column, as `timestamp_columns` can exempt a column from `timestamptz`
+	vector<bool> timestamptz;
 	idx_t rows_per_task = 1000000;
 	bool integer64 = false;
 	bool experimental = false;
-	bool timestamptz = false;
 };
 
 struct DataFrameGlobalState : public GlobalTableFunctionState {
@@ -711,12 +725,14 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	auto integer64 = get_integer64_param(input.named_parameters);
 	auto experimental = get_experimental_param(input.named_parameters);
 	auto map_list_of = get_map_list_of_param(input.named_parameters);
-	auto timestamptz = get_timestamptz_param(input.named_parameters);
+	auto scan_timestamptz = get_timestamptz_param(input.named_parameters);
+	auto timestamp_columns = get_timestamp_columns_param(input.named_parameters);
 
 	auto df_names = df.names();
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
+	vector<bool> timestamptz_by_column;
 
 	// Touch the columns on R's thread only, the one thread that may run R code.
 	// A task binds on any thread, and there reads only what is in memory already.
@@ -743,6 +759,9 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		if (!error.empty()) {
 			throw InvalidInputException(error);
 		}
+		const bool timestamptz =
+		    scan_timestamptz && timestamp_columns.find(string(df_names[col_idx])) == timestamp_columns.end();
+		timestamptz_by_column.push_back(timestamptz);
 		auto rtype = RApiTypes::DetectRType(coldata, integer64, timestamptz);
 
 		bool is_named_list_map = false;
@@ -764,7 +783,8 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		data_ptrs.push_back(GetColDataPtr(rtype, coldata));
 	}
 	auto row_count = RApiTypes::GetVecSize(rtypes[0], VECTOR_ELT(df, 0));
-	return make_uniq<DataFrameScanBindData>(df, row_count, rtypes, data_ptrs, named_list_map, input.named_parameters);
+	return make_uniq<DataFrameScanBindData>(df, row_count, rtypes, data_ptrs, named_list_map, timestamptz_by_column,
+	                                        input.named_parameters);
 }
 
 static idx_t DataFrameScanMaxThreads(ClientContext &context, const FunctionData *bind_data_p) {
@@ -841,11 +861,11 @@ static void DataFrameScanFunc(ClientContext &context, TableFunctionInput &data, 
 		auto coldata_ptr = bind_data.data_ptrs[src_df_col_idx];
 		auto rtype = bind_data.rtypes[src_df_col_idx];
 		if (bind_data.named_list_map[src_df_col_idx]) {
-			AppendMapEntriesListColumnSegment(rtype, bind_data.timestamptz, (SEXP *)coldata_ptr, sexp_offset, v,
-			                                  this_count);
+			AppendMapEntriesListColumnSegment(rtype, bind_data.timestamptz[src_df_col_idx], (SEXP *)coldata_ptr,
+			                                  sexp_offset, v, this_count);
 		} else {
-			AppendAnyColumnSegment(rtype, bind_data.experimental, bind_data.timestamptz, coldata_ptr, sexp_offset, v,
-			                       this_count);
+			AppendAnyColumnSegment(rtype, bind_data.experimental, bind_data.timestamptz[src_df_col_idx], coldata_ptr,
+			                       sexp_offset, v, this_count);
 		}
 	}
 	operator_data.position += this_count;
@@ -871,7 +891,9 @@ DataFrameScanFunction::DataFrameScanFunction()
 	    .AddKeywordOnly("integer64", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("experimental", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false))
-	    .AddKeywordOnly("timestamptz", LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	    .AddKeywordOnly("timestamptz", LogicalType::BOOLEAN, Value::BOOLEAN(false))
+	    .AddKeywordOnly("timestamp_columns", LogicalType::LIST(LogicalType::VARCHAR),
+	                    Value::LIST(LogicalType::VARCHAR, vector<Value>()));
 	projection_pushdown = true;
 	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }

@@ -258,3 +258,17 @@ test_that("a column changes its type (#2998)", {
     c("0", "1", "2")
   )
 })
+
+test_that("duckdb_register() works with the plain rapi_register_df() wrapper (no rlang)", {
+  # `rethrow_restore()` binds the wrapper to the bare function where rlang is missing,
+  # and that function takes no `call` argument.
+  local_mocked_bindings(rethrow_rapi_register_df = rapi_register_df)
+  con <- local_con()
+
+  duckdb_register(con, "my_df", data.frame(a = 1:3))
+  expect_equal(dbReadTable(con, "my_df")$a, 1:3)
+
+  dbWriteTable(con, "my_tbl", data.frame(b = 4:5))
+  dbAppendTable(con, "my_tbl", data.frame(b = 6L))
+  expect_equal(dbReadTable(con, "my_tbl")$b, 4:6)
+})

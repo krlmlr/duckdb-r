@@ -68,6 +68,7 @@ The \href{https://duckdb.org/docs/current/sql/data_types/date}{date}, \href{http
 \href{https://duckdb.org/docs/current/sql/data_types/timestamp}{timestamp} and \href{https://duckdb.org/docs/current/sql/data_types/interval}{interval} types:
 \itemize{
 \item \strong{\code{DATE}} reads as \code{Date}, and a \code{Date} writes it, stored as double or as integer.
+A \code{POSIXct} that \code{dbAppendTable()} or \code{field.types} writes into it, or into a \code{TIME}, keeps its UTC date or time of day whatever the session zone.
 \item \strong{\code{TIME}} reads as \code{difftime} in seconds.
 Its text writes it through \code{field.types}, and so does Arrow (see \link{duckdb_types_arrow}).
 \item \strong{\code{TIME_NS}} reads through Arrow, and to the microsecond through a cast to \code{TIME} in the query.
