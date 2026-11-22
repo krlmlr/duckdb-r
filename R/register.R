@@ -54,8 +54,7 @@ duckdb_register <- function(
     name,
     df,
     overwrite,
-    experimental,
-    call = parent.frame()
+    experimental
   )
 }
 
@@ -69,8 +68,7 @@ duckdb_register_impl <- function(
   df,
   overwrite = FALSE,
   experimental = FALSE,
-  posixct_naive_columns = NULL,
-  call = parent.frame()
+  posixct_naive_columns = NULL
 ) {
   stopifnot(dbIsValid(conn))
   df <- encode_values(as.data.frame(df))
@@ -86,8 +84,7 @@ duckdb_register_impl <- function(
     enc2utf8(as.character(name)),
     df,
     convert_opts,
-    overwrite,
-    call = call
+    overwrite
   )
   invisible(TRUE)
 }
