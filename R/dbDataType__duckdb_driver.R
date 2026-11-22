@@ -35,7 +35,7 @@ duckdb_data_type <- function(dbObj, obj) {
   } else if (is.numeric(obj)) {
     "DOUBLE"
   } else if (inherits(obj, "POSIXt")) {
-    if (duckdb_posixct_type(dbObj@convert_opts) == "timestamptz") {
+    if (identical(duckdb_posixct_type(dbObj@convert_opts), "timestamptz")) {
       "TIMESTAMPTZ"
     } else {
       "TIMESTAMP"

@@ -20,7 +20,7 @@ local_icu_installed_dir <- function(.env = parent.frame()) {
   # `dbConnect()` loads an installed icu to align the session `TimeZone`
   # (R/session-timezone.R), which would leave nothing for a query to autoload
   local_mocked_bindings(
-    duckdb_align_session_timezone = function(conn) invisible(FALSE),
+    duckdb_align_session_timezone = function(conn, ...) invisible(FALSE),
     .env = .env
   )
   dir

@@ -50,6 +50,11 @@ struct ConvertOpts {
 	// respected. Empty string means "fall back to `timezone_out`".
 	string session_time_zone = "";
 
+	// Columns of a registered data frame whose `POSIXct` scans as TIMESTAMP whatever `posixct` says,
+	// set by dbAppendTable() and dbWriteTable() for a column going into a naive temporal type.
+	// Handbook: handbook/usage/timestamps/README.md
+	vector<string> posixct_naive_columns;
+
 	// Constructor with defaults
 	ConvertOpts() = default;
 

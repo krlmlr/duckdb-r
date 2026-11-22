@@ -117,6 +117,15 @@ rethrow_rapi_connection_valid <- function(conn, call = parent.frame(2)) {
   )
 }
 
+rethrow_rapi_extension_setting_set_globally <- function(conn, name, call = parent.frame(2)) {
+  rlang::try_fetch(
+    rapi_extension_setting_set_globally(conn, name),
+    error = function(e) {
+      rethrow_error_from_rapi(e, call)
+    }
+  )
+}
+
 rethrow_rapi_startup <- function(dbdir, readonly, configsexp, environment_scan, allow_extensions, call = parent.frame(2)) {
   rlang::try_fetch(
     rapi_startup(dbdir, readonly, configsexp, environment_scan, allow_extensions),
@@ -671,6 +680,7 @@ rethrow_restore <- function() {
   rethrow_rapi_query_off_r_thread <<- rapi_query_off_r_thread
   rethrow_rapi_connection_set_invalidation_policy <<- rapi_connection_set_invalidation_policy
   rethrow_rapi_connection_valid <<- rapi_connection_valid
+  rethrow_rapi_extension_setting_set_globally <<- rapi_extension_setting_set_globally
   rethrow_rapi_startup <<- rapi_startup
   rethrow_rapi_lock <<- rapi_lock
   rethrow_rapi_unlock <<- rapi_unlock

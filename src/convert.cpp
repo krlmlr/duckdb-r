@@ -100,10 +100,19 @@ ConvertOpts::ConvertOpts(cpp11::sexp options_nullable) {
 	// Extract map
 	map = string_to_map_shape(as_cpp<std::string>(options["map"]));
 
-	// Extract posixct; absent, it keeps the documented default, as `duckdb_posixct_type()` does on the R side
+	// Extract posixct; absent or NA, it keeps the documented default, as `duckdb_posixct_type()` does in R
 	SEXP posixct_sexp = options["posixct"];
-	if (posixct_sexp != R_NilValue) {
+	if (posixct_sexp != R_NilValue && !(TYPEOF(posixct_sexp) == STRSXP && Rf_xlength(posixct_sexp) == 1 &&
+	                                    STRING_ELT(posixct_sexp, 0) == NA_STRING)) {
 		posixct = string_to_posixct_type(as_cpp<std::string>(posixct_sexp));
+	}
+
+	// Extract posixct_naive_columns; set only for a registration that dbAppendTable() or dbWriteTable() makes
+	SEXP posixct_naive_columns_sexp = options["posixct_naive_columns"];
+	if (posixct_naive_columns_sexp != R_NilValue) {
+		for (auto column : cpp11::strings(posixct_naive_columns_sexp)) {
+			posixct_naive_columns.push_back(std::string(column));
+		}
 	}
 
 	// Extract arrow

@@ -42,7 +42,7 @@
     Code
       duckdb_register(con, "r", df)
     Condition
-      Error:
+      Error in `duckdb_register()`:
       ! Can't pass a matrix or array that carries a class to DuckDB. Affected column: `m` (class `Date`).
       i Context: rapi_register_df
 

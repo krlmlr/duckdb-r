@@ -16,9 +16,11 @@
 #'   If you want to display datetime values in the local timezone,
 #'   set to [Sys.timezone()] or `""`.
 #'   `TIMESTAMPTZ` columns follow the session's `TimeZone` setting instead,
-#'   which `dbConnect()` sets to `"UTC"` where the icu extension is available,
+#'   which `dbConnect()` sets to `"UTC"` where the icu extension is installed,
 #'   so that both timestamp types read a naive wall clock the same way.
 #'   Run `SET TimeZone` on the connection, or name `TimeZone` in the `config` of [duckdb()], to choose another.
+#'   A `TimeZone` set with `SET GLOBAL` stays for later connections to the same instance,
+#'   and one named in `config` here applies to the new connection when the instance exists already.
 #' @param tz_out_convert How to convert timestamp columns to the timezone specified in `timezone_out`.
 #'   There are two options: `"with"`, and `"force"`.
 #'   If `"with"` is chosen, the timestamp will be returned as it would appear in the specified time zone.
@@ -165,6 +167,7 @@ dbConnect__duckdb_driver <- function(
   on.exit(dbDisconnect(conn))
 
   reg.finalizer(conn@conn_ref, onexit = TRUE, rapi_disconnect)
+  duckdb_align_session_timezone(conn, config)
   on.exit(NULL)
 
   rs_on_connection_opened(conn)

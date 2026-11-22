@@ -37,7 +37,13 @@ the wider type mapping is
   It is a starting point, not a lock: `SET TimeZone` on the connection
   wins, and such a comparison stops matching once it does,
   because only one side of the pair moved.
-  A `TimeZone` named in `duckdb(config = )` wins too, and the alignment leaves it alone.
+  A `TimeZone` named in `duckdb(config = )` wins too, and the alignment leaves it alone,
+  as it does one set with `SET GLOBAL` on another connection to the same instance:
+  a session setting would mask it, so the alignment asks the engine whether the global setting
+  holds a chosen value or its default, which SQL cannot tell apart
+  (`duckdb_settings()` reports both as `GLOBAL`).
+  A `TimeZone` named in the `config` of `dbConnect()` on an instance that exists already,
+  which can no longer take it, becomes the new session's.
 * **The session `TimeZone` is the icu extension's setting,
   so the alignment reaches exactly as far as icu does.**
   `SET TimeZone` needs icu for any value, `'UTC'` included.
@@ -46,11 +52,13 @@ the wider type mapping is
   where icu cannot be had, the engine reports `UTC` for want of the
   setting, which is the zone the alignment would have set, so the two
   cases agree on the answer and differ only in how they reach it.
-  What the alignment removes is the state in between, where icu is
+  What the alignment narrows is the state in between, where icu is
   installed but unloaded and the zone changes under a session:
   `SET TimeZone` and `current_setting('TimeZone')` both autoload icu,
   and before the alignment the label went from `UTC` to the machine's
-  zone the moment anything touched the setting
+  zone the moment anything touched the setting.
+  A session that finds icu installed at connect never sees that switch;
+  one that installs icu only after it connected still can
   ([`experiments/2026-08-09-rel-from-df-posixct/`](/experiments/2026-08-09-rel-from-df-posixct/README.md)).
   `duckdb_extensions()` loads nothing, and is how to tell which state
   a session is in.
@@ -73,15 +81,24 @@ the wider type mapping is
   `duckdb_register()`, bound parameters, `dbDataType()` and
   `dbQuoteLiteral()`, nested columns included.
 * **Written into a naive column, a `POSIXct` keeps the UTC wall clock.**
-  `dbAppendTable()` into an existing `TIMESTAMP`, `TIMESTAMP_S`,
-  `TIMESTAMP_MS` or `TIMESTAMP_NS` column,
-  `dbWriteTable(append = TRUE)`, and `dbWriteTable()` with
-  `field.types` naming one of these
-  store what `posixct = "timestamp"` stores,
-  whatever the session zone and whether icu is loaded:
-  they convert by epoch, not by the engine's cast,
-  which would take the wall clock in the session `TimeZone`
-  once icu is loaded.
+  `dbAppendTable()`, `dbWriteTable(append = TRUE)`, and `dbWriteTable()`
+  with `field.types` register a column as `TIMESTAMP`, as
+  `posixct = "timestamp"` does, when its target holds
+  `TIMESTAMP`, `TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP_NS`, `DATE`
+  or `TIME` and no zoned type,
+  at the top or nested in a `STRUCT`, a `LIST` or a `MAP`.
+  They store the UTC wall clock, date or time of day
+  whatever the session zone and whether icu is loaded,
+  where the engine's cast from `TIMESTAMPTZ` would take them
+  in the session `TimeZone` once icu is loaded.
+  Three targets take the session zone.
+  A `TIME_NS` does, as the engine casts only a `TIMESTAMPTZ` into it.
+  A nested one that mixes a naive field with a zoned one or a `TIME_NS`
+  scans as `TIMESTAMPTZ` for that field's sake,
+  so its naive field gets the session's wall clock.
+  A `VARCHAR` gets the text of a `TIMESTAMPTZ`,
+  which carries the session offset, `2024-01-11 03:03:12+14`
+  where the older mapping wrote `2024-01-10 13:03:12`.
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,

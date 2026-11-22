@@ -838,14 +838,184 @@ test_that("convert_opts without posixct falls back to the default everywhere (#2
   expect_match(dbQuoteLiteral(con, instant), "::timestamptz$")
 })
 
-test_that("dbConnect() sets the session TimeZone to UTC (#2646)", {
+test_that("convert_opts with a missing posixct falls back to the default everywhere (#2574)", {
+  con <- local_con()
+  con@convert_opts$posixct <- NA_character_
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  duckdb_register(con, "df", data.frame(a = instant))
+
+  expect_equal(
+    dbGetQuery(con, "DESCRIBE FROM df")$column_type,
+    "TIMESTAMP WITH TIME ZONE"
+  )
+  expect_equal(dbDataType(con, instant), "TIMESTAMPTZ")
+  expect_match(dbQuoteLiteral(con, instant), "::timestamptz$")
+})
+
+# UTC+14, so 13:03:12 UTC is 03:03:12 on the next day there
+test_that("dbAppendTable() into nested naive timestamps ignores SET TimeZone (#2574)", {
   skip_if_no_icu()
 
   con <- local_con()
   dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'Pacific/Kiritimati'")
 
-  # Whatever zone the machine is on, and whether or not icu was loaded
-  # before, a fresh connection starts on UTC
+  dbExecute(
+    con,
+    "CREATE TABLE t (s STRUCT(a TIMESTAMP), l TIMESTAMP[], m MAP(VARCHAR, TIMESTAMP))"
+  )
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(row = 1L)
+  df$s <- data.frame(a = instant)
+  df$l <- list(c(instant, instant))
+  df$m <- list(data.frame(key = "k", value = instant))
+  df$row <- NULL
+  dbAppendTable(con, "t", df)
+
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT s.a::VARCHAR, l[2]::VARCHAR, m['k']::VARCHAR FROM t"
+    )),
+    rep("2024-01-10 13:03:12", 3),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbAppendTable() into DATE and TIME ignores SET TimeZone, VARCHAR takes its offset (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'Pacific/Kiritimati'")
+
+  dbExecute(con, "CREATE TABLE t (d DATE, t TIME, v VARCHAR)")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbAppendTable(con, "t", data.frame(d = instant, t = instant, v = instant))
+
+  expect_equal(
+    unlist(dbGetQuery(con, "SELECT d::VARCHAR, t::VARCHAR, v FROM t")),
+    c("2024-01-10", "13:03:12", "2024-01-11 03:03:12+14"),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbWriteTable(append = TRUE) into DATE and nested naive timestamps ignores SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'Pacific/Kiritimati'")
+
+  dbExecute(con, "CREATE TABLE t (d DATE, s STRUCT(a TIMESTAMP_NS))")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(d = instant)
+  df$s <- data.frame(a = instant)
+  dbWriteTable(con, "t", df, append = TRUE)
+
+  expect_equal(
+    unlist(dbGetQuery(con, "SELECT d::VARCHAR, s.a::VARCHAR FROM t")),
+    c("2024-01-10", "2024-01-10 13:03:12"),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("dbWriteTable(field.types =) to DATE, TIME and nested naive timestamps ignores SET TimeZone (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'Pacific/Kiritimati'")
+
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(d = instant, t = instant)
+  df$l <- list(c(instant, instant))
+  dbWriteTable(
+    con,
+    "t",
+    df,
+    field.types = c(d = "date", t = "TIME", l = "TIMESTAMP[]")
+  )
+
+  expect_equal(
+    unlist(dbGetQuery(
+      con,
+      "SELECT d::VARCHAR, t::VARCHAR, l[1]::VARCHAR FROM t"
+    )),
+    c("2024-01-10", "13:03:12", "2024-01-10 13:03:12"),
+    ignore_attr = TRUE
+  )
+})
+
+test_that("a nested target with naive and zoned timestamps takes the session zone for the naive one (#2574)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "LOAD icu")
+  dbExecute(con, "SET TimeZone = 'Pacific/Kiritimati'")
+
+  dbExecute(con, "CREATE TABLE t (s STRUCT(a TIMESTAMP, z TIMESTAMPTZ))")
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  df <- data.frame(row = 1L)
+  df$s <- data.frame(a = instant, z = instant)
+  df$row <- NULL
+  dbAppendTable(con, "t", df)
+
+  # The zoned field keeps the instant, so the column scans as `TIMESTAMPTZ`,
+  # and the naive field takes the wall clock in the session zone
+  expect_equal(
+    dbGetQuery(con, "SELECT s.a::VARCHAR AS a FROM t")$a,
+    "2024-01-11 03:03:12"
+  )
+  expect_equal(
+    dbGetQuery(con, "SELECT epoch(s.z) AS z FROM t")$z,
+    as.numeric(instant)
+  )
+})
+
+test_that("only a POSIXct going into a naive temporal type scans naive (#2574)", {
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  value <- data.frame(
+    a = instant,
+    b = instant,
+    c = 1L,
+    d = instant,
+    e = instant
+  )
+  value$s <- data.frame(x = instant)
+  target_types <- c(
+    a = "TIMESTAMP",
+    b = "TIMESTAMP WITH TIME ZONE",
+    c = "DATE",
+    d = "STRUCT(date INTEGER)",
+    e = "TIME_NS",
+    s = "STRUCT(x TIMESTAMP_MS)"
+  )
+
+  expect_equal(
+    duckdb_posixct_naive_columns(value, target_types),
+    c("a", "s")
+  )
+})
+
+test_that("dbConnect() sets the session TimeZone to UTC (#2646)", {
+  skip_if_no_icu()
+
+  # Installed before the connection opens, so the alignment finds it
+  setup <- local_con()
+  dbExecute(setup, "INSTALL icu")
+
+  # A machine zone that is not UTC, which icu would default to
+  withr::local_timezone("America/New_York")
+  con <- local_con()
+
+  # Whatever zone the machine is on, a fresh connection starts on UTC
   expect_equal(
     dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
     "UTC"
@@ -923,5 +1093,77 @@ test_that("a TimeZone named in duckdb(config =) is kept (#2646)", {
   expect_equal(
     dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
     "Asia/Tokyo"
+  )
+})
+
+test_that("a TimeZone named in dbConnect(config =) on a live instance is kept (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  setup <- local_con(drv = drv)
+  dbExecute(setup, "INSTALL icu")
+
+  # The instance exists already and cannot take the setting,
+  # so the session does
+  con <- dbConnect(drv, config = list(TimeZone = "Europe/Paris"))
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Europe/Paris"
+  )
+})
+
+test_that("SET GLOBAL TimeZone survives later connections (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  first <- local_con(drv = drv)
+  dbExecute(first, "INSTALL icu")
+  dbExecute(first, "LOAD icu")
+  dbExecute(first, "SET GLOBAL TimeZone = 'Asia/Tokyo'")
+
+  # A session `SET TimeZone = 'UTC'` on the next connection would mask
+  # the global choice, so the alignment leaves that connection alone
+  con <- dbConnect(drv)
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Asia/Tokyo"
+  )
+
+  # Until the global setting goes back to its default
+  dbExecute(first, "RESET GLOBAL TimeZone")
+  again <- dbConnect(drv)
+  withr::defer(dbDisconnect(again))
+  expect_equal(
+    dbGetQuery(again, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "UTC"
+  )
+})
+
+test_that("a connection opens and leaves icu alone where it is not installed (#2646)", {
+  skip_if_no_icu()
+
+  dir <- withr::local_tempdir()
+  drv <- duckdb(
+    config = list(
+      extension_directory = dir,
+      secret_directory = file.path(dir, "secrets"),
+      autoload_known_extensions = "FALSE"
+    ),
+    allow_extensions = TRUE
+  )
+  con <- local_con(drv = drv)
+  skip_if_builtin_icu(con)
+
+  # Nothing was installed under `dir`, so nothing was loaded or set
+  expect_true(dbIsValid(con))
+  expect_false(icu_loaded(con))
+  expect_equal(
+    dbGetQuery(
+      con,
+      "SELECT installed FROM duckdb_extensions() WHERE extension_name = 'icu'"
+    )$installed,
+    FALSE
   )
 })
