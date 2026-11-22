@@ -15,21 +15,30 @@
 # `duckdb_extensions()` answers that without loading anything. Where icu
 # cannot be had, the engine reports `UTC` for want of the setting, which is
 # the zone this would have set.
+#
+# Called by `dbConnect()` once the connection has its finalizer.
 duckdb_align_session_timezone <- function(conn) {
   if (!isTRUE(conn@driver@allow_extensions)) {
     return(invisible(FALSE))
   }
-  # A zone named in `duckdb(config = )` is the user's choice, and stays
-  if ("timezone" %in% tolower(names(conn@driver@config))) {
+  # A zone named in `duckdb(config = )` is the instance's, and stays
+  if (any(tolower(names(conn@driver@config)) == "timezone")) {
     return(invisible(FALSE))
   }
 
-  icu <- dbGetQuery(
-    conn,
-    "SELECT loaded, installed
-       FROM duckdb_extensions() WHERE extension_name = 'icu'"
+  # The statements below are bookkeeping, not the user's,
+  # so they stay out of the debug echo
+  conn@debug <- FALSE
+
+  icu <- tryCatch(
+    dbGetQuery(
+      conn,
+      "SELECT loaded, installed
+         FROM duckdb_extensions() WHERE extension_name = 'icu'"
+    ),
+    error = function(e) NULL
   )
-  if (nrow(icu) == 0) {
+  if (NROW(icu) == 0) {
     return(invisible(FALSE))
   }
 

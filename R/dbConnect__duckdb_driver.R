@@ -165,6 +165,7 @@ dbConnect__duckdb_driver <- function(
   on.exit(dbDisconnect(conn))
 
   reg.finalizer(conn@conn_ref, onexit = TRUE, rapi_disconnect)
+  duckdb_align_session_timezone(conn)
   on.exit(NULL)
 
   rs_on_connection_opened(conn)
