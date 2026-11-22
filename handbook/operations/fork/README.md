@@ -6,9 +6,9 @@ The fork's own branches, the series refs and the mirrors, are [`branches/`](/han
 
 **Work lives in the fork.**
 Issues and pull requests are opened in `krlmlr/duckdb-r`,
-and the open ones in `duckdb/duckdb-r` move there as
+and the maintainer's open ones in `duckdb/duckdb-r` move there as
 [krlmlr/duckdb-r#194](https://github.com/krlmlr/duckdb-r/pull/194) tracks, which is still open.
-Each repository runs CI on its own pull requests,
+`rcc` runs on pull requests in both repositories, except that the fork skips one against a release branch,
 and the per-commit builds run in the fork alone ([`ci/workflows/`](/handbook/operations/ci/workflows/README.md)).
 
 **The fork leads, and `duckdb/duckdb-r` takes the same object.**
@@ -16,6 +16,14 @@ A ref is written in the fork first and copied to `duckdb/duckdb-r` unchanged, so
 For a branch the copy is a plain push of the fork's tip, so it lands only as a fast-forward:
 the landing `a1a93d5bee` (`2.0.99.9000`) went to the fork's `main` first,
 and `duckdb/duckdb-r`'s `main` takes it by a fast-forward push of the same commit.
+
+**The fork's `main` and `v2.0-cyanoptera` are still mirrors, which contradicts the lead.**
+[`.github/pull.yml`](/.github/pull.yml) hard-resets both to `duckdb/duckdb-r`'s tip
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)),
+so a commit that reaches either in the fork first is discarded on the next sync unless `duckdb/duckdb-r` already has it.
+The fork's `v2.0-cyanoptera` has no freeze, so a landing or a merge there, a merged pull request included, is lost that way.
+Which way these branches move is open, a question on
+[krlmlr/duckdb-r#262](https://github.com/krlmlr/duckdb-r/pull/262).
 
 **A version tag is the annotated tag object itself, pushed on.**
 It is created in the fork, and the copy names it by its ref:
@@ -35,12 +43,13 @@ and its header says what it takes and what it refuses.
 It is provisional: both files are proposed in [duckdb/duckdb-r#3070](https://github.com/duckdb/duckdb-r/pull/3070),
 and are not on `main` yet.
 
-**The fork's `main` is frozen for a landing as `duckdb/duckdb-r`'s is.**
-A ruleset `freeze main` on `krlmlr/duckdb-r` stops every update, deletion and non-fast-forward of `refs/heads/main`,
-and while it is active a pull request into the fork's `main` cannot merge either
-([`series-land`](/.claude/skills/series-land/SKILL.md), step 1, freezes the branch in `duckdb/duckdb-r`).
+**The fork's `main` stays frozen, and the freeze is lifted only for a push.**
+The ruleset `freeze main` on `krlmlr/duckdb-r`, id `27849787`, stops every update, deletion and non-fast-forward of `refs/heads/main`,
+and while it is active a pull request into the fork's `main` cannot merge either.
 It has no bypass actors, because sessions push with the maintainer's token, and a bypass would let any session past the freeze.
-It is provisional: the ruleset is not created yet, and the maintainer creates it with this call:
+`duckdb/duckdb-r` creates its freeze for each landing and deletes it at the end
+([`series-land`](/.claude/skills/series-land/SKILL.md), steps 1 and 7);
+the fork's stays, and was created by the maintainer in this shape:
 
 ```sh
 gh api -X POST repos/krlmlr/duckdb-r/rulesets --input - <<EOF
@@ -60,9 +69,14 @@ EOF
 ```
 
 **Lifting and restoring the freeze are the maintainer's steps.**
-Each is one call, with `<id>` the ruleset's id from `gh api repos/krlmlr/duckdb-r/rulesets`:
+Each is one call:
 
 ```sh
-gh api -X PUT repos/krlmlr/duckdb-r/rulesets/<id> -f enforcement=disabled   # lift
-gh api -X PUT repos/krlmlr/duckdb-r/rulesets/<id> -f enforcement=active     # restore
+gh api -X PUT repos/krlmlr/duckdb-r/rulesets/27849787 -f enforcement=disabled   # lift
+gh api -X PUT repos/krlmlr/duckdb-r/rulesets/27849787 -f enforcement=active     # restore
 ```
+
+**While the freeze is active, the fork's `main` is no mirror.**
+The ruleset refuses the Pull app's hard reset like any other update,
+so the fork's `main` stays where the freeze found it,
+and the badges and the series seeds that read it read that commit ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
