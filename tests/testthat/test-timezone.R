@@ -1007,11 +1007,15 @@ test_that("only a POSIXct going into a naive temporal type scans naive (#2574)",
 test_that("dbConnect() sets the session TimeZone to UTC (#2646)", {
   skip_if_no_icu()
 
-  con <- local_con()
-  dbExecute(con, "INSTALL icu")
+  # Installed before the connection opens, so the alignment finds it
+  setup <- local_con()
+  dbExecute(setup, "INSTALL icu")
 
-  # Whatever zone the machine is on, and whether or not icu was loaded
-  # before, a fresh connection starts on UTC
+  # A machine zone that is not UTC, which icu would default to
+  withr::local_timezone("America/New_York")
+  con <- local_con()
+
+  # Whatever zone the machine is on, a fresh connection starts on UTC
   expect_equal(
     dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
     "UTC"
@@ -1089,5 +1093,32 @@ test_that("a TimeZone named in duckdb(config =) is kept (#2646)", {
   expect_equal(
     dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
     "Asia/Tokyo"
+  )
+})
+
+test_that("a connection opens and leaves icu alone where it is not installed (#2646)", {
+  skip_if_no_icu()
+
+  dir <- withr::local_tempdir()
+  drv <- duckdb(
+    config = list(
+      extension_directory = dir,
+      secret_directory = file.path(dir, "secrets"),
+      autoload_known_extensions = "FALSE"
+    ),
+    allow_extensions = TRUE
+  )
+  con <- local_con(drv = drv)
+  skip_if_builtin_icu(con)
+
+  # Nothing was installed under `dir`, so nothing was loaded or set
+  expect_true(dbIsValid(con))
+  expect_false(icu_loaded(con))
+  expect_equal(
+    dbGetQuery(
+      con,
+      "SELECT installed FROM duckdb_extensions() WHERE extension_name = 'icu'"
+    )$installed,
+    FALSE
   )
 })
