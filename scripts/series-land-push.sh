@@ -38,8 +38,8 @@
 # Nothing here locks out a concurrent writer: a push to `<B>` by someone else between the check and the push makes
 # this plain push fail rather than overwrite it.
 
-if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
-  echo "Error: series-land-push.sh needs bash 4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: series-land-push.sh needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
   exit 1
 fi
 set -euo pipefail
@@ -64,13 +64,13 @@ L=${args[0]}
 [[ $L =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "Error: not a serving series: '$L'" >&2; exit 2; }
 
 # Is each remote's URL, and its push URL if it has one, the repository it must be? Read as configured, before git
-# rewrites it, in the https or SSH form.
+# rewrites it, in the https or SSH form, in any letter case.
 remote_is() { # <remote> <owner/repo>
   local u re="^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)$2(\.git)?/?$"
   u=$(git config --get "remote.$1.url" || true)
-  [[ $u =~ $re ]] || { echo "Error: remote '$1' is '${u:-missing}', not github.com/$2" >&2; return 1; }
+  [[ ${u,,} =~ $re ]] || { echo "Error: remote '$1' is '${u:-missing}', not github.com/$2" >&2; return 1; }
   for u in $(git config --get-all "remote.$1.pushurl" || true); do
-    [[ $u =~ $re ]] || { echo "Error: remote '$1' pushes to '$u', not github.com/$2" >&2; return 1; }
+    [[ ${u,,} =~ $re ]] || { echo "Error: remote '$1' pushes to '$u', not github.com/$2" >&2; return 1; }
   done
 }
 git rev-parse --git-dir >/dev/null

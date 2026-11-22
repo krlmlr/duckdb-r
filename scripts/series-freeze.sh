@@ -18,14 +18,14 @@
 #
 # scripts/series-freeze-test.sh runs this and scripts/series-unfreeze.sh against a stand-in for `gh`.
 
-if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
-  echo "Error: $(basename "$0") needs bash 4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: $(basename "$0") needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
   exit 1
 fi
 set -euo pipefail
 shopt -s inherit_errexit
 
-usage="usage: $(basename "$0") <B> [--remote upstream|origin] [--dry-run]"
+usage="usage: $(basename "$0") <B> [--remote upstream|origin] [--dry-run] [--unfreeze]"
 argerr() { echo "$usage" >&2; exit 2; }
 
 only='' dry='' unfreeze=''
@@ -95,7 +95,9 @@ for r in "${remotes[@]}"; do
     fi
     want=active
   fi
-  read -r got bypass < <(gh api "repos/$repo/rulesets/$id" --jq '[.enforcement, .current_user_can_bypass] | @tsv')
+  rb=$(gh api "repos/$repo/rulesets/$id" --jq '[.enforcement, .current_user_can_bypass] | @tsv') ||
+    { echo "Error: could not read freeze $B ($id) back from $repo; check it with 'gh api repos/$repo/rulesets/$id'" >&2; exit 1; }
+  read -r got bypass <<<"$rb"
   [ "$got" = "$want" ] || { echo "Error: freeze $B ($id) on $repo reads back as '$got', not $want" >&2; exit 1; }
   [ "$want" = disabled ] || [ "$bypass" = never ] ||
     { echo "Error: freeze $B ($id) on $repo lets the caller bypass it: '$bypass'" >&2; exit 1; }

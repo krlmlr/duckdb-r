@@ -7,7 +7,7 @@
 #   2. Unfreezing disables it on both, deletes nothing, and a second unfreeze has nothing to do.
 #   3. Freezing again reuses the ruleset, written whole: a bypass list added since is gone.
 #   4. --remote acts on one repository, --dry-run writes nothing, an organization's ruleset of the same name is left
-#      alone, two of the repository's own are refused, and a branch no series lands on is refused.
+#      alone, two of the repository's own are refused, so is a read-back that fails, and a branch no series lands on is refused.
 #
 # Usage:
 #   scripts/series-freeze-test.sh
@@ -54,6 +54,7 @@ elif [ "\$1" = -X ]; then
   f=\$(file "\$3"); id=\${3##*/}
   jq --argjson id "\$id" --arg e "\${5#enforcement=}" 'map(if .id == \$id then .enforcement = \$e else . end)' "\$f" > "\$f.new"; mv "\$f.new" "\$f"
 else
+  [ ! -e "$GH/noread" ] || { echo "HTTP 502" >&2; exit 1; }
   f=\$(file "\$1"); id=\${1##*/}
   jq -r --argjson id "\$id" '.[] | select(.id == \$id) | . + {current_user_can_bypass: (if (.bypass_actors // []) == [] then "never" else "always" end)}' "\$f" | jq -r "\$3"
 fi
@@ -117,6 +118,11 @@ mv "$GH/x" "$GH/krlmlr_duckdb-r.json"
 st=0; out=$(freeze main --remote origin) || st=$?
 is "two freezes of one branch are refused" "$st" 1
 has "  and named" "$out" "more than one ruleset named 'freeze main'"
+touch "$GH/noread"
+st=0; out=$(unfreeze main --remote upstream) || st=$?
+rm "$GH/noread"
+is "a read-back that fails is refused" "$st" 1
+has "  and named" "$out" "could not read freeze main (101) back from duckdb/duckdb-r"
 st=0; out=$(freeze feature) || st=$?
 is "a branch no series lands on is refused" "$st" 2
 st=0; out=$(freeze main --remote elsewhere) || st=$?

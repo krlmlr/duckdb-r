@@ -6,7 +6,7 @@
 # the branch is frozen there.
 #
 #   1. A remote that is not the repository it must be, by its URL or its push URL, is refused; the https and SSH
-#      forms are both accepted.
+#      forms are both accepted, in any letter case.
 #   2. Nothing is pushed unless --status, asked of `origin` and `upstream`, prints READY with its push line, which
 #      names the head and the branch; a --sha that is not that head is refused.
 #   3. A head that does not fast-forward the branch on `origin` is refused.
@@ -152,6 +152,13 @@ git -C "$WORK" remote rename canonical upstream
 st=0; out=$(land main --dry-run) || st=$?
 is "https for upstream and SSH for origin are accepted" "$st" 0
 is "--status is asked of origin and upstream" "$(cat "$SCRATCH/status.log")" "main --status --remote origin --canonical upstream"
+git -C "$WORK" config url."$FORK".insteadOf git@github.com:KrlMlr/DuckDB-R.git
+git -C "$WORK" remote set-url origin git@github.com:KrlMlr/DuckDB-R.git
+st=0; out=$(land main --dry-run) || st=$?
+is "a URL in another letter case is accepted" "$st" 0
+git -C "$WORK" remote set-url origin git@github.com:krlmlr/duckdb-r.git
+git -C "$WORK" config --unset-all url."$FORK".insteadOf
+git -C "$WORK" config url."$FORK".insteadOf git@github.com:krlmlr/duckdb-r.git
 
 # --- 2. READY ----------------------------------------------------------------
 echo "2. READY"
