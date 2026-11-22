@@ -81,7 +81,8 @@ driver_registry <- new.env(parent = emptyenv())
 #' @param environment_scan Set to `TRUE` to treat data frames from the calling environment as tables.
 #'   If a database table with the same name exists, it takes precedence.
 #'   A data frame found this way is converted with the same options as one passed to [duckdb_register()],
-#'   so the `map` and `posixct` arguments of [dbConnect()] reach both alike,
+#'   so the `map` and `posixct` arguments of [dbConnect()] reach both alike
+#'   (except under `rel_from_sql()`, which keeps `posixct` on `TIMESTAMP`),
 #'   and an `integer64` column arrives as `BIGINT` through both.
 #'   The default of this setting may change in a future version.
 #'

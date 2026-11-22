@@ -99,6 +99,10 @@ the wider type mapping is
   A `VARCHAR` gets the text of a `TIMESTAMPTZ`,
   which carries the session offset, `2024-01-11 03:03:12+14`
   where the older mapping wrote `2024-01-10 13:03:12`.
+  A data frame read by the environment scan and cast into a naive column,
+  as in `INSERT INTO naive_tbl SELECT a FROM df`, follows the session `TimeZone` instead,
+  unlike `dbAppendTable()`, because the scan has no target table to look at;
+  `dbConnect()` starts the session on UTC, so this matters only after a user sets `TimeZone`.
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,
