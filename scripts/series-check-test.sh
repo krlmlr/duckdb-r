@@ -34,6 +34,10 @@
 #  10. A forward reads ready to cut over only on its own vendor commits,
 #      counted above the canonical `main`: a landing the fork's copy of `main`
 #      lacks is no coverage, and the forward's own vendor commit is.
+#  11. A forward of a series releasing from a release branch is counted above
+#      that branch's canonical copy, so a landing there is no coverage either;
+#      the fork's copy as the bound is warned about, and no bound at all is
+#      reported as missing data.
 #
 # Usage:
 #   scripts/series-check-test.sh
@@ -379,6 +383,45 @@ git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb22
 git -C "$Z" push -q -f origin "HEAD:refs/heads/v9.9-z-fwd-green" "HEAD:refs/heads/v9.9-z-fwd-dev"
 out=$(ready)
 has "the forward's own vendor commit is" "$out" "CUTOVER  v9.9-z-fwd covers v9.9-z's green"
+
+echo "=== 11. a release-branch forward is counted above that branch"
+# The declaration names `v9.9-r` releasing from `rbr`. The canonical `rbr` takes
+# a landing that vendors cccc333, which `main` never sees; the fork's copy of
+# `rbr` stays behind it. The series' green vendors cccc333 on its own line, and
+# the forward is seeded on the landing.
+git -C "$Z" checkout -q --detach canon/main
+printf '  - flavor: duckdb.r.dev\n    kind: dev\n    series: v9.9-r\n    releases_from: rbr\n' >> "$Z/scripts/series.yaml"
+git -C "$Z" commit -qam 'chore: Declare v9.9-r'
+git -C "$Z" push -q canon HEAD:refs/heads/main
+RB0=$(git -C "$Z" rev-parse HEAD)
+echo 'engine cccc333' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@cccc333'
+git -C "$Z" push -q canon HEAD:refs/heads/rbr
+git -C "$Z" commit -q --allow-empty -m 'chore: Add fifth version component'
+RSEED=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" checkout -q --detach "$SEED"
+echo 'engine cccc333' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@cccc333'
+RG=$(git -C "$Z" rev-parse HEAD)
+git push -q origin "$RB0:refs/heads/rbr" "$RG:refs/heads/v9.9-r-green" "$RG:refs/heads/v9.9-r-dev" \
+  "$RG:refs/heads/v9.9-r-build" "$RG:refs/heads/v9.9-r-build-base" \
+  "$RSEED:refs/heads/v9.9-r-fwd-green" "$RSEED:refs/heads/v9.9-r-fwd-dev" \
+  "$RSEED:refs/heads/v9.9-r-fwd-build" "$RSEED:refs/heads/v9.9-r-fwd-build-base"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical canon 2>&1)
+hasnt "a landing on the release branch is no coverage" "$out" "CUTOVER  v9.9-r-fwd"
+hasnt "and the canonical bound draws no warning" "$out" "readiness may over-count"
+
+# Without the canonical repository the fork's copies answer, the declaration
+# included, and each is said to be one.
+git push -q -f origin "$RB0:refs/heads/main"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)
+has "the fork's main as the bound is warned about" "$out" "warning: main read from origin's copy"
+has "and so is the fork's copy of the release branch" "$out" "v9.9-r-fwd: warning: origin/rbr is the fork's copy"
+git push -q origin :refs/heads/rbr
+git update-ref -d refs/remotes/origin/rbr
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)
+has "no bound at all is missing data" "$out" "v9.9-r-fwd: could not read rbr, the branch v9.9-r releases from"
+hasnt "and claims no cutover" "$out" "CUTOVER  v9.9-r-fwd"
 git worktree remove -f "$Z"
 
 echo
