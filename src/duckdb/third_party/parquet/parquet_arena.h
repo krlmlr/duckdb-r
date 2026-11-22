@@ -73,6 +73,11 @@ public:
 	using base::base;
 	using base::operator=;
 
+	ParquetString(const ParquetString &other) = default;
+	ParquetString(ParquetString &&other) = default;
+	ParquetString &operator=(const ParquetString &other) = default;
+	ParquetString &operator=(ParquetString &&other) = default;
+
 	ParquetString &operator=(const std::string &value) {
 		assign(value.data(), value.size());
 		return *this;
