@@ -67,6 +67,9 @@ Passing `convert_opts` explicitly is the way in for a caller who wants
 and a per-column zone on a result, which DuckDB does not have,
 is what would settle it
 ([#2574](https://github.com/duckdb/duckdb-r/issues/2574)).
+A data frame that `rel_from_sql()` picks up by name through the environment scan stays on `TIMESTAMP` too
+([`src/relational.cpp`](/src/relational.cpp)),
+while the same scan under a DBI query follows the setting.
 
 **Untyped `NULL` constants.**
 `expr_constant(NA)` builds an untyped `NULL`

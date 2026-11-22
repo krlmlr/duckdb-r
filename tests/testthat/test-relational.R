@@ -2527,6 +2527,21 @@ test_that("rel_from_sql() relations can be used in further relational ops", {
   expect_equal(out$a, c(3L, 4L), ignore_attr = TRUE)
 })
 
+test_that("rel_from_sql() keeps a scanned POSIXct on TIMESTAMP, as rel_from_df() does", {
+  # dbConnect() defaults to `posixct = "timestamptz"`, which a DBI query over the same data frame follows.
+  con <- local_con(drv = duckdb(environment_scan = TRUE))
+
+  df_ts <- data.frame(a = as.POSIXct("2024-01-10 13:03:12", tz = "UTC"))
+  rel <- rel_from_sql(con, "SELECT typeof(a) AS t, a FROM df_ts")
+  out <- as.data.frame(rel)
+  expect_equal(out$t, "TIMESTAMP")
+  expect_equal(out$a, df_ts$a, ignore_attr = TRUE)
+  expect_equal(
+    dbGetQuery(con, "SELECT typeof(a) AS t FROM df_ts")$t,
+    "TIMESTAMP WITH TIME ZONE"
+  )
+})
+
 test_that("rel_from_df() rejects matrix, S4, and integer64 columns", {
   con <- local_con()
 
