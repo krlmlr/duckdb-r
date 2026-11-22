@@ -8,7 +8,7 @@ and the ones worth setting repo-wide are repository variables:
 
 | Knob | Input | Variable | Default |
 |---|---|---|---|
-| Earliest commit date | `since` | `EACH_RCC_SINCE` | none: the variable must be set (`2026-01-01`) |
+| Earliest commit date | `since` | `EACH_RCC_SINCE` | none: the variable must be set unless the input is (`2026-01-01`) |
 | Concurrent shards | `max-parallel` | `EACH_RCC_MAX_PARALLEL` | `20` |
 | Build-time target per shard | `shard-budget-minutes` | — | `300` |
 | Compute traded for wall clock | `split-factor` | `EACH_RCC_SPLIT_FACTOR` | `1.5` |

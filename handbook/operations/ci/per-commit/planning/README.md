@@ -18,7 +18,7 @@ Four constants, each measuring one thing.
 They are this package's own fit, kept as the repository variables
 `EACH_RCC_SETUP_MINUTES`, `EACH_RCC_FULL_BUILD_MINUTES`, `EACH_RCC_FLOOR_MINUTES` and `EACH_RCC_OBJECT_SECONDS`,
 which `each.yaml` passes to the `each-plan` action;
-its plan job fails first, naming any of them that is empty, and `EACH_RCC_SINCE` with them:
+its plan job fails first, naming any of them that is empty, and `EACH_RCC_SINCE` with them where no `since` input is given:
 
 | Constant | Value | What it is |
 |---|---|---|
