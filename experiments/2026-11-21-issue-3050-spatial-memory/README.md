@@ -47,6 +47,10 @@ The cgroup peak counts the page cache, so a run that spills to the temporary dir
   `profile-<version>.txt` with the operator tree of 2024,
   `cli-<version>-{rewrite,pairs,minimal}.txt` for the reformulations,
   and `narrow-{limit,threads,default-limit,k,variants,size}.txt` for the one-year profiles.
+* [`cli-repro.sql`](cli-repro.sql) is a self-contained reproducer for the CLI alone, run as `duckdb < cli-repro.sql`:
+  it generates one year's points in SQL with a fixed seed and runs the query at 4 threads and a 2 GB limit,
+  printing the engine's peak buffer memory and temporary directory size;
+  `out/cli-repro-<version>.txt` holds its output under `capped.sh`.
 
 The Parquet data are not kept; `Rscript repro.R write=<dir>` regenerates them in about two seconds.
 
