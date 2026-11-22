@@ -87,7 +87,7 @@ Every commit of the landing stands on one `<B>` commit, so `<B>` must not move u
 The freeze lasts as long as CI takes over the batch, which is what keeps the batches small.
 A ruleset with no bypass list stops every update, pull requests and admins included.
 A human runs these, and reads each output before the next.
-These freeze `<B>` in `duckdb/duckdb-r` only; the fork's `main` has a standing freeze of its own ([`operations/fork/`](/handbook/operations/fork/README.md)).
+These freeze `<B>` in `duckdb/duckdb-r` only; `scripts/series-freeze.sh <B>` freezes it there and in the fork alike, provisionally ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 Inspect: the rulesets on `<B>`, and the commit it freezes at.
 
