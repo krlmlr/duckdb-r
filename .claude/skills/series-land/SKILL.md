@@ -350,22 +350,28 @@ The copy runs hourly, and a dispatch of [`each-mirror.yaml`](/.github/workflows/
 Paste the blocks of this step into bash: zsh by default reads `#` comments as commands.
 
 The push and the tag are the maintainer's, from his own checkout, whose `upstream` and `origin` are `duckdb/duckdb-r` and the fork.
-The session hands him the `READY` SHA and this sequence:
+The session hands him the `READY` SHA and this block, which runs in a subshell that stops at the first failure:
 
 ```sh
+( set -eu
 S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto
-sha=...                                     # the SHA READY names
+[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
+sha=...                                     # the SHA READY names, in place of the dots
 scripts/series-land-push.sh "$S" --sha "$sha" --dry-run
 scripts/series-unfreeze.sh "$B"
-scripts/series-land-push.sh "$S" --sha "$sha"
+scripts/series-land-push.sh "$S" --sha "$sha" || { scripts/series-freeze.sh "$B"; exit 1; }
+)
 ```
 
 The dry run runs every check and pushes nothing, so it needs no lifted freeze;
-where it refuses, the sequence stops there and nothing is unfrozen.
-[`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) then disables `freeze <B>` on both repositories.
-Where the real push fails after that, [`scripts/series-freeze.sh`](/scripts/series-freeze.sh) `<B>` puts the freeze back
+where it refuses, the block stops there and nothing is unfrozen.
+[`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) then disables `freeze <B>` on both repositories,
+and where the real push fails after that, [`scripts/series-freeze.sh`](/scripts/series-freeze.sh) puts the freeze back
 until the failure is understood.
+The block is then run again as it stands, which unfreezes again,
+and the script resumes where it stopped: a branch already at the SHA is not pushed again,
+so a run that pushed `upstream` but not `origin` pushes `origin` alone, and a tag already on a remote is not pushed again.
 [`scripts/series-land-push.sh`](/scripts/series-land-push.sh) refuses unless `--status` prints `READY` for that SHA,
 the tip of `<L>-land-dev`, and the SHA fast-forwards `<B>` on both remotes.
 It pushes `<B>` to `upstream` and then `origin` with plain pushes, which git refuses unless they fast-forward,
@@ -376,7 +382,7 @@ the annotated `v<v>`, its message `duckdb <v>`, or for a release `v<v>.9900` and
 then the section `NEWS.md` has for `<v>`.
 It pushes the same tag object to both repositories.
 It refuses before any push where the landing does not change `NEWS.md`, the section is missing,
-or a tag of that name points elsewhere, and a rerun picks up where a failure stopped.
+or a tag of that name points elsewhere.
 A push still refused names the unfreeze.
 
 Afterwards, the session checks what both repositories hold, `<B>` at the SHA and the tag on it:
