@@ -197,6 +197,10 @@ pass unchanged. No new R-visible behaviour.
 
 - New `stream` argument on `dbSendQuery__duckdb_connection_character`,
   default `FALSE`.
+- The R-level fetch wraps `rapi_stream_fetch()` so that an interrupt
+  escaping the call (raised after `.Call()` returns, before the value is
+  bound) marks the result tainted, and the next `dbFetch()` fails the
+  way the entry point's own mark does (see the audit note on interrupts).
 - New slot `stream_result` on `duckdb_result` (parallel to
   `query_result`). Slot stays `NULL` for non-streaming results.
 - `duckdb_result()`: when `stream && n_param == 0 && is_data_query`,
