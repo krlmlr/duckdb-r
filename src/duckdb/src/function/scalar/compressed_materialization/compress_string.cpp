@@ -17,13 +17,14 @@ string StringCompressFunctionName(const LogicalType &result_type) {
 
 template <idx_t LENGTH>
 inline void TemplatedReverseMemCpy(const data_ptr_t &__restrict dest, const const_data_ptr_t &__restrict src) {
-	idx_t offset = 0;
-	if (LENGTH > sizeof(uint64_t)) {
-		for (; offset + sizeof(uint32_t) <= LENGTH; offset += sizeof(uint32_t)) {
-			Store<uint32_t>(BSwap(Load<uint32_t>(src + LENGTH - offset - sizeof(uint32_t))), dest + offset);
-		}
+	// The number of bytes copied a word at a time is a constant, so the
+	// byte-wise tail below starts at a constant offset as well.
+	static constexpr idx_t WORD_BYTES =
+	    LENGTH > sizeof(uint64_t) ? LENGTH / sizeof(uint32_t) * sizeof(uint32_t) : 0;
+	for (idx_t offset = 0; offset < WORD_BYTES; offset += sizeof(uint32_t)) {
+		Store<uint32_t>(BSwap(Load<uint32_t>(src + LENGTH - offset - sizeof(uint32_t))), dest + offset);
 	}
-	for (; offset < LENGTH; offset++) {
+	for (idx_t offset = WORD_BYTES; offset < LENGTH; offset++) {
 		dest[offset] = src[LENGTH - offset - 1];
 	}
 }
