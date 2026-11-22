@@ -1,15 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-land-push.sh, offline, against two bare repositories built here standing in for the canonical
 # repository and the fork, and a stand-in for `gh api` that keeps their rulesets: no network, no fixtures on disk.
 # A pre-receive hook in each refuses an update of `main` while its `freeze main` ruleset is active, as GitHub does.
 #
 #   1. A landing that does not descend from `main` on either repository is refused, with nothing written.
-#   2. A commit without a success record on the store is refused, and --no-check pushes past it.
+#   2. A commit without a success record on the store, missing or failed, is refused, and so is a --sha below the
+#      version bump; --no-check pushes past both.
 #   3. A dry run writes nothing: no ref, no tag, no ruleset.
 #   4. A run moves `main` on both repositories, lifts each freeze only around its push, and puts it back.
 #   5. The fork's annotated tag reaches the canonical repository as the same object; without it, the tagging
 #      command is printed and a rerun copies the tag without pushing a branch.
-#   6. A push refused for another reason still puts the freeze back.
+#   6. A push refused for another reason still puts the freeze back, and so does a disable that GitHub applied but
+#      `gh` reported as failed. An organization's ruleset of the same name is left alone.
+#   7. A lightweight tag on the fork, or a different tag of the same name upstream, is refused.
+#   8. --onto lands `<L>-land-dev` on another branch, which no ruleset freezes.
 #
 # Usage:
 #   scripts/series-land-push-test.sh
@@ -51,10 +55,12 @@ git init -q --bare -b main "$CANON"
 git init -q --bare -b main "$FORK"
 git init -q -b main "$WORK"
 
-# The rulesets of each repository, as `gh api repos/<repo>/rulesets` lists them.
+# The rulesets of each repository, as `gh api repos/<repo>/rulesets` lists them: its freeze first, then an
+# organization's ruleset of the same name that the script must not touch, then another of its own.
 ruleset() { # <file> <id> <enforcement>
-  printf '[{"id":%s,"name":"freeze main","enforcement":"%s"},{"id":7,"name":"main","enforcement":"active"}]\n' \
-    "$2" "$3" > "$1"
+  printf '[{"id":%s,"name":"freeze main","source_type":"Repository","enforcement":"%s"},%s,%s]\n' "$2" "$3" \
+    '{"id":9,"name":"freeze main","source_type":"Organization","enforcement":"disabled"}' \
+    '{"id":7,"name":"main","source_type":"Repository","enforcement":"active"}' > "$1"
 }
 hook() { # <bare repository> <its rulesets' file name>
   cat > "$1/hooks/pre-receive" <<EOF
@@ -62,7 +68,7 @@ hook() { # <bare repository> <its rulesets' file name>
 while read -r old new ref; do
   [ ! -e "$SCRATCH/reject" ] || { echo "rejected by a rule" >&2; exit 1; }
   if [ "\$ref" = refs/heads/main ] &&
-    jq -e '.[] | select(.name == "freeze main" and .enforcement == "active")' "$GH/$2.json" >/dev/null 2>&1; then
+    jq -e '.[] | select(.id != 9 and .name == "freeze main" and .enforcement == "active")' "$GH/$2.json" >/dev/null 2>&1; then
     echo "frozen" >&2; exit 1
   fi
 done
@@ -72,8 +78,9 @@ EOF
 hook "$CANON" duckdb_duckdb-r
 hook "$FORK" krlmlr_duckdb-r
 
-# The stand-in for `gh`: `api repos/<o>/<r>/rulesets [--jq <filter>]` lists, and
-# `api -X PUT repos/<o>/<r>/rulesets/<id> -f enforcement=<e> [--silent]` sets one; each call is logged.
+# The stand-in for `gh`: `api --paginate repos/<o>/<r>/rulesets?includes_parents=false --jq <filter>` lists, and
+# `api -X PUT repos/<o>/<r>/rulesets/<id> -f enforcement=<e> --silent` sets one; each call is logged. With
+# $GH/flaky present, a disable is applied and then reported as failed, as a timeout after GitHub acted would.
 cat > "$SCRATCH/bin/gh" <<EOF
 #!/bin/bash
 echo "\$*" >> "$GH/log"
@@ -85,9 +92,11 @@ if [ "\$1" = -X ]; then
   f="$GH/\${repo/\//_}.json"
   jq --argjson id "\$id" --arg e "\$e" 'map(if .id == \$id then .enforcement = \$e else . end)' "\$f" > "\$f.new"
   mv "\$f.new" "\$f"
+  [ "\$e" != disabled ] || [ ! -e "$GH/flaky" ] || { echo "HTTP 502" >&2; exit 1; }
 else
-  repo=\${1#repos/}; repo=\${repo%/rulesets}
-  jq -r "\${3:-.}" "$GH/\${repo/\//_}.json"
+  [ "\$1" = --paginate ] || exit 1
+  repo=\${2#repos/}; repo=\${repo%/rulesets?includes_parents=false}
+  jq -r "\$4" "$GH/\${repo/\//_}.json"
 fi
 EOF
 chmod +x "$SCRATCH/bin/gh"
@@ -97,11 +106,14 @@ export SERIES_LAND_PUSH_CANONICAL_URL=$CANON SERIES_LAND_PUSH_FORK_URL=$FORK
 git init -q -b main "$BUILD"
 cd "$BUILD"
 git config commit.gpgsign false
-c() { printf 'Package: duckdb\nVersion: %s\n' "$2" > DESCRIPTION; echo "$1" > "$1.txt"; git add -A; git commit -qm "$1"; git rev-parse HEAD; }
-C0=$(c seed 2.0.0.9000)
-C1=$(c one 2.0.0.9000.1); C2=$(c two 2.0.0.9000.2); C3=$(c three 2.0.99.9000)
+c() { # <file> <version> <subject>
+  printf 'Package: duckdb\nVersion: %s\n' "$2" > DESCRIPTION; echo "$1" > "$1.txt"; git add -A; git commit -qm "$3"; git rev-parse HEAD
+}
+C0=$(c seed 2.0.0.9000 "chore: seed")
+C1=$(c one 2.0.0.9000.1 "vendor: one"); C2=$(c two 2.0.0.9000.2 "vendor: two")
+C3=$(c three 2.0.99.9000 "chore: Bump version to 2.0.99.9000")
 git checkout -q -b beside "$C0"
-X=$(c beside 2.0.0.9001)
+X=$(c beside 2.0.0.9001 "fix: beside")
 git checkout -q main
 git push -q "$CANON" "$C0:refs/heads/main"
 git push -q "$FORK" "$C0:refs/heads/main" "$C3:refs/heads/main-land-dev"
@@ -117,7 +129,7 @@ record() { # <commit> <state>: the store's record of <commit>, on the fork's rcc
   git -C "$SCRATCH/store" push -q -f "$FORK" HEAD:refs/heads/rcc2
 }
 git init -q -b rcc2 "$SCRATCH/store"
-record "$C1" success; record "$C2" failure; record "$C3" success
+record "$C1" success; record "$C3" success
 
 heads() { echo "$(git ls-remote "$CANON" refs/heads/main | cut -f1) $(git ls-remote "$FORK" refs/heads/main | cut -f1)"; }
 rules() { echo "$(jq -r '.[0].enforcement' "$GH/duckdb_duckdb-r.json") $(jq -r '.[0].enforcement' "$GH/krlmlr_duckdb-r.json")"; }
@@ -143,6 +155,10 @@ is "refs are under refs/series-land-push only while it runs" "$(git -C "$WORK" f
 # --- 2. the records ----------------------------------------------------------
 echo "2. the store's records"
 st=0; out=$(land main --dry-run) || st=$?
+is "a commit without a record is refused" "$st" 1
+has "  and named" "$out" "not passed: ${C2:0:10} (missing)"
+record "$C2" failure
+st=0; out=$(land main --dry-run) || st=$?
 is "a failed commit is refused" "$st" 1
 has "  and named" "$out" "not passed: ${C2:0:10} (failure)"
 has "  counted" "$out" "1 of 3 commits"
@@ -150,6 +166,12 @@ st=0; out=$(land main --dry-run --no-check) || st=$?
 is "--no-check passes it" "$st" 0
 has "  and says so" "$out" "Not checked"
 record "$C2" success
+st=0; out=$(land main --dry-run --sha "$C2") || st=$?
+is "a --sha below the bump is refused" "$st" 1
+has "  as not the tip" "$out" "is not the main-land-dev tip"
+st=0; out=$(land main --dry-run --sha "$C2" --no-check) || st=$?
+is "  and --no-check passes it" "$st" 0
+has "  noting the tip" "$out" "main-land-dev has moved above $C2"
 
 # --- 3. a dry run ------------------------------------------------------------
 echo "3. a dry run"
@@ -174,6 +196,13 @@ rm "$SCRATCH/reject"
 is "fails" "$st" 1
 is "nothing moved" "$(heads)" "$C0 $C0"
 is "the freeze is back" "$(rules)" "active active"
+touch "$GH/flaky"
+st=0; out=$(land main) || st=$?
+rm "$GH/flaky"
+is "a disable reported as failed fails" "$st" 1
+is "  nothing moved" "$(heads)" "$C0 $C0"
+is "  the freeze is back" "$(rules)" "active active"
+is "  the organization's ruleset untouched" "$(jq -r '.[1].enforcement' "$GH/duckdb_duckdb-r.json")" disabled
 
 # --- 4. the run --------------------------------------------------------------
 echo "4. a run"
@@ -203,6 +232,36 @@ is "  without touching a ruleset" "$(grep -c -- '-X PUT' "$GH/log" || true)" 0
 st=0; out=$(land main) || st=$?
 has "a second rerun finds it there" "$out" "v2.0.99.9000 is already there"
 is "no tag is created in the working repository" "$(git -C "$WORK" tag)" ""
+
+# --- 7. tags that are refused ------------------------------------------------
+echo "7. refused tags"
+git push -q "$CANON" :refs/tags/v2.0.99.9000
+git tag -a -f v2.0.99.9000 -m "duckdb 2.0.99.9000, another" "$C3" >/dev/null
+git push -q "$CANON" refs/tags/v2.0.99.9000
+st=0; out=$(land main) || st=$?
+is "a different tag upstream is refused" "$st" 1
+has "  and named" "$out" "v2.0.99.9000 on duckdb/duckdb-r is $(git rev-parse v2.0.99.9000), not the fork's $obj"
+git push -q "$CANON" :refs/tags/v2.0.99.9000
+git push -q -f "$FORK" "$C3:refs/tags/v2.0.99.9000"
+st=0; out=$(land main) || st=$?
+is "a lightweight tag on the fork is refused" "$st" 1
+has "  and named" "$out" "is a lightweight tag"
+is "  and not copied" "$(git ls-remote "$CANON" refs/tags/v2.0.99.9000)" ""
+
+# --- 8. --onto ---------------------------------------------------------------
+echo "8. --onto"
+git push -q -f "$FORK" "$obj:refs/tags/v2.0.99.9000"
+git push -q "$CANON" "$C0:refs/heads/v2.0-cyanoptera"
+git push -q "$FORK" "$C0:refs/heads/v2.0-cyanoptera"
+: > "$GH/log"
+st=0; out=$(land main --onto v2.0-cyanoptera) || st=$?
+is "lands main-land-dev on the other branch" "$st" 0
+is "  moving it on both" "$(git ls-remote "$CANON" refs/heads/v2.0-cyanoptera | cut -f1) $(git ls-remote "$FORK" refs/heads/v2.0-cyanoptera | cut -f1)" "$C3 $C3"
+is "  lifting no freeze of main" "$(grep -c -- '-X PUT' "$GH/log" || true)" 0
+has "  from where it stood" "$out" "duckdb/duckdb-r: v2.0-cyanoptera ${C0:0:10} -> ${C3:0:10}"
+has "  and copies the tag" "$out" "copying v2.0.99.9000 ($obj)"
+st=0; out=$(land main --onto feature) || st=$?
+is "a branch that is no line's is refused" "$st" 2
 
 echo
 echo "$pass passed, $fail failed"

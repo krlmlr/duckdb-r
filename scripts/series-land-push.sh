@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Fast-forward a landing's branch onto `<L>-land-dev` in both repositories, with one command run by the maintainer
 # (.claude/skills/series-land/SKILL.md, step 6).
 #
@@ -9,15 +9,18 @@
 #   1. Fetch `<L>-land-dev` from the fork and `<B>` from the canonical repository and the fork. The landing head is
 #      the fork's `<L>-land-dev` tip, or the commit --sha names, which must be on it. It must descend from both `<B>`
 #      tips, or nothing is pushed; the range above the canonical `<B>` and its count are printed.
-#   2. Check that every commit of that range has a `success` record on the fork's `rcc2` store, the record
-#      `series-land.sh <L> --status` reads, and refuse otherwise. --no-check skips this, for a store that cannot be
-#      fetched; `--status` is then the check, read beforehand.
+#   2. Check what `series-land.sh <L> --status` checks before it prints READY, and refuse otherwise: the landing head
+#      is the `<L>-land-dev` tip; above `<B>` it is the base's own commits, then `vendor:` commits, then the version
+#      bump `chore: Bump version to <version>` last and nowhere else; and every commit of that range has a `success`
+#      record on the fork's `rcc2` store. The bump's alpha stamp is not checked here, nor the copied `each-rcc (fork)`
+#      statuses step 6 reads on the landing's pull request. --no-check skips this step, for a store that cannot be
+#      fetched or a --sha below the tip; `--status` is then the check, read beforehand.
 #   3. For the canonical repository, then the fork, unless `<B>` is already the landing head there: disable an active
-#      ruleset named `freeze <B>`, push `<sha>:refs/heads/<B>`, a plain push that git refuses unless it fast-forwards,
+#      repository ruleset named `freeze <B>`, push `<sha>:refs/heads/<B>`, a plain push that git refuses unless it fast-forwards,
 #      and enable the ruleset again. A trap enables it on the way out too, whether the push succeeded or not.
 #   4. Copy the version tag: `v<version>` of DESCRIPTION at the landing head, `v<version>.9900` for a release's version
 #      (handbook/operations/releases/versioning/README.md). If the fork has it, pointing at the landing head, the same
-#      annotated tag object is pushed to the canonical repository. If not, nothing is tagged here: the command that
+#      annotated tag object is pushed to the canonical repository; a lightweight tag is refused. If not, nothing is tagged here: the command that
 #      dispatches tag-version.yaml in the fork is printed, and a rerun of this script, which then pushes no branch,
 #      copies the tag.
 #   5. Print `git ls-remote` of both `<B>` refs and of the tag.
@@ -37,9 +40,13 @@
 #   SERIES_LAND_PUSH_FORK          - the fork for `gh api`, default krlmlr/duckdb-r
 #   RCC_BRANCH                     - the store's branch, default rcc2
 # scripts/series-land-push-test.sh runs this against local bare repositories and a stand-in for `gh`.
+#
+# It runs under bash 3.2, macOS's /bin/bash: no `inherit_errexit`, associative arrays or `mapfile`, and `sed -E`.
+#
+# Nothing here locks out a concurrent writer: between the fast-forward check and the push, a push by someone else to
+# `<B>` is refused by the freeze, or, while it is lifted, makes this plain push fail rather than overwrite it.
 
 set -euo pipefail
-shopt -s inherit_errexit
 
 usage='usage: series-land-push.sh <L> [--onto <B>] [--sha <sha>] [--dry-run] [--no-check]'
 argerr() { echo "$usage" >&2; exit 2; }
@@ -79,6 +86,8 @@ enable() { # <repo> <id>
 }
 cleanup() {
   local r failed=''
+  # A second Ctrl-C must not skip the restore.
+  trap '' INT TERM
   for r in ${restore[@]+"${restore[@]}"}; do
     # shellcheck disable=SC2086
     enable $r || { failed=1; echo "Error: could not enable ruleset ${r#* } on ${r%% *} again; enable it by hand" >&2; }
@@ -119,16 +128,33 @@ git log --oneline --first-parent -n 3 "$canon..$sha" | sed 's/^/  /'
 
 # --- 2. every commit passed --------------------------------------------------
 if [ -n "$check" ]; then
+  [ "$sha" = "$dev" ] ||
+    { echo "Error: $sha is not the $L-land-dev tip $dev; --no-check pushes it once --status has printed READY for it" >&2; exit 1; }
+  # The shape out_of_place in scripts/series-land.sh accepts, with the `vendor:` prefix of scripts/series-lib.sh.
+  bump_subject='chore: Bump version to '
+  seen='' last=''
+  while IFS=' ' read -r c subj; do
+    [ -z "$last" ] || { echo "Error: $L-land-dev carries a commit after the version bump: $c $subj" >&2; exit 1; }
+    case "$subj" in
+      vendor:*) seen=1 ;;
+      "$bump_subject"*)
+        [ -n "$seen" ] || { echo "Error: the version bump $c has no vendor commit under it" >&2; exit 1; }
+        last=1 ;;
+      *) [ -z "$seen" ] || { echo "Error: $L-land-dev carries a commit out of place: $c $subj" >&2; exit 1; } ;;
+    esac
+  done < <(git log --reverse --first-parent --format='%h %s' "$canon..$sha")
+  # Once `<B>` is the bump, a rerun only copies the tag, as --status prints READY again then.
+  [ -n "$last" ] || [ "$canon" = "$sha" ] || { echo "Error: $L-land-dev does not end on the version bump" >&2; exit 1; }
   git fetch -q --no-tags "$fork_url" "+refs/heads/$rcc:$tmp/rcc"
   bad=0
   while IFS= read -r c; do
     st=$(git show "$tmp/rcc:runs2.d/${c:0:2}/$c.ndjson" 2>/dev/null |
-      sed -nr 's/.*"status":[^}]*"state": *"([a-z]+)".*/\1/p' | head -n 1 || true)
+      sed -nE 's/.*"status":[^}]*"state": *"([a-z]+)".*/\1/p' | head -n 1 || true)
     [ "$st" = success ] || { bad=$((bad + 1)); [ "$bad" -gt 5 ] || echo "  not passed: ${c:0:10} (${st:-missing})" >&2; }
   done < <(git rev-list --first-parent "$canon..$sha")
   [ "$bad" -eq 0 ] ||
     { echo "Error: $bad of $n commits have no success record on $rcc; read 'scripts/series-land.sh $L --status'" >&2; exit 1; }
-  echo "All $n commits passed on $rcc."
+  echo "All $n commits passed on $rcc, and $L-land-dev ends on its version bump."
 else
   echo "Not checked: the records on $rcc; 'scripts/series-land.sh $L --status' must have printed READY for $sha."
 fi
@@ -137,12 +163,14 @@ fi
 push_branch() { # <repo> <url> <current>
   local repo=$1 url=$2 cur=$3 ids id
   if [ "$cur" = "$sha" ]; then echo "$repo: $B is already at $sha"; return; fi
-  ids=$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == \"freeze $B\" and .enforcement == \"active\") | .id")
+  ids=$(gh api --paginate "repos/$repo/rulesets?includes_parents=false" \
+    --jq ".[] | select(.source_type == \"Repository\" and .name == \"freeze $B\" and .enforcement == \"active\") | .id")
   [[ $ids =~ ^[0-9]*$ ]] || { echo "Error: more than one active freeze ruleset for $B on $repo: $ids" >&2; exit 1; }
   for id in $ids; do
     echo "$repo: lifting ruleset $id, freeze $B"
-    run gh api -X PUT "repos/$repo/rulesets/$id" -f enforcement=disabled --silent
+    # Recorded first: a disable GitHub applied but gh reports as failed is restored all the same.
     [ -n "$dry" ] || restore+=("$repo $id")
+    run gh api -X PUT "repos/$repo/rulesets/$id" -f enforcement=disabled --silent
   done
   echo "$repo: $B ${cur:0:10} -> ${sha:0:10}"
   run git push "$url" "$sha:refs/heads/$B"
@@ -161,6 +189,8 @@ t=v$v
 [[ ! $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || t=v$v.9900
 if [ -n "$(git ls-remote "$fork_url" "refs/tags/$t")" ]; then
   git fetch -q --no-tags "$fork_url" "+refs/tags/$t:$tmp/tag"
+  [ "$(git cat-file -t "$tmp/tag")" = tag ] ||
+    { echo "Error: $t on the fork is a lightweight tag; tag-version.yaml writes an annotated one" >&2; exit 1; }
   [ "$(git rev-parse "$tmp/tag^{commit}")" = "$sha" ] ||
     { echo "Error: $t on the fork points at $(git rev-parse "$tmp/tag^{commit}"), not $sha" >&2; exit 1; }
   obj=$(git rev-parse "$tmp/tag")
