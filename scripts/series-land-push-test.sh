@@ -7,7 +7,7 @@
 #
 #   1. A remote that is not the repository it must be, by its URL or its push URL, is refused; the https and SSH
 #      forms are both accepted, in any letter case.
-#   2. Nothing is pushed unless --status, asked of `origin` and `upstream`, prints READY with its push line, which
+#   2. Nothing is pushed unless --status, run by the script's own bash and asked of `origin` and `upstream`, prints READY with its push line, which
 #      names the head and the branch; a --sha that is not that head is refused.
 #   3. A head that does not fast-forward the branch on `origin` is refused.
 #   4. A landing that does not change NEWS.md, or whose NEWS.md has no section for the version, is refused, and so
@@ -72,11 +72,12 @@ hook "$CANON" upstream
 hook "$FORK" origin
 
 # The copy of the script, beside a stand-in for series-land.sh that logs its arguments and answers with
-# $SCRATCH/status and the exit status in $SCRATCH/status.rc.
+# $SCRATCH/status and the exit status in $SCRATCH/status.rc. Its shebang names no shell, as /bin/bash names one too
+# old on macOS: the script must run it with its own bash.
 mkdir -p "$SCRATCH/scripts"
 cp "$HERE/series-land-push.sh" "$SCRATCH/scripts/"
 cat > "$SCRATCH/scripts/series-land.sh" <<EOF
-#!/bin/bash
+#!/nonexistent/bash
 echo "\$*" >> "$SCRATCH/status.log"
 cat "$SCRATCH/status"
 exit "\$(cat "$SCRATCH/status.rc")"

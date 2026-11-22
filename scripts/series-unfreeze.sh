@@ -4,4 +4,5 @@
 #
 # Usage:
 #   scripts/series-unfreeze.sh <B> [--remote upstream|origin] [--dry-run]
-exec "$(dirname "$0")/series-freeze.sh" --unfreeze "$@"
+# Run by this bash, as series-freeze.sh's guard then checks, whatever a shebang would pick.
+exec "$BASH" "$(dirname "$0")/series-freeze.sh" --unfreeze "$@"

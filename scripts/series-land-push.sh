@@ -86,7 +86,8 @@ run() { # <command>...: run it, or print it on a dry run
 
 # --- 1. READY ----------------------------------------------------------------
 st=0
-status=$("$(dirname "$0")/series-land.sh" "$L" --status --remote origin --canonical upstream 2>&1) || st=$?
+# Run by this bash, which passed the guard above, not by the shebang's /bin/bash, which is 3.2 on macOS.
+status=$("$BASH" "$(dirname "$0")/series-land.sh" "$L" --status --remote origin --canonical upstream 2>&1) || st=$?
 printf '%s\n' "$status" | sed -n '1,/^READY/p' | sed 's/^/  | /'
 push_re='^  git push upstream ([0-9a-f]{40}):refs/heads/(main|v[0-9]+\.[0-9]+-[a-z]+)$'
 sha='' B=''
