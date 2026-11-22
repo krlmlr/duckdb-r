@@ -323,7 +323,9 @@ A red is repaired as stage 2 repairs one ([`series-loop`](/.claude/skills/series
 
 ## 6. Fast-forward `<B>`
 
-Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges, `scripts/series-unfreeze.sh <B>` and `scripts/series-land-push.sh <S>` supersede the lift, push, restore and tag blocks of this step, which stay until then ([`operations/fork/`](/handbook/operations/fork/README.md)).
+Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges,
+`scripts/series-unfreeze.sh <B>` and `scripts/series-land-push.sh <S>` supersede this step's lift, push, restore and tag commands
+and the note on an existing tag, which stay until then ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 When `--status` prints `READY`, every commit has passed and `<B>` is still the commit the landing stands on.
 Push the SHA that line names, not whatever the branch holds by then,
@@ -382,7 +384,9 @@ delete the local tag with `git tag -d`, and read the remote one before rerunning
 
 ## 7. After the landing
 
-Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges, the freeze is not restored after the push and there is nothing to delete, which supersedes the block below ([`operations/fork/`](/handbook/operations/fork/README.md)).
+Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges,
+the freeze is not restored after the push and there is nothing to delete,
+which supersedes this step's command that deletes the freeze ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 Delete the freeze, so that `<B>` takes pull requests again:
 
