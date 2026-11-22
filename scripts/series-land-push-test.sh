@@ -4,8 +4,10 @@
 # A pre-receive hook in each refuses an update of `main` while its `freeze main` ruleset is active, as GitHub does.
 #
 #   1. A landing that does not descend from `main` on either repository is refused, with nothing written.
-#   2. A commit without a success record on the store, missing or failed, is refused, and so is a --sha below the
-#      version bump; --no-check pushes past both.
+#   2. A commit without a success record on the store, missing or failed, is refused, and --no-check pushes past it.
+#      A --sha below the version bump, a commit out of place and a landing that does not end on the bump are refused
+#      with --no-check too. The base's own commits below the first vendor commit, and a vendor commit under the older
+#      `Update vendored sources` subject, are in place.
 #   3. A dry run writes nothing: no ref, no tag, no ruleset.
 #   4. A run moves `main` on both repositories, lifts each freeze only around its push, and puts it back.
 #   5. The fork's annotated tag reaches the canonical repository as the same object; without it, the tagging
@@ -42,7 +44,8 @@ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.negotiate GIT_CONFIG_VALUE_0=fal
 
 # --- the fixture -------------------------------------------------------------
 #
-# `main` at C0 on both repositories, the landing C1..C3 above it on the fork as `main-land-dev`, a commit X beside it,
+# `main` at C0 on both repositories, the landing B1..C3 above it on the fork as `main-land-dev`: the base's own
+# commit B1, the vendor commit C1 under the older subject, the vendor commit C2 and the bump C3; a commit X beside it,
 # and the store's records on the fork's `rcc2`. The script runs in a repository with no remotes at all.
 
 CANON=$SCRATCH/canonical.git
@@ -110,7 +113,9 @@ c() { # <file> <version> <subject>
   printf 'Package: duckdb\nVersion: %s\n' "$2" > DESCRIPTION; echo "$1" > "$1.txt"; git add -A; git commit -qm "$3"; git rev-parse HEAD
 }
 C0=$(c seed 2.0.0.9000 "chore: seed")
-C1=$(c one 2.0.0.9000.1 "vendor: one"); C2=$(c two 2.0.0.9000.2 "vendor: two")
+B1=$(c base 2.0.0.9000 "test: the base's own")
+C1=$(c one 2.0.0.9000.1 "chore: Update vendored sources to duckdb/duckdb@0123456789abcdef0123456789abcdef01234567")
+C2=$(c two 2.0.0.9000.2 "vendor: two")
 C3=$(c three 2.0.99.9000 "chore: Bump version to 2.0.99.9000")
 git checkout -q -b beside "$C0"
 X=$(c beside 2.0.0.9001 "fix: beside")
@@ -129,7 +134,7 @@ record() { # <commit> <state>: the store's record of <commit>, on the fork's rcc
   git -C "$SCRATCH/store" push -q -f "$FORK" HEAD:refs/heads/rcc2
 }
 git init -q -b rcc2 "$SCRATCH/store"
-record "$C1" success; record "$C3" success
+record "$B1" success; record "$C1" success; record "$C3" success
 
 heads() { echo "$(git ls-remote "$CANON" refs/heads/main | cut -f1) $(git ls-remote "$FORK" refs/heads/main | cut -f1)"; }
 rules() { echo "$(jq -r '.[0].enforcement' "$GH/duckdb_duckdb-r.json") $(jq -r '.[0].enforcement' "$GH/krlmlr_duckdb-r.json")"; }
@@ -161,7 +166,7 @@ record "$C2" failure
 st=0; out=$(land main --dry-run) || st=$?
 is "a failed commit is refused" "$st" 1
 has "  and named" "$out" "not passed: ${C2:0:10} (failure)"
-has "  counted" "$out" "1 of 3 commits"
+has "  counted" "$out" "1 of 4 commits"
 st=0; out=$(land main --dry-run --no-check) || st=$?
 is "--no-check passes it" "$st" 0
 has "  and says so" "$out" "Not checked"
@@ -170,16 +175,30 @@ st=0; out=$(land main --dry-run --sha "$C2") || st=$?
 is "a --sha below the bump is refused" "$st" 1
 has "  as not the tip" "$out" "is not the main-land-dev tip"
 st=0; out=$(land main --dry-run --sha "$C2" --no-check) || st=$?
-is "  and --no-check passes it" "$st" 0
-has "  noting the tip" "$out" "main-land-dev has moved above $C2"
+is "  with --no-check too" "$st" 1
+# A landing whose bump has a stray commit under it, and one that does not end on a bump, both pushed in turn as
+# main-land-dev.
+git checkout -q -b stray "$C2"
+S1=$(c stray 2.0.0.9000.2 "fix: stray")
+S2=$(c three 2.0.99.9000 "chore: Bump version to 2.0.99.9000")
+git checkout -q main
+git push -q -f "$FORK" "$S2:refs/heads/main-land-dev"
+st=0; out=$(land main --dry-run --no-check) || st=$?
+is "a commit out of place is refused with --no-check" "$st" 1
+has "  and named" "$out" "carries a commit out of place: ${S1:0:7}"
+git push -q -f "$FORK" "$C2:refs/heads/main-land-dev"
+st=0; out=$(land main --dry-run --no-check) || st=$?
+is "a landing without its bump is refused with --no-check" "$st" 1
+has "  and named" "$out" "does not end on the version bump"
+git push -q -f "$FORK" "$C3:refs/heads/main-land-dev"
 
 # --- 3. a dry run ------------------------------------------------------------
 echo "3. a dry run"
 : > "$GH/log"
 st=0; out=$(land main --dry-run) || st=$?
 is "succeeds" "$st" 0
-has "prints the range" "$out" "$C0..$C3, 3 commits"
-has "checks the records" "$out" "All 3 commits passed"
+has "prints the range" "$out" "$C0..$C3, 4 commits"
+has "checks the records" "$out" "All 4 commits passed"
 has "would lift the canonical freeze" "$out" "would run: gh api -X PUT repos/duckdb/duckdb-r/rulesets/101 -f enforcement=disabled"
 has "would push" "$out" "would run: git push $CANON $C3:refs/heads/main"
 has "would lift the fork's freeze" "$out" "repos/krlmlr/duckdb-r/rulesets/202"

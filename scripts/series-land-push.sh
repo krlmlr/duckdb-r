@@ -7,14 +7,15 @@
 # is addressed by URL and fetched into temporary refs under refs/series-land-push/, deleted on exit:
 #
 #   1. Fetch `<L>-land-dev` from the fork and `<B>` from the canonical repository and the fork. The landing head is
-#      the fork's `<L>-land-dev` tip, or the commit --sha names, which must be on it. It must descend from both `<B>`
+#      the fork's `<L>-land-dev` tip, which --sha, if given, must name. It must descend from both `<B>`
 #      tips, or nothing is pushed; the range above the canonical `<B>` and its count are printed.
-#   2. Check what `series-land.sh <L> --status` checks before it prints READY, and refuse otherwise: the landing head
-#      is the `<L>-land-dev` tip; above `<B>` it is the base's own commits, then `vendor:` commits, then the version
-#      bump `chore: Bump version to <version>` last and nowhere else; and every commit of that range has a `success`
-#      record on the fork's `rcc2` store. The bump's alpha stamp is not checked here, nor the copied `each-rcc (fork)`
-#      statuses step 6 reads on the landing's pull request. --no-check skips this step, for a store that cannot be
-#      fetched or a --sha below the tip; `--status` is then the check, read beforehand.
+#   2. Check what `series-land.sh <L> --status` checks before it prints READY, and refuse otherwise: above `<B>` the
+#      landing is the base's own commits, then vendor commits as scripts/series-lib.sh reads a subject, then the
+#      version bump `chore: Bump version to <version>` last and nowhere else; and every commit of that range has a
+#      `success` record on the fork's `rcc2` store. Not checked here: what the bump changes (series-land.sh's
+#      is_bump: DESCRIPTION, NEWS.md and the alpha stamp only, and the version it sets), the bump's alpha stamp
+#      against upstream, and the copied `each-rcc (fork)` statuses step 6 reads on the landing's pull request.
+#      --no-check skips the records alone, for a store that cannot be fetched; `--status` is then their check.
 #   3. For the canonical repository, then the fork, unless `<B>` is already the landing head there: disable an active
 #      repository ruleset named `freeze <B>`, push `<sha>:refs/heads/<B>`, a plain push that git refuses unless it fast-forwards,
 #      and enable the ruleset again. A trap enables it on the way out too, whether the push succeeded or not.
@@ -47,6 +48,8 @@
 # `<B>` is refused by the freeze, or, while it is lifted, makes this plain push fail rather than overwrite it.
 
 set -euo pipefail
+# shellcheck source=series-lib.sh
+. "$(dirname "$0")/series-lib.sh"
 
 usage='usage: series-land-push.sh <L> [--onto <B>] [--sha <sha>] [--dry-run] [--no-check]'
 argerr() { echo "$usage" >&2; exit 2; }
@@ -109,9 +112,8 @@ dev=$(git rev-parse "$tmp/land-dev")
 if [ -n "$want" ]; then
   sha=$(git rev-parse -q --verify "$want^{commit}") ||
     { echo "Error: $want is not a commit on $L-land-dev ($fork_url)" >&2; exit 1; }
-  git merge-base --is-ancestor "$sha" "$dev" ||
-    { echo "Error: $want is not on $L-land-dev, which is at $dev" >&2; exit 1; }
-  [ "$sha" = "$dev" ] || echo "Note: $L-land-dev has moved above $sha, to $dev; pushing $sha"
+  [ "$sha" = "$dev" ] ||
+    { echo "Error: $want is not the $L-land-dev tip $dev; it moved, so read --status again" >&2; exit 1; }
 else
   sha=$dev
 fi
@@ -121,30 +123,28 @@ for side in canonical fork; do
   git merge-base --is-ancestor "$tmp/$side" "$sha" ||
     { echo "Error: $sha does not fast-forward $B on the $side repository ($(git rev-parse "$tmp/$side"))" >&2; exit 1; }
 done
-n=$(git rev-list --count "$canon..$sha")
-echo "Landing $L onto $B: $canon..$sha, $n commits"
+count=$(git rev-list --count "$canon..$sha")
+echo "Landing $L onto $B: $canon..$sha, $count commits"
 git log --oneline --first-parent -n 3 "$canon..$sha" | sed 's/^/  /'
-[ "$n" -le 3 ] || echo "  ..."
+[ "$count" -le 3 ] || echo "  ..."
 
-# --- 2. every commit passed --------------------------------------------------
+# --- 2. READY: the landing's shape, and every commit passed -------------------
+# The shape out_of_place in scripts/series-land.sh accepts: the base's own commits below the first vendor commit,
+# then vendor commits, then the bump.
+bump_subject='chore: Bump version to '
+seen='' last=''
+while IFS=' ' read -r c subj; do
+  [ -z "$last" ] || { echo "Error: $L-land-dev carries a commit after the version bump: $c $subj" >&2; exit 1; }
+  if series_is_vendor "$subj"; then seen=1; continue; fi
+  [ -n "$seen" ] || continue
+  case "$subj" in
+    "$bump_subject"*) last=1 ;;
+    *) echo "Error: $L-land-dev carries a commit out of place: $c $subj" >&2; exit 1 ;;
+  esac
+done < <(git log --reverse --first-parent --format='%h %s' "$canon..$sha")
+# Once `<B>` is the bump, a rerun only copies the tag, as --status prints READY again then.
+[ -n "$last" ] || [ "$canon" = "$sha" ] || { echo "Error: $L-land-dev does not end on the version bump" >&2; exit 1; }
 if [ -n "$check" ]; then
-  [ "$sha" = "$dev" ] ||
-    { echo "Error: $sha is not the $L-land-dev tip $dev; --no-check pushes it once --status has printed READY for it" >&2; exit 1; }
-  # The shape out_of_place in scripts/series-land.sh accepts, with the `vendor:` prefix of scripts/series-lib.sh.
-  bump_subject='chore: Bump version to '
-  seen='' last=''
-  while IFS=' ' read -r c subj; do
-    [ -z "$last" ] || { echo "Error: $L-land-dev carries a commit after the version bump: $c $subj" >&2; exit 1; }
-    case "$subj" in
-      vendor:*) seen=1 ;;
-      "$bump_subject"*)
-        [ -n "$seen" ] || { echo "Error: the version bump $c has no vendor commit under it" >&2; exit 1; }
-        last=1 ;;
-      *) [ -z "$seen" ] || { echo "Error: $L-land-dev carries a commit out of place: $c $subj" >&2; exit 1; } ;;
-    esac
-  done < <(git log --reverse --first-parent --format='%h %s' "$canon..$sha")
-  # Once `<B>` is the bump, a rerun only copies the tag, as --status prints READY again then.
-  [ -n "$last" ] || [ "$canon" = "$sha" ] || { echo "Error: $L-land-dev does not end on the version bump" >&2; exit 1; }
   git fetch -q --no-tags "$fork_url" "+refs/heads/$rcc:$tmp/rcc"
   bad=0
   while IFS= read -r c; do
@@ -153,8 +153,8 @@ if [ -n "$check" ]; then
     [ "$st" = success ] || { bad=$((bad + 1)); [ "$bad" -gt 5 ] || echo "  not passed: ${c:0:10} (${st:-missing})" >&2; }
   done < <(git rev-list --first-parent "$canon..$sha")
   [ "$bad" -eq 0 ] ||
-    { echo "Error: $bad of $n commits have no success record on $rcc; read 'scripts/series-land.sh $L --status'" >&2; exit 1; }
-  echo "All $n commits passed on $rcc, and $L-land-dev ends on its version bump."
+    { echo "Error: $bad of $count commits have no success record on $rcc; read 'scripts/series-land.sh $L --status'" >&2; exit 1; }
+  echo "All $count commits passed on $rcc."
 else
   echo "Not checked: the records on $rcc; 'scripts/series-land.sh $L --status' must have printed READY for $sha."
 fi
