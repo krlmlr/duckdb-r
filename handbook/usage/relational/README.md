@@ -36,9 +36,10 @@ and any class beyond the built-in ones in the default strict mode
 pinned in
 [`tests/testthat/test-relational.R`](/tests/testthat/test-relational.R)
 and [`tests/testthat/test-timezone.R`](/tests/testthat/test-timezone.R)).
-The environment scan follows the connection's `map` since [#3040](https://github.com/duckdb/duckdb-r/pull/3040)
+The environment scan follows the connection's `map` since [#3040](https://github.com/duckdb/duckdb-r/pull/3040),
+follows its `posixct` everywhere but under `rel_from_sql()` (below),
 and scans an `integer64` column as `BIGINT` since [#3015](https://github.com/duckdb/duckdb-r/pull/3015).
-`rel_from_df()` does neither, and the relation over a materialized ALTREP data frame does not scan `integer64` as `BIGINT`:
+`rel_from_df()` does none of these, and the relation over a materialized ALTREP data frame does not scan `integer64` as `BIGINT`:
 duckplyr aims at compatibility with R, and enabling these there waits for more tests that show it holds
 ([#3067](https://github.com/duckdb/duckdb-r/pull/3067), [#3069](https://github.com/duckdb/duckdb-r/pull/3069)).
 Factors lift and come back as factors.
@@ -47,10 +48,15 @@ duckplyr surfaces these refusals as errors on an explicit
 What a value becomes once it has crossed is
 [`types/`](/handbook/usage/types/README.md)'s.
 
-**A `POSIXct` lifts as `TIMESTAMP` here, and only here.**
-Everything else that hands R values to the engine follows
-`dbConnect(posixct = )`, whose default sends the instant as
-`TIMESTAMPTZ` ([`timestamps/`](/handbook/usage/timestamps/README.md));
+**A `POSIXct` lifts as `TIMESTAMP` here, whatever the setting says.**
+The other paths that hand a data frame or a value to the engine follow
+`dbConnect(posixct = )`, whose default sends the instant as `TIMESTAMPTZ`,
+with two exceptions:
+Arrow lands a timestamp that carries a zone as `TIMESTAMPTZ` under either setting,
+and `dbAppendTable()`, `dbWriteTable(append = TRUE)` and `field.types`
+let a known target type pick the scan type per column,
+`TIMESTAMP` for a naive target and `TIMESTAMPTZ` for a zoned one
+([`timestamps/`](/handbook/usage/timestamps/README.md)).
 `rel_from_df()` pins the older mapping instead
 ([`R/relational.R`](/R/relational.R)),
 because a `TIMESTAMPTZ` column comes back labeled with the session

@@ -78,8 +78,9 @@ the wider type mapping is
   column and dropped the R-side zone
   ([#184](https://github.com/duckdb/duckdb-r/issues/184)).
   The setting reaches `dbWriteTable()`, `dbAppendTable()`,
-  `duckdb_register()`, bound parameters, `dbDataType()` and
-  `dbQuoteLiteral()`, nested columns included.
+  `duckdb_register()`, a data frame picked up by name under `duckdb(environment_scan = TRUE)`,
+  bound parameters, `dbDataType()` and `dbQuoteLiteral()`, nested columns included;
+  the relational API stays on `TIMESTAMP` (see below).
 * **Written into a naive column, a `POSIXct` keeps the UTC wall clock.**
   `dbAppendTable()`, `dbWriteTable(append = TRUE)`, and `dbWriteTable()`
   with `field.types` register a column as `TIMESTAMP`, as

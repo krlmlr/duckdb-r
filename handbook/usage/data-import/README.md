@@ -36,7 +36,8 @@ and reading many files at once.
   and a table of that name in the database wins over it.
   Registration and the environment scan bind with the connection's `map` and `posixct`,
   and both take an `integer64` column as `BIGINT` whatever `bigint` says,
-  so one data frame reaching the engine either way arrives as one set of types
+  so one data frame reaching the engine either way arrives as one set of types,
+  except that the scan under `rel_from_sql()` keeps a `POSIXct` on `TIMESTAMP`
   ([`types/`](/handbook/usage/types/README.md)).
 
 *To deepen: state the sniffing rules and their defaults from
