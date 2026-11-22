@@ -1,0 +1,19 @@
+## cli-2.0.1-workaround-candidate: cli duckdb workaround-candidate.sql
+┌─────────────────┬────────────┬─────────┬──────────────┐
+│ library_version │ source_id  │ threads │ memory_limit │
+│     varchar     │  varchar   │  int64  │   varchar    │
+├─────────────────┼────────────┼─────────┼──────────────┤
+│ v2.0.1          │ 8d78114e90 │       4 │ 3.7 GiB      │
+└─────────────────┴────────────┴─────────┴──────────────┘
+Run Time (s): real 18.403 user 10.804591 sys 9.107895
+Run Time (s): real 22.807 user 13.702383 sys 11.569878
+Run Time (s): real 22.827 user 12.111488 sys 13.343115
+Run Time (s): real 29.980 user 16.301040 sys 15.164832
+Run Time (s): real 27.157 user 13.967053 sys 16.369432
+Run Time (s): real 25.543 user 12.279404 sys 14.906740
+Run Time (s): real 29.226 user 17.758646 sys 17.697473
+Run Time (s): real 34.606 user 19.245490 sys 17.654744
+Run Time (s): real 32.595 user 17.979644 sys 17.933852
+Run Time (s): real 36.367 user 17.064082 sys 22.752956
+RESULT cli-2.0.1-workaround-candidate | peak RSS 2088 MiB | cgroup peak 8192 MiB | wall 4:39.92 | ok
+

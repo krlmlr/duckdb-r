@@ -1,0 +1,19 @@
+## cli-2.0.0-workaround-threads8: cli duckdb workaround.sql, -cmd "SET threads = 8"
+┌─────────────────┬────────────┬─────────┬──────────────┐
+│ library_version │ source_id  │ threads │ memory_limit │
+│     varchar     │  varchar   │  int64  │   varchar    │
+├─────────────────┼────────────┼─────────┼──────────────┤
+│ v2.0.0          │ d54cbbe3df │       8 │ 3.7 GiB      │
+└─────────────────┴────────────┴─────────┴──────────────┘
+Run Time (s): real 0.860 user 1.473642 sys 0.210199
+Run Time (s): real 0.831 user 1.667515 sys 0.115257
+Run Time (s): real 0.920 user 2.179056 sys 0.206546
+Run Time (s): real 0.902 user 1.646005 sys 0.161352
+Run Time (s): real 0.786 user 1.632124 sys 0.070236
+Run Time (s): real 0.914 user 2.203720 sys 0.179610
+Run Time (s): real 0.920 user 1.769362 sys 0.155268
+Run Time (s): real 0.896 user 1.855392 sys 0.131922
+Run Time (s): real 0.928 user 2.303326 sys 0.207563
+Run Time (s): real 0.846 user 2.259466 sys 0.097384
+RESULT cli-2.0.0-workaround-threads8 | peak RSS 877 MiB | cgroup peak 822 MiB | wall 0:09.05 | ok
+

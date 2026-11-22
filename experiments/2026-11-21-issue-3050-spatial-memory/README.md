@@ -140,3 +140,43 @@ does not spill either, at k = 5,000 or 4,096.
   That is an unverified explanation.
 * **Workarounds on 2.0.x:** keep k at 4,096 or below, give the query a higher `memory_limit` or fewer threads,
   or write the query without `LATERAL`, as in [`rewrite.sql`](rewrite.sql).
+
+## A workaround that returns the same result
+
+Added later on 2026-11-22, on the same machine, data and CLIs, under the same cap.
+
+* [`workaround-candidate.sql`](workaround-candidate.sql) is the first candidate for every year:
+  the spatial join, `ROW_NUMBER()` per `obsid`, and `rn <= 5000` as a condition of a `LEFT JOIN` back to the query points,
+  so that a point without a neighbour within 2,500 m keeps `n_points` = 0 and `NULL` statistics.
+* [`workaround.sql`](workaround.sql) is the fixed form:
+  the same row number as a running `COUNT(*) OVER (... ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`,
+  `rn <= 5000` in a `WHERE`, the aggregates per `obsid`, then the `LEFT JOIN` from the query points.
+* [`compare.sql`](compare.sql) stores the results of `query.sql` and both workarounds for all years and compares them per `obsid`
+  (`out/compare-<version>.txt`, on 1.5.6 and 2.0.1).
+
+Both return what the `LATERAL` returns on 1.5.6 and 2.0.1:
+26,000 rows, one per `obsid`, the same `n_points` everywhere, `avg_dist` within 7e-12 and `min_dist` exactly,
+and the same `id_shop` everywhere, so no distance ties came up.
+The data hold 1,741 query points without a neighbour within 2,500 m and 1,092 that reach k = 5,000.
+
+All years, 4 threads, `memory_limit` 4 GB, peak RSS, cgroup peak and wall time (`out/cli-<version>-workaround[-candidate].txt`):
+
+* `workaround-candidate.sql`
+  * 1.5.6: 2,347 MiB, 2,311 MiB, 25 s
+  * 2.0.0: 2,464 MiB, 8,192 MiB, 433 s, spilling, slower than the `LATERAL` (69 s)
+  * 2.0.1: 2,088 MiB, 8,192 MiB, 280 s, spilling, where the `LATERAL` did not (18 s)
+* `workaround.sql`
+  * 1.5.6: 901 MiB, 864 MiB, 9 s
+  * 2.0.0: 598 MiB, 542 MiB, 8 s; at 8 threads (`cli-2.0.0-workaround-threads8.txt`) 877 MiB, 822 MiB, 9 s
+  * 2.0.1: 513 MiB, 457 MiB, 11 s
+
+The candidate spills because the optimizer's `top_n_window_elimination` turns `ROW_NUMBER() ... rn <= 5000`
+into the same `HASH_GROUP_BY` with `arg_min_nulls_last()` the decorrelated `LATERAL` uses.
+Moving `rn <= 5000` into a `WHERE` alone does not help: in one-off profiles of 2024 on 2.0.0, not kept,
+that form still spilled 17 GiB in 42 s once all output columns were selected,
+and ran in 1 s without spilling once only `count(*)` and `sum(n_points)` were,
+since `id_shop` is then pruned from the aggregate's payload.
+[`rewrite.sql`](rewrite.sql) selects only those two, so its numbers above understate what a full rewrite without `LATERAL` needs on 2.0.x;
+the last bullet of the conclusions holds for `workaround.sql`, not for `rewrite.sql` as written.
+A running `COUNT(*)` numbers the rows as `ROW_NUMBER()` does but escapes that rewrite,
+and so does `SET disabled_optimizers = 'top_n_window_elimination'` with `ROW_NUMBER()`, 1 s and 395 MiB in the same profile.

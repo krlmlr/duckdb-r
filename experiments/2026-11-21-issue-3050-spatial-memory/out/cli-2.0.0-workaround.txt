@@ -1,0 +1,19 @@
+## cli-2.0.0-workaround: cli duckdb workaround.sql
+┌─────────────────┬────────────┬─────────┬──────────────┐
+│ library_version │ source_id  │ threads │ memory_limit │
+│     varchar     │  varchar   │  int64  │   varchar    │
+├─────────────────┼────────────┼─────────┼──────────────┤
+│ v2.0.0          │ d54cbbe3df │       4 │ 3.7 GiB      │
+└─────────────────┴────────────┴─────────┴──────────────┘
+Run Time (s): real 0.832 user 1.573126 sys 0.136411
+Run Time (s): real 0.794 user 1.487949 sys 0.087264
+Run Time (s): real 0.841 user 1.666095 sys 0.055798
+Run Time (s): real 0.812 user 1.565760 sys 0.103778
+Run Time (s): real 0.744 user 1.514845 sys 0.047702
+Run Time (s): real 0.760 user 1.506253 sys 0.052827
+Run Time (s): real 0.794 user 1.583351 sys 0.091526
+Run Time (s): real 0.737 user 1.505597 sys 0.072097
+Run Time (s): real 0.897 user 1.740885 sys 0.080104
+Run Time (s): real 0.885 user 1.839420 sys 0.079357
+RESULT cli-2.0.0-workaround | peak RSS 598 MiB | cgroup peak 542 MiB | wall 0:08.34 | ok
+
