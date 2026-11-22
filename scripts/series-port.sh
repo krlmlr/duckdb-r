@@ -255,8 +255,9 @@ if [ -n "$canonical" ]; then
   fi
   [ -n "$main" ] || {
     echo "Warning: could not read main from '$canonical'; falling back to" >&2
-    echo "  $remote/main, which the mirror may have left behind. Add the" >&2
-    echo "  canonical repository as that remote, or pass --canonical <name>." >&2
+    echo "  $remote/main, which nothing keeps level and which may be ahead of the" >&2
+    echo "  canonical main (krlmlr/duckdb-r#264). Add the canonical repository as" >&2
+    echo "  that remote, or pass --canonical <name>." >&2
   }
 fi
 # No canonical remote named at all (SERIES_CANONICAL='') or none reachable: the

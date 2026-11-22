@@ -533,7 +533,8 @@ fork_point() { # <upstream branch> -> sha, empty without a clone
 }
 
 # The tests every series is held to are `main`'s: the canonical copy where this
-# run could fetch it, the fork's mirror otherwise.
+# run could fetch it, the fork's copy otherwise, which nothing keeps level
+# (handbook/branches/mirrors/README.md).
 main_ref=''
 for r in ${canonical:+"refs/remotes/$canonical/main"} "refs/remotes/$remote/main"; do
   if git rev-parse -q --verify "$r" >/dev/null; then main_ref=$r; break; fi
@@ -572,13 +573,20 @@ for S in "${series[@]}"; do
       # base green vendors: coverage may never regress. Tested by subject, like
       # every other equivalence here, and bounded by the mainline the forward
       # seed was built on — `main`'s own vendor commits sit below that seed and
-      # must not answer for the forward chain. A base green that vendors nothing
-      # asks for no coverage, exactly as in series-cutover.sh.
+      # must not answer for the forward chain. That mainline is `main_ref`, the
+      # canonical `main` where this run could read it: a landing's vendor commits
+      # are in it and may be missing from the fork's copy, and counted as coverage
+      # they would call a forward ready. With no `main` read at all nothing is
+      # counted. A base green that vendors nothing asks for no coverage, exactly
+      # as in series-cutover.sh.
       base_up=$(series_vendored_sha "$remote/$base-green")
       # The vendor subjects, collected rather than piped into `grep -q`:
       # it leaves early, and under `pipefail` the SIGPIPE it hands its writer would read as a failed test.
       # `grep -E` reads its input whole, so `git log` may feed it.
-      fwd_vendored=$(git log --format=%s "$remote/main..$green" -- "$series_scan_dir" | grep -E "$series_vendor_ere" || true)
+      fwd_vendored=''
+      if [ -n "$main_ref" ]; then
+        fwd_vendored=$(git log --format=%s "$main_ref..$green" -- "$series_scan_dir" | grep -E "$series_vendor_ere" || true)
+      fi
       if [ -z "$base_up" ] || grep -qF "@$base_up" <<<"$fwd_vendored"; then
         cutover=$base
       fi

@@ -209,8 +209,10 @@ https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=<S>-green&
 It compares **within one repository**, which is what forces both refs a badge names
 to live in the repository it is counted in:
 *ahead* is counted in `duckdb/duckdb-r`, which carries the release branch and the copy of `<S>-green`
-([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-Link each badge to `https://github.com/krlmlr/duckdb-r/compare/<base>...<head>`, its drill-down.
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)),
+and the other two in `krlmlr/duckdb-r`.
+Each badge links to `https://github.com/<repo>/compare/<base>...<head>` in the repository it is counted in, its drill-down
+([`scripts/series-table.R`](/scripts/series-table.R)).
 An upstream-lag badge — how far behind `duckdb/duckdb` itself — is not expressible this way,
 because that comparison crosses repositories.
 The table's upkeep is [`series-open`](/.claude/skills/series-open/SKILL.md)'s.

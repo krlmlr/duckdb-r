@@ -195,7 +195,7 @@ git commit -qm 'chore: Bump version to 1.0.1.9002 beside an edit to the stamp fi
 git push -q origin main s-dev
 git push -q upstream main
 
-# --- the mirror falls behind ------------------------------------------------
+# --- the fork's copy falls behind -------------------------------------------
 #
 # One more commit reaches the canonical repository and not the fork's copy of
 # `main`, which nothing brings level any more.

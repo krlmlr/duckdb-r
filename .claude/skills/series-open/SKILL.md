@@ -196,7 +196,8 @@ until now.
    One entry, and both tables are written from it — the `Flavors` table in
    [`README.Rmd`](/README.Rmd) and the one in
    [`branches/flavors/`](/handbook/branches/flavors/README.md). The entry is the
-   only place a new series is named by hand; everything else is discovered from refs or derived from it.
+   only place a new series is named by hand; everything else is discovered from
+   refs or derived from it.
    See below for what the fields mean and what a badge row gets wrong.
 
    **The entry may already be there.** A loop firing that saw the line cut

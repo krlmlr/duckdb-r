@@ -29,6 +29,12 @@
 #      lines chain oldest to newest, and a branch it cannot read, without a
 #      canonical remote or with no merge base, is reported as missing data.
 #
+# And one about a forward:
+#
+#  10. A forward reads ready to cut over only on its own vendor commits,
+#      counted above the canonical `main`: a landing the fork's copy of `main`
+#      lacks is no coverage, and the forward's own vendor commit is.
+#
 # Usage:
 #   scripts/series-check-test.sh
 #
@@ -341,6 +347,39 @@ git checkout -q -f main
 out=$(fwd)
 has "a branch with no merge base is missing data" "$out" "could not read rel2 beside main, or their merge base"
 hasnt "rather than owing all of it" "$out" "On a history of its own"
+
+echo "=== 10. a forward is ready only on its own vendor commits"
+# The canonical `main` takes a landing that vendors bbbb222, and the fork's copy
+# of `main` stays behind it. The series' green vendors bbbb222 on its own line;
+# the forward is seeded on the landing and vendors nothing of its own yet.
+git fetch -q canon main
+Z=$SCRATCH/z
+git worktree add -q --detach "$Z" canon/main
+identity "$Z"
+echo 'engine bbbb222' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+LAND=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" commit -q --allow-empty -m 'chore: Add fifth version component'
+FSEED=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" checkout -q --detach "$SEED"
+echo 'engine bbbb222' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+ZG=$(git -C "$Z" rev-parse HEAD)
+git push -q canon "$LAND:refs/heads/main"
+git push -q origin "$ZG:refs/heads/v9.9-z-green" "$ZG:refs/heads/v9.9-z-dev" \
+  "$ZG:refs/heads/v9.9-z-build" "$ZG:refs/heads/v9.9-z-build-base" \
+  "$FSEED:refs/heads/v9.9-z-fwd-green" "$FSEED:refs/heads/v9.9-z-fwd-dev" \
+  "$FSEED:refs/heads/v9.9-z-fwd-build" "$FSEED:refs/heads/v9.9-z-fwd-build-base"
+ready() { UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z-fwd --canonical canon 2>&1; }
+out=$(ready)
+hasnt "a landing the fork's copy of main lacks is no coverage" "$out" "CUTOVER  v9.9-z-fwd"
+git -C "$Z" checkout -q --detach "$FSEED"
+echo 'engine bbbb222, forwarded' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+git -C "$Z" push -q -f origin "HEAD:refs/heads/v9.9-z-fwd-green" "HEAD:refs/heads/v9.9-z-fwd-dev"
+out=$(ready)
+has "the forward's own vendor commit is" "$out" "CUTOVER  v9.9-z-fwd covers v9.9-z's green"
+git worktree remove -f "$Z"
 
 echo
 echo "$pass passed, $fail failed"
