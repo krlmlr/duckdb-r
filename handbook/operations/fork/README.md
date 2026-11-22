@@ -16,7 +16,8 @@ A series landing ends by fast-forwarding `<B>` onto `<L>-land-dev` ([`series-lan
 and the maintainer runs `scripts/series-land-push.sh` from his own checkout, with `origin` the fork and `upstream` `duckdb/duckdb-r`.
 It goes ahead only where `series-land.sh <L> --status` prints `READY`,
 pushes the same commit to `<B>` in both, so `<B>` has one SHA in either repository,
-and then creates the annotated tag `v<version>` from the `NEWS.md` section the landing brings and pushes that one tag object to both.
+and then creates the annotated tag `v<version>` from the `NEWS.md` section the landing brings,
+or reuses an annotated tag of the head that one of the remotes already has, and pushes that one tag object to both.
 Its header says what it checks and what it refuses,
 and which version takes which tag is [`releases/versioning/`](/handbook/operations/releases/versioning/README.md)'s.
 It is provisional: the script is proposed in [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263).
@@ -26,7 +27,7 @@ It is provisional: the script is proposed in [krlmlr/duckdb-r#263](https://githu
 creating it where there is none and making the existing one active otherwise,
 and `scripts/series-unfreeze.sh <B>` disables it before the push and deletes nothing.
 The freeze is not restored after the landing.
-While it is active, a pull request into `<B>` cannot merge either.
+While it is active, it stops every update, a pull request's merge included.
 It has no bypass actors, because sessions push with the maintainer's token, and a bypass would let any session past the freeze.
 On the fork's `main` it is the ruleset `freeze main`, id `27849787`, which the scripts reuse.
 Both scripts are provisional, proposed in [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263).
