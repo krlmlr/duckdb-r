@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">duckdb</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2.0.0.9001</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2.0.99.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,7 +39,21 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="duckdb-development-version">duckdb (development version)<a class="anchor" aria-label="anchor" href="#duckdb-development-version"></a></h2>
-<p>Commits since v2.0.1.9900: <a href="https://github.com/duckdb/duckdb-r/compare/v2.0.1.9900...main" class="external-link uri">https://github.com/duckdb/duckdb-r/compare/v2.0.1.9900...main</a>.</p>
+<p>Commits since v2.0.99.9000: <a href="https://github.com/duckdb/duckdb-r/compare/v2.0.99.9000...main" class="external-link uri">https://github.com/duckdb/duckdb-r/compare/v2.0.99.9000...main</a>.</p>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="2.0.99.9000" id="duckdb-20999000-2026-11-21">duckdb 2.0.99.9000 (2026-11-21)<a class="anchor" aria-label="anchor" href="#duckdb-20999000-2026-11-21"></a></h2>
+<p><em>Drafted with AI from the vendored upstream commits and the R-side changes, not reviewed by a maintainer.</em></p>
+<div class="section level3">
+<h3 id="features-2-0-99-9000">Features<a class="anchor" aria-label="anchor" href="#features-2-0-99-9000"></a></h3>
+<ul><li><p>Update to DuckDB v2.1.0-alpha56621, upstream <code>main</code> from v2.0.0 on, see <a href="https://github.com/duckdb/duckdb/compare/v2.0.0...bc04be044b0d84075aa6d63fc11d5dfaa6e9aaa8" class="external-link uri">https://github.com/duckdb/duckdb/compare/v2.0.0...bc04be044b0d84075aa6d63fc11d5dfaa6e9aaa8</a> for details.</p></li>
+<li><p><code>GEOGRAPHY</code> columns read as WKB, as <code>GEOMETRY</code> columns do; with <code>geometry = "wk"</code> they read as <code>wk_wkb</code> vectors marked geodesic (duckdb/duckdb#28092).</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-2-0-99-9000">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-2-0-99-9000"></a></h3>
+<ul><li><p>Query results that hold constant or dictionary vectors convert to R correctly (duckdb/duckdb#27380).</p></li>
+<li><p>The progress bar is switched on through DuckDB’s generic settings, and stays off where the system disabled it (duckdb/duckdb#28571).</p></li>
+</ul></div>
 </div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2.0.1" id="duckdb-201-2026-11-20">duckdb 2.0.1 (2026-11-20)<a class="anchor" aria-label="anchor" href="#duckdb-201-2026-11-20"></a></h2>
