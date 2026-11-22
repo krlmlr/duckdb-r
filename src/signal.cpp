@@ -54,11 +54,9 @@ bool ScopedInterruptHandler::IsActiveFor(const ClientContext &context) {
 }
 
 void ScopedInterruptHandler::HandleInterrupt() const {
-	// Never interrupted without context
+	// Never interrupted without context; the flag outlives Disable(), so a caller may disable first and raise after
 	if (!interrupted) {
 		return;
-	} else {
-		D_ASSERT(context);
 	}
 
 	// This seems necessary to work around a specificity with the RStudio IDE on Windows.
