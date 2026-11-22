@@ -70,6 +70,11 @@ is what would settle it
 A data frame that `rel_from_sql()` picks up by name through the environment scan stays on `TIMESTAMP` too
 ([`src/relational.cpp`](/src/relational.cpp)),
 while the same scan under a DBI query follows the setting.
+`expr_constant()` of a `POSIXct` stays a `TIMESTAMP` the same way,
+so against a `TIMESTAMPTZ` column,
+which `dbWriteTable()` creates by default,
+it compares in the session zone once a user sets `TimeZone`
+([`timestamps/`](/handbook/usage/timestamps/README.md)).
 
 **Untyped `NULL` constants.**
 `expr_constant(NA)` builds an untyped `NULL`
