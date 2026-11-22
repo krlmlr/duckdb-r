@@ -179,10 +179,6 @@ groups <- list(
     globs = c("delete-branch.sh", "delete-branch-test.sh")
   ),
   list(
-    owner = "handbook/branches/mirrors",
-    globs = c("pull-config.sh")
-  ),
-  list(
     owner = "handbook/build/fast-paths",
     globs = c("install-*.sh")
   ),

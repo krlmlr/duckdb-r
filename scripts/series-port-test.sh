@@ -55,11 +55,11 @@
 #      NEWS.md as it was, records nothing for rerere, and is not offered again.
 #
 # And one thing about *which* `main` answers. The series live in a fork whose
-# `main` is a mirror the Pull app refreshes every six hours, so the fork's copy
-# is routinely behind the canonical repository's. The walk reads the canonical
-# one, so a commit merged since the last sync is offered rather than silently
-# reverted by the tooling sync; with no canonical remote to read, the mirror is
-# the fallback and answers with the subset it has.
+# copy of `main` nothing keeps level with the canonical repository's
+# (handbook/branches/mirrors/README.md). The walk reads the canonical one, so a
+# commit merged there and missing from the fork's copy is offered rather than
+# silently reverted by the tooling sync; with no canonical remote to read, the
+# fork's copy is the fallback and answers with what it has.
 
 set -euo pipefail
 
@@ -198,7 +198,7 @@ git push -q upstream main
 # --- the mirror falls behind ------------------------------------------------
 #
 # One more commit reaches the canonical repository and not the fork's copy of
-# `main`, which is the state the fork is in for most of the Pull app's cycle.
+# `main`, which nothing brings level any more.
 
 echo 'foo <- function() 3' > R/foo.R
 git add -A

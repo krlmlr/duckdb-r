@@ -28,8 +28,7 @@ network, not a copy that shares its name — used for CI/CD
 so the per-commit builds do not consume
 the `duckdb` organization's Actions quota;
 every series' working refs live there,
-beside mirrors of the canonical branches
-they are seeded from and measured against
+beside copies of canonical branches that nothing keeps level any more
 ([`mirrors/`](/handbook/branches/mirrors/README.md)).
 The fork carries only the refs the loop serves;
 what it does not carry stands in `krlmlr/duckdb-r-old`,
@@ -207,8 +206,9 @@ shields.io renders a count from the public repository:
 https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=<S>-green&head=<S>-dev&label=in%20flight
 ```
 
-It compares **within one repository**, which is what forces every ref a badge names
-to live in `krlmlr/duckdb-r`, release branches included, and kept fresh
+It compares **within one repository**, which is what forces both refs a badge names
+to live in the repository it is counted in:
+*ahead* is counted in `duckdb/duckdb-r`, which carries the release branch and the copy of `<S>-green`
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 Link each badge to `https://github.com/krlmlr/duckdb-r/compare/<base>...<head>`, its drill-down.
 An upstream-lag badge — how far behind `duckdb/duckdb` itself — is not expressible this way,
@@ -278,7 +278,7 @@ counting its vendor commits and version bumps and listing each R-side commit.
 A path-limited walk of the engine follows a forward merge's first parent by itself, since the merge keeps that side of the engine,
 and the port stage walks the newer line's first parents, offering each forward merge as one port of its change outside the engine,
 so the commits behind it, the older line's vendor commits and fixes, never reach the newer line's series one by one.
-The fork's `main` takes no part in it: it is a mirror and moves on its own
+The fork's `main` takes no part in it, and neither does any copy of a release branch the fork carries
 ([`mirrors/`](/handbook/branches/mirrors/README.md)).
 
 That ordering is what makes the vendor strand the only thing a series owns.

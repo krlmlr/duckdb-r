@@ -216,10 +216,10 @@ git fetch -q "$remote"
 dev="$remote/$S-dev"
 git rev-parse -q --verify "$dev" >/dev/null || { echo "Error: no $S-dev on $remote"; exit 1; }
 
-# `main` is read from the canonical repository, not from the fork's mirror of
+# `main` is read from the canonical repository, not from the fork's copy of
 # it. The series live in the fork, but this script's whole output is "what does
 # the series not have that main has", and the sync commit takes that main's
-# tooling tree *verbatim* -- so a mirror that has not caught up is not a smaller
+# tooling tree *verbatim* -- so a copy that has not caught up is not a smaller
 # answer but a wrong one: every commit merged since it last ran is reverted onto
 # the series, silently and on all of them at once.
 #
@@ -232,11 +232,13 @@ git rev-parse -q --verify "$dev" >/dev/null || { echo "Error: no $S-dev on $remo
 #
 # Reading the canonical tip is what removes that failure mode rather than
 # detecting it. This script used to ask the canonical repository only whether
-# the mirror was stale, and refuse while it was -- which turned the Pull app's
-# six-hour cycle into a six-hour window where no series could be ported at all,
-# against a repository the run could read the whole time
-# (handbook/branches/mirrors/README.md). Nothing here writes to the fork's
-# `main`, and the mirror keeps serving the badges that measure against it.
+# the copy was stale, and refuse while it was -- which turned every wait for a
+# sync into a window where no series could be ported at all, against a
+# repository the run could read the whole time. Nothing here writes to the
+# fork's `main`. Nothing keeps that copy level any more, and it has moved ahead
+# of the canonical `main`, so a sync from the canonical tip lacks what the fork's
+# `main` carries beyond it; which `main` to read is open
+# (handbook/branches/mirrors/README.md).
 main=
 if [ -n "$canonical" ]; then
   if git remote get-url "$canonical" >/dev/null 2>&1 &&
@@ -258,8 +260,7 @@ if [ -n "$canonical" ]; then
   }
 fi
 # No canonical remote named at all (SERIES_CANONICAL='') or none reachable: the
-# mirror is what is left. It is only ever behind, never ahead, so a fallback
-# offers a subset of the truth -- worth saying and not worth refusing over.
+# fork's copy is what is left, worth saying and not worth refusing over.
 [ -n "$main" ] || main="$remote/main"
 
 # **The R side comes from the branch the series releases from; the tooling

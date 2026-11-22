@@ -107,7 +107,7 @@ usage='usage: series-check.sh [<series>...] [--remote <name>] [--upstream <path>
 remote=${SERIES_REMOTE:-origin}
 rcc=${RCC_BRANCH:-rcc2}
 
-# The repository `main` belongs to, which the fork mirrors. Read only for the
+# The repository `main` belongs to, which the fork copies. Read only for the
 # flavor declaration below, and never written here.
 canonical=${SERIES_CANONICAL-upstream}
 
@@ -419,13 +419,13 @@ flavor_of() { # v<major>.<minor>-<codename> -> duckdb.<major>.<minor>.dev
 # series branches, whose trees lag `main` by whatever stage 4 has not ported
 # yet, and the declaration is `main`'s.
 #
-# The canonical repository comes first, and the fork's mirror of it second. The
-# question this answers is whether the flavor PR has merged, so a mirror the
-# Pull app has not refreshed yet answers "undeclared" for a PR that merged
+# The canonical repository comes first, and the fork's copy of it second. The
+# question this answers is whether the flavor PR has merged into the canonical
+# `main`, so a copy that lacks it answers "undeclared" for a PR that merged
 # hours ago -- and the skill's rule on an undeclared line is to open one, which
 # is how a firing would file the same PR twice
-# (.claude/skills/series-loop/SKILL.md, "What a firing reports"). Whichever ref
-# is fresher is right, and only the canonical one is guaranteed to be.
+# (.claude/skills/series-loop/SKILL.md, "What a firing reports"). Nothing keeps
+# the fork's copy level with the canonical one (handbook/branches/mirrors/).
 declaration() { # -> the file, empty and non-zero when no ref carries it
   local r
   for r in ${canonical:+"refs/remotes/$canonical/main"} \

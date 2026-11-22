@@ -77,8 +77,8 @@ The full match keeps the series refs, which carry a copy of this file, out of `r
 The other workflows that serve a pull request filter no base branch, so they take a release branch's pull requests as they are.
 
 **In a fork, `rcc` skips a pull request against a release branch.**
-The fork's mirror of a release branch takes pull requests nobody needs checked there:
-the Pull app's at every sync ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)), and one that pins a branch before its deletion.
+The fork's copy of a release branch takes pull requests nobody needs checked there
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)), such as one that pins a branch before its deletion.
 `rcc-smoke` skips them by a job-level condition, and every job that needs it skips with it, so none starts a full run.
 [`R-CMD-check-status.yaml`](/.github/workflows/R-CMD-check-status.yaml) reports such a run as a passing `rcc`
 once [cynkra/cynkratemplate#163](https://github.com/cynkra/cynkratemplate/pull/163) has taught its status action that a skipped run is no failure.
