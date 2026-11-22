@@ -32,6 +32,12 @@ and reading many files at once.
 * **R data frames** need no import at all:
   `duckdb_register()` scans a frame in place, zero-copy,
   and `dbWriteTable()` copies it into a table.
+  `duckdb(environment_scan = TRUE)` scans a data frame found by name in the calling environment the same way,
+  and a table of that name in the database wins over it.
+  Registration and the environment scan bind with the connection's `map` and `posixct`,
+  and both take an `integer64` column as `BIGINT` whatever `bigint` says,
+  so one data frame reaching the engine either way arrives as one set of types
+  ([`types/`](/handbook/usage/types/README.md)).
 
 *To deepen: state the sniffing rules and their defaults from
 `R/csv.R`; fold the [#1511](https://github.com/duckdb/duckdb-r/issues/1511)

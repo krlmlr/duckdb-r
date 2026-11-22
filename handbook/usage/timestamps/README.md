@@ -90,11 +90,11 @@ the wider type mapping is
   which is where `dbConnect()` starts it.
   `dbConnect(posixct = "timestamp")` keeps the older behavior,
   or cast the column with `timezone('UTC', …)` in the query.
-* **Two paths stay on `TIMESTAMP` whatever the setting says.**
-  A data frame picked up by name under
-  `duckdb(environment_scan = TRUE)` follows the connection's `map` and `experimental`
-  ([`relational/`](/handbook/usage/relational/README.md)) but not yet its `posixct`,
-  which the replacement scan in [`src/register.cpp`](/src/register.cpp) does not pass on.
+* **The relational path stays on `TIMESTAMP` whatever the setting says.**
+  A data frame picked up by name under `duckdb(environment_scan = TRUE)` follows it,
+  as it follows the connection's `map` and `experimental`,
+  because the replacement scan in [`src/register.cpp`](/src/register.cpp) passes all three on as `duckdb_register()` does.
+  `rel_from_sql()` pins `TIMESTAMP` for such a data frame, as `rel_from_df()` does.
   `rel_from_df()` declines the setting rather than misses it:
   a relation promises the data frame back unchanged, which a
   `TIMESTAMPTZ` column cannot keep, and what each candidate policy
