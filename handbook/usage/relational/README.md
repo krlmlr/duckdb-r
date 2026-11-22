@@ -67,6 +67,11 @@ Passing `convert_opts` explicitly is the way in for a caller who wants
 and a per-column zone on a result, which DuckDB does not have,
 is what would settle it
 ([#2574](https://github.com/duckdb/duckdb-r/issues/2574)).
+`expr_constant()` of a `POSIXct` stays a `TIMESTAMP` the same way,
+so against a `TIMESTAMPTZ` column,
+which `dbWriteTable()` creates by default,
+it compares in the session zone once a user sets `TimeZone`
+([`timestamps/`](/handbook/usage/timestamps/README.md)).
 
 **Untyped `NULL` constants.**
 `expr_constant(NA)` builds an untyped `NULL`

@@ -107,6 +107,11 @@ the wider type mapping is
   both match the older mapping only while the session zone is UTC.
   `dbConnect(posixct = "timestamp")` keeps the older behavior,
   or cast the column with `timezone('UTC', …)` in the query.
+  The reverse holds for a constant of the relational API:
+  `expr_constant()` of a `POSIXct` stays a `TIMESTAMP`
+  ([`relational/`](/handbook/usage/relational/README.md)),
+  so against a `TIMESTAMPTZ` column, which `dbWriteTable()` now creates by default,
+  it compares in the session zone once a user sets `TimeZone`.
 * **Two paths stay on `TIMESTAMP` whatever the setting says.**
   A data frame picked up by name under
   `duckdb(environment_scan = TRUE)` follows the connection's `map` and `experimental`

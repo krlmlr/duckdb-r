@@ -81,9 +81,11 @@ these are the boundaries users keep hitting:
 * `pivot_longer()` expands SQL generically instead of `UNPIVOT`
   ([#2029](https://github.com/duckdb/duckdb-r/issues/2029)).
 * An inline `as.POSIXct("…")` is translated, not escaped,
-  so the session time zone is not applied; `!!as.POSIXct(…)`
-  is escaped R-side and is
+  so the engine reads its text in the session time zone
   ([#1064](https://github.com/duckdb/duckdb-r/issues/1064), dbplyr-wide).
+  `!!as.POSIXct(…)` is escaped R-side, under the default as an absolute
+  `'…+00:00'::timestamptz` that names the instant whatever the session zone
+  ([`timestamps/`](/handbook/usage/timestamps/README.md)).
   Build the value in R with the zone meant and inject it with `!!`.
 * A bare `Inf` literal escapes as the string `'Infinity'`
   ([#1585](https://github.com/duckdb/duckdb-r/issues/1585),
