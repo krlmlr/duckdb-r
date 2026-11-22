@@ -85,51 +85,17 @@ One landing per line is in flight at a time, and all three are deleted once `<B>
 
 Every commit of the landing stands on one `<B>` commit, so `<B>` must not move until it fast-forwards.
 The freeze lasts as long as CI takes over the batch, which is what keeps the batches small.
-A ruleset with no bypass list stops every update, pull requests and admins included.
-A human runs these, and reads each output before the next.
-
-Inspect: the rulesets on `<B>`, and the commit it freezes at.
-
-```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
-B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
-R=duckdb/duckdb-r
-gh api repos/$R/rulesets --jq '.[] | [.id, .name, .enforcement] | @tsv'
-gh api repos/$R/commits/$B --jq .sha
-```
-
-Freeze:
-
-```sh
-( set -eu
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
-B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
-[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
-gh api -X POST repos/duckdb/duckdb-r/rulesets --input - <<EOF
-{
-  "name": "freeze $B",
-  "target": "branch",
-  "enforcement": "active",
-  "bypass_actors": [],
-  "conditions": {"ref_name": {"include": ["refs/heads/$B"], "exclude": []}},
-  "rules": [
-    {"type": "update", "parameters": {"update_allows_fetch_and_merge": false}},
-    {"type": "deletion"},
-    {"type": "non_fast_forward"}
-  ]
-}
-EOF
-)
-```
-
-Verify: an `update` row from the new ruleset, and `never`.
+[`scripts/series-freeze.sh`](/scripts/series-freeze.sh) `<B>` puts the ruleset `freeze <B>` on the canonical repository and the fork:
+no bypass list, so it stops every update, pull requests and admins included.
+It creates the ruleset, or writes one left from an earlier landing whole and active, and reads it back.
+A human runs it, after reading what `--dry-run` would write:
 
 ```sh
 S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
-gh api repos/duckdb/duckdb-r/rules/branches/$B --jq '.[] | [.type, .ruleset_id] | @tsv'
-id=$(gh api repos/duckdb/duckdb-r/rulesets --jq ".[] | select(.name == \"freeze $B\") | .id")
-gh api repos/duckdb/duckdb-r/rulesets/$id --jq .current_user_can_bypass
+scripts/series-freeze.sh "$B" --dry-run
+scripts/series-freeze.sh "$B"
+gh api repos/duckdb/duckdb-r/commits/$B --jq .sha   # the commit it freezes at
 ```
 
 The loop keeps running: it reads `<B>` and writes no ref there.
@@ -381,74 +347,48 @@ done
 ```
 
 The copy runs hourly, and a dispatch of [`each-mirror.yaml`](/.github/workflows/each-mirror.yaml) runs it at once.
-Paste the blocks of this step into bash: zsh reads `$sha:r` as a modifier and, by default, `#` comments as commands.
-From a checkout whose `upstream` and `origin` are the canonical repository and the fork, [`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) `<B>` lifts the freeze on both,
-and [`scripts/series-land-push.sh`](/scripts/series-land-push.sh) `<S> --sha <sha>`, with `--dry-run` first, checks `--status` for READY, pushes `<B>` to both, and tags it from NEWS.md; [`scripts/series-freeze.sh`](/scripts/series-freeze.sh) `<B>` freezes a branch.
+Paste the blocks of this step into bash: zsh by default reads `#` comments as commands.
 
-Lift the freeze, push, put the freeze back, and then tag the bump.
-The block runs in a subshell that stops at the first failure, before the freeze is lifted unless `--status` printed `READY`,
-and puts the freeze back on its way out whether the push succeeded or not
-(`tests/testthat/test-series-land-skill.R` runs it against a scratch repository):
+The push and the tag are the maintainer's, from his own checkout, whose `upstream` and `origin` are `duckdb/duckdb-r` and the fork.
+The session hands him the `READY` SHA and this sequence:
 
-<!-- series-land: fast-forward block -->
 ```sh
-( set -eu
 S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
-B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
-[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
-sha=$(scripts/series-land.sh "$S" --status | sed -n 's/^  git push [^ ]* \([0-9a-f]\{40\}\):refs\/heads\/.*/\1/p')
-[[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "not READY" >&2; exit 1; }
-id=$(gh api repos/duckdb/duckdb-r/rulesets --jq ".[] | select(.name == \"freeze $B\") | .id")
-[[ $id =~ ^[0-9]+$ ]] || { echo "no single freeze ruleset for $B: '$id'" >&2; exit 1; }
-gh api -X PUT "repos/duckdb/duckdb-r/rulesets/$id" -f enforcement=disabled
-trap 'gh api -X PUT "repos/duckdb/duckdb-r/rulesets/$id" -f enforcement=active' EXIT
-git push upstream "${sha}:refs/heads/$B"
-git ls-remote upstream "refs/heads/$B"
-)
+B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto
+sha=...                                     # the SHA READY names
+scripts/series-unfreeze.sh "$B"
+scripts/series-land-push.sh "$S" --sha "$sha" --dry-run
+scripts/series-land-push.sh "$S" --sha "$sha"
 ```
 
-The push is a plain one, so git refuses it unless it is a fast-forward.
-It needs the existing branch ruleset's admin bypass, because it is not a pull request.
+[`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) disables `freeze <B>` on both repositories.
+[`scripts/series-land-push.sh`](/scripts/series-land-push.sh) refuses unless `--status` prints `READY` for that SHA,
+the tip of `<L>-land-dev`, and the SHA fast-forwards `<B>` on both remotes.
+It pushes `<B>` to `upstream` and then `origin` with plain pushes, which git refuses unless they fast-forward,
+and which need the branch ruleset's admin bypass, because they are not pull requests.
+Then it tags the bump: every landing's bump is tagged, a bump to an upstream release included
+([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md) names the tag):
+the annotated `v<v>`, or `v<v>.9900` for a release, its message `duckdb <version>` and the section `NEWS.md` has for `<v>`.
+It pushes the same tag object to both repositories.
+It refuses before any push where the landing does not change `NEWS.md`, the section is missing,
+or a tag of that name points elsewhere, and a rerun picks up where a failure stopped.
+A push still refused names the unfreeze.
 
-Then tag the bump, which is the commit `READY` named.
-Every landing's bump is tagged, and a bump to an upstream release is no exception
-([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md) names the tag);
-the freeze ruleset targets the branch only, so the tag needs no lifted freeze.
-`--status` prints `READY` again once `<B>` is the bump, and below the push the commands that tag it,
-which the block runs as printed, and only on `READY`: they tag nothing `<B>` lacks, and push no tag they did not create
-(`scripts/series-land-test.sh` runs it against a scratch repository):
+Afterwards, the session checks what both repositories hold, `<B>` at the SHA and the tag on it:
 
-<!-- series-land: tag block -->
 ```sh
-( set -eu
-S=main                                                # the serving series that landed: main, or v2.0-cyanoptera
-B=$(scripts/series-land.sh "$S" --target)             # the branch it landed onto
-[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
-out=$(scripts/series-land.sh "$S" --status) || true   # READY again, now that the branch is the bump
-printf '%s\n' "$out"
-grep -q '^READY' <<<"$out" || { echo "not READY" >&2; exit 1; }
-bash -c "$(sed -n '/^Then tag it on /,$s/^  //p' <<<"$out")"   # the tag commands below the push
-git tag -n3 --points-at "refs/remotes/upstream/$B"   # the tag: the subject, then NEWS.md's section for the version, if it has one
-)
+S=main                                      # the serving series that landed: main, or v2.0-cyanoptera
+B=$(scripts/series-land.sh "$S" --target)   # the branch it landed onto
+git fetch -q upstream "$B"
+v=$(git show FETCH_HEAD:DESCRIPTION | sed -n 's/^Version: //p')   # the tag's version: .9900 added to a release's
+[[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && v=$v.9900
+for r in upstream origin; do git ls-remote "$r" "refs/heads/$B" "refs/tags/v$v" "refs/tags/v$v^{}"; done
 ```
-
-A `v<version>.9900` already on the remote stops the chain at the push and leaves the local tag behind:
-delete the local tag with `git tag -d`, and read the remote one before rerunning.
 
 ## 7. After the landing
 
-Delete the freeze, so that `<B>` takes pull requests again:
-
-```sh
-( set -eu
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
-B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
-[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
-id=$(gh api repos/duckdb/duckdb-r/rulesets --jq ".[] | select(.name == \"freeze $B\") | .id")
-[[ $id =~ ^[0-9]+$ ]] || { echo "no single freeze ruleset for $B: '$id'" >&2; exit 1; }
-gh api -X DELETE "repos/duckdb/duckdb-r/rulesets/$id"
-)
-```
+The freeze stays lifted, so that `<B>` takes pull requests again, and its ruleset stays, disabled,
+for the next landing's step 1 to activate; nothing is deleted.
 
 Then the series:
 
