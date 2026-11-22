@@ -1,53 +1,37 @@
 # Working from the fork
 
 Where development happens now that it has moved from `duckdb/duckdb-r` to the maintainer's fork, `krlmlr/duckdb-r`:
-what lives in each repository, which way a ref travels between them, how a version tag is written, and how the fork's `main` is frozen.
-The fork's own branches, the series refs and the mirrors, are [`branches/`](/handbook/branches/README.md)'s.
+what lives in each repository, the one write a landing makes to both, how a version tag is written, and how the fork's `main` is frozen.
+The fork's own branches and the series refs are [`branches/`](/handbook/branches/README.md)'s.
 
-**Work lives in the fork.**
+**Work happens in the fork.**
 Issues and pull requests are opened in `krlmlr/duckdb-r`,
 and the maintainer's open ones in `duckdb/duckdb-r` move there as
 [krlmlr/duckdb-r#194](https://github.com/krlmlr/duckdb-r/pull/194) tracks, which is still open.
-`rcc` runs on pull requests in both repositories, except that the fork skips one against a release branch,
+`rcc` runs on pull requests in both repositories, each on its own, except that the fork skips one against a release branch,
 and the per-commit builds run in the fork alone ([`ci/workflows/`](/handbook/operations/ci/workflows/README.md)).
 
-**The fork leads, and `duckdb/duckdb-r` takes the same object.**
-A ref is written in the fork first and copied to `duckdb/duckdb-r` unchanged, so its SHA is the same in both.
-For a branch the copy is a plain push of the fork's tip, so it lands only as a fast-forward:
-the landing `a1a93d5bee` (`2.0.99.9000`) went to the fork's `main` first,
-and `duckdb/duckdb-r`'s `main` takes it by a fast-forward push of the same commit.
+**A landing's fast-forward is the exception, made on both repositories with one local command.**
+A series landing ends by fast-forwarding `<B>` onto `<L>-land-dev` ([`series-land`](/.claude/skills/series-land/SKILL.md), step 6),
+and the maintainer pushes it to `<B>` in `duckdb/duckdb-r` and in the fork alike, from his own checkout,
+with `scripts/series-land-push.sh`, whose header says what it checks and what it refuses.
+The same commit is pushed to both, so `<B>` has one SHA in either repository.
+It is provisional: the script is proposed in [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263).
 
-**The fork's `main` and `v2.0-cyanoptera` are still mirrors, which contradicts the lead.**
-[`.github/pull.yml`](/.github/pull.yml) hard-resets both to `duckdb/duckdb-r`'s tip
-([`branches/mirrors/`](/handbook/branches/mirrors/README.md)),
-so a commit that reaches either in the fork first is discarded on the next sync unless `duckdb/duckdb-r` already has it.
-The fork's `v2.0-cyanoptera` has no freeze, so a landing or a merge there, a merged pull request included, is lost that way.
-Which way these branches move is open, a question on
-[krlmlr/duckdb-r#262](https://github.com/krlmlr/duckdb-r/pull/262).
-
-**A version tag is the annotated tag object itself, pushed on.**
-It is created in the fork, and the copy names it by its ref:
-
-```sh
-tag=v2.0.99.9001                            # the tag to copy
-git fetch origin "refs/tags/$tag:refs/tags/$tag"
-git push git@github.com:duckdb/duckdb-r.git "refs/tags/$tag"
-```
-
-Git sends the tag object rather than a new tag, so the copy keeps the tag's SHA as well as the commit it points to.
+**The version tag is written in the fork and copied by the same command.**
+The "Tag version" workflow, `.github/workflows/tag-version.yaml`, runs `scripts/tag-version.sh` in the fork,
+and `series-land-push.sh` pushes that annotated tag object to `duckdb/duckdb-r`,
+so the copy keeps the tag's SHA as well as the commit it points to.
 Which version takes which tag, and the tag's message, are [`releases/versioning/`](/handbook/operations/releases/versioning/README.md)'s.
+The workflow is provisional: it is proposed in [duckdb/duckdb-r#3070](https://github.com/duckdb/duckdb-r/pull/3070),
+and is not on `main` yet.
 
-**The tag is written by the "Tag version" workflow, dispatched in the fork.**
-`.github/workflows/tag-version.yaml` runs `scripts/tag-version.sh` on the branch it is dispatched on,
-and its header says what it takes and what it refuses.
-It is provisional: both files are proposed in [duckdb/duckdb-r#3070](https://github.com/duckdb/duckdb-r/pull/3070),
-and are not on `main` yet.
-
-**The fork's `main` stays frozen, and the freeze is lifted only for a push.**
+**The fork's `main` stays frozen, and the freeze is lifted only for the landing's push.**
 The ruleset `freeze main` on `krlmlr/duckdb-r`, id `27849787`, stops every update, deletion and non-fast-forward of `refs/heads/main`,
 and while it is active a pull request into the fork's `main` cannot merge either.
 It has no bypass actors, because sessions push with the maintainer's token, and a bypass would let any session past the freeze.
-`duckdb/duckdb-r` creates its freeze for each landing and deletes it at the end
+`series-land-push.sh` lifts it for the push and restores it.
+`duckdb/duckdb-r` instead creates its freeze for each landing and deletes it at the end
 ([`series-land`](/.claude/skills/series-land/SKILL.md), steps 1 and 7);
 the fork's stays, and was created by the maintainer in this shape:
 
@@ -68,15 +52,7 @@ gh api -X POST repos/krlmlr/duckdb-r/rulesets --input - <<EOF
 EOF
 ```
 
-**Lifting and restoring the freeze are the maintainer's steps.**
-Each is one call:
-
-```sh
-gh api -X PUT repos/krlmlr/duckdb-r/rulesets/27849787 -f enforcement=disabled   # lift
-gh api -X PUT repos/krlmlr/duckdb-r/rulesets/27849787 -f enforcement=active     # restore
-```
-
-**While the freeze is active, the fork's `main` is no mirror.**
-The ruleset refuses the Pull app's hard reset like any other update,
-so the fork's `main` stays where the freeze found it,
-and the badges and the series seeds that read it read that commit ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+**The Pull app is gone.**
+It no longer keeps the fork's branches level with `duckdb/duckdb-r`,
+and its configuration, [`.github/pull.yml`](/.github/pull.yml), is still here until
+[krlmlr/duckdb-r#264](https://github.com/krlmlr/duckdb-r/pull/264) drops it with the pages that describe it.

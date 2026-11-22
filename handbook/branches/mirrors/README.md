@@ -28,7 +28,6 @@ That is the property the badges rest on,
 and nothing announces its loss:
 a mirror left behind still renders, counting commits that have already
 shipped.
-The fork's `main` loses it while its freeze is active, because the freeze refuses the reset too ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 **The mechanism is the fork's own, not a job of ours.**
 Keeping a fork level with what it forked from is what the Pull app does,
