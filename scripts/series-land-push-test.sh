@@ -166,7 +166,7 @@ says 1 "main-land-dev: 2 of 3 commits above main-land-green passed" "NOT READY: 
 st=0; out=$(land main --dry-run) || st=$?
 is "NOT READY is refused" "$st" 1
 has "  showing why" "$out" "  | NOT READY: the bump stamps"
-has "  and saying so" "$out" "does not print READY; nothing is pushed"
+has "  and saying so" "$out" "does not print READY (exit status 1); nothing is pushed"
 says 1 "Error: series-land.sh needs bash 4.4 or newer, not 3.2.57(1)-release; on macOS, install it with Homebrew"
 st=0; out=$(land main --dry-run) || st=$?
 is "a --status that fails on its own is refused" "$st" 1
