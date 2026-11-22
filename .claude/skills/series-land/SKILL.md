@@ -87,6 +87,7 @@ Every commit of the landing stands on one `<B>` commit, so `<B>` must not move u
 The freeze lasts as long as CI takes over the batch, which is what keeps the batches small.
 A ruleset with no bypass list stops every update, pull requests and admins included.
 A human runs these, and reads each output before the next.
+These freeze `<B>` in `duckdb/duckdb-r` only; the fork's `main` has a freeze of its own ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 Inspect: the rulesets on `<B>`, and the commit it freezes at.
 
@@ -328,6 +329,8 @@ so a repair pushed in between cannot reach `<B>` unjudged.
 Paste the blocks of this step into bash: zsh reads `$sha:r` as a modifier and, by default, `#` comments as commands.
 
 Lift the freeze, push, put the freeze back, and then tag the bump.
+The blocks below push and tag in `duckdb/duckdb-r` only;
+where the fork leads, `<B>` and the tag are written in the fork first and copied on ([`operations/fork/`](/handbook/operations/fork/README.md)).
 The block runs in a subshell that stops at the first failure, before the freeze is lifted unless `--status` printed `READY`,
 and puts the freeze back on its way out whether the push succeeded or not
 (`tests/testthat/test-series-land-skill.R` runs it against a scratch repository):
