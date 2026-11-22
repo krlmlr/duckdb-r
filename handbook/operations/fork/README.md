@@ -32,7 +32,7 @@ and is not on `main` yet.
 The ruleset `freeze main` on `krlmlr/duckdb-r`, id `27849787`, stops every update, deletion and non-fast-forward of `refs/heads/main`,
 and while it is active a pull request into the fork's `main` cannot merge either.
 It has no bypass actors, because sessions push with the maintainer's token, and a bypass would let any session past the freeze.
-`series-land-push.sh` lifts it for the push and restores it, as it does every active ruleset named `freeze <B>` in either repository, found by name rather than by id.
+`series-land-push.sh` lifts it for the push and restores it, as it does the active ruleset named `freeze <B>` in either repository, found by name rather than by id.
 `duckdb/duckdb-r` instead creates its freeze for each landing and deletes it at the end
 ([`series-land`](/.claude/skills/series-land/SKILL.md), steps 1 and 7);
 the fork's stays, and was created by the maintainer in this shape:
@@ -55,4 +55,4 @@ EOF
 ```
 
 **The Pull app is gone.**
-A pull request drops its configuration, [krlmlr/duckdb-r#264](https://github.com/krlmlr/duckdb-r/pull/264).
+A pull request drops its configuration with the pages that describe it, [krlmlr/duckdb-r#264](https://github.com/krlmlr/duckdb-r/pull/264).
