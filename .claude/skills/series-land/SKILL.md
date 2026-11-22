@@ -382,6 +382,8 @@ done
 
 The copy runs hourly, and a dispatch of [`each-mirror.yaml`](/.github/workflows/each-mirror.yaml) runs it at once.
 Paste the blocks of this step into bash: zsh reads `$sha:r` as a modifier and, by default, `#` comments as commands.
+From a checkout that need not hold the landing, [`scripts/series-land-push.sh`](/scripts/series-land-push.sh) `<S> --sha <sha>`
+does the lift, push and restore below for the canonical repository and the fork by URL, and copies the fork's tag, with `--dry-run` first.
 
 Lift the freeze, push, put the freeze back, and then tag the bump.
 The block runs in a subshell that stops at the first failure, before the freeze is lifted unless `--status` printed `READY`,

@@ -194,6 +194,8 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`series-forward-build-test.sh`](series-forward-build-test.sh) | Check the forward replay, offline, against a synthetic base series and seed built here: no network, no fixtures on disk. |
 | [`series-forward-build.sh`](series-forward-build.sh) | Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-dev`, and then of the old `<S>-build` above it, onto HEAD, which must be the freshly fla... |
 | [`series-glue.sh`](series-glue.sh) | Every R-side glue adaptation a series carries, in one read. |
+| [`series-land-push-test.sh`](series-land-push-test.sh) | Check scripts/series-land-push.sh, offline, against two bare repositories built here standing in for the canonical repository and the fork, and a stand-in fo... |
+| [`series-land-push.sh`](series-land-push.sh) | Fast-forward a landing's branch onto `<L>-land-dev` in both repositories, with one command run by the maintainer (.claude/skills/series-land/SKILL.md, step 6). |
 | [`series-land-test.sh`](series-land-test.sh) | Check the landing of a series on `main`, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk. |
 | [`series-land.sh`](series-land.sh) | Land a series on `main`: build `<L>-land-dev`, every vendor commit of the series replayed without its flavor onto the `main` it will fast-forward (.claude/sk... |
 | [`series-learned.sh`](series-learned.sh) | What a series' `-dev` learned beyond its buffer: for every vendor commit, the fix the loop folded into it that its `-build` twin does not carry. |
