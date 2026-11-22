@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Publish a staging directory to the verdict store on the orphan `rcc2` branch.
 #
 # This is the only writer every producer goes through -- the matrix leg

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check the version vendoring stamps the engine with, offline:
 # series_upstream_version() and series_generate_tree() in
 # scripts/series-config.sh, against a synthetic upstream built here, with

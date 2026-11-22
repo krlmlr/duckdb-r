@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Print the SHA of every commit the verdict store has decided, one per line.
 #
 # The verdict store is the orphan `rcc2` branch: one record per commit at

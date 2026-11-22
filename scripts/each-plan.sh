@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Plan the sharded per-commit `rcc` build for the checked-out branch.
 #
 # Selects the undecided commits -- on a series branch those in

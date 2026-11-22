@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check a cutover, offline, against a synthetic fork, canonical repository and clone built here:
 # no network, no fixtures on disk, the stacks built by hand and their pull requests' heads written as GitHub keeps them,
 # and a `gh` first on PATH that fails and records any call.

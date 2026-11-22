@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Every R-side glue adaptation a series carries, in one read.
 #
 # Vendoring adapts the glue commit by commit: `vendor-one.sh` stops at the first

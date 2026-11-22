@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Fold fixes into the commits that introduced their defects, and replay
 # everything above them: the landing commits of an iteration
 # (.claude/skills/series-land/SKILL.md, step 4), or the vendor commits of a

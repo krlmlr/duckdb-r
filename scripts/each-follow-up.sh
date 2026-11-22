@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Dispatch one more `each-rcc` run when this one left planned commits undecided.
 #
 # A leg stops at its own deadline and defers the commits it did not reach

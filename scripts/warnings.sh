@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # The compiler-warning gate: what each scope is held to, and the check itself.
 # Handbook: handbook/build/warnings/README.md
 #

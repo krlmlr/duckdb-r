@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check how scripts/series-check.sh classifies a red commit, offline, against a
 # synthetic fork and verdict store built here: no network, no fixtures on disk.
 #

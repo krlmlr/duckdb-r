@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/cran-release.sh offline, against a fake P3M on 127.0.0.1 and a `gh` stub: nothing reaches GitHub.
 # Handbook: handbook/operations/releases/cran/README.md
 #

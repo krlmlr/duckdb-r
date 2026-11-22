@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/each-follow-up.sh, offline, against a synthetic branch, a
 # synthetic store and a stand-in for `gh api` built here, and the part of
 # scripts/each-plan.sh it relies on: no network, no fixtures on disk.

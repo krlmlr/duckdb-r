@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check the invariants the verdict store rests on, offline, against a local bare
 # repository -- optionally seeded from the real `rcc` branch.
 #

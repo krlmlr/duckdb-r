@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # shellcheck disable=SC2016  # Markdown backticks in the expected output, not commands
 # Check scripts/series-cutover-stack.sh offline, against a synthetic fork and upstream clone built here:
 # no network, no fixtures on disk, a `gh` first on PATH that fails, and every run with stdin closed and no controlling terminal.

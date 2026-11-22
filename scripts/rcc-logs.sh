@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Collect rcc results and failure logs for commits the verdict store has no
 # record for, and stage them for publication to the orphan `rcc2` branch.
 #

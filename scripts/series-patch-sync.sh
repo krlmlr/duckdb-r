@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Carry `patch/` entries from `<S>-dev` onto `<S>-vendor`, the strand the buffer
 # is derived from, the way stage 5 carries tests and glue onto a forward series;
 # a series with no strand yet takes them onto `<S>-build` as before.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-patch-sync.sh offline, against a synthetic series built
 # here: no network, no fixtures on disk. The carry lands on the vendor strand
 # where the series has one (handbook/branches/model/README.md), and on the

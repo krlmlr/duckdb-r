@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # One-shot: build the `rcc2` verdict store from what the old `rcc` branch holds.
 #
 # `rcc` accumulated four layouts, one per generation of the harvest -- the legacy

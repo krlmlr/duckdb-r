@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Stamp a preview line's version prefix onto the strand checked out here: the
 # prefix of the line it *previews*, not the one it was seeded from
 # (handbook/operations/releases/versioning/README.md).

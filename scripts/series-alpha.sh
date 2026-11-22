@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Derive the alpha strand of a series: `<S>-alpha`, a green commit stamped with
 # the version of upstream's alpha build of its engine, so that `INSTALL` finds
 # the extensions upstream published for it (.claude/skills/series-alpha/SKILL.md).

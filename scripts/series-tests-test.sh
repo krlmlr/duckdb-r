@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check how scripts/series-tests.sh reads a tree's tests against `main`'s,
 # offline, against a synthetic repository built here: no network, no fixtures.
 #

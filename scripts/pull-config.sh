@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Read-only: does `.github/pull.yml` rule every mirror a badge measures against?
 #
 # A mirror exists because a series seeds and forward-ports from the branch it

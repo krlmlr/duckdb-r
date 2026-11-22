@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Rebuild a commit, run the suite, accept the named snapshots, re-run to
 # confirm they hold. The fallback for snapshot repair when no
 # snapshot-<sha>-rcc-smoke-null branch exists, or when its diff does not

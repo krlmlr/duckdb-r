@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check which commits stage 4 offers, offline, against a synthetic remote and
 # clone built here -- no network, no fixtures on disk.
 #

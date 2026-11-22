@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Vendors DuckDB sources from the upstream repository (manual vendoring).
 # See scripts/VENDORING.md for complete documentation
 #

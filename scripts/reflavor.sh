@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Change an already-flavored tree from one flavor to another, in place:
 # `duckdb.dev` -> `duckdb.2.0.dev`, renamed files and regenerated binding
 # included. See handbook/branches/flavors/README.md.

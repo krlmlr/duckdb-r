@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Derive the release-candidate strand of a series: `<S>-rc-dev`, the package
 # without its flavor, commit for commit (.claude/skills/series-rc/SKILL.md).
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Wraps one scenario; a `_gogc20` suffix runs it with GOGC=20 and keeps the suffix in the recorded name.
 # pipefail, so a binary killed at the memory cap is reported as such rather than as sed's success.
 set -o pipefail

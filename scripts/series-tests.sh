@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Which of `main`'s tests does a tree stop running, and which does it change?
 #
 # Compares `tests/` of two trees and sorts every difference into what takes a

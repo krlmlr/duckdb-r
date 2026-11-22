@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build one shard of an `each-rcc` plan: many commits, one job, one workspace.
 #
 # Walks its slice of `plan.json` oldest-first, and for every commit resets the

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Fail a pull request to `main` that belongs on the oldest active release
 # branch, by the rule handbook/branches/model/README.md states: a fix is written
 # on the oldest active release branch and reaches `main` by a forward merge.

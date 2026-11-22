@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/preview-prefix.sh, offline, in a repository built here.
 #
 # The claim is that a strand is owed the prefix of the line it previews, read

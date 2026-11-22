@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # What a series' `-dev` learned beyond its buffer: for every vendor commit, the
 # fix the loop folded into it that its `-build` twin does not carry.
 #

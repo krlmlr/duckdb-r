@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/delete-branch.sh, offline, against a bare repository built
 # here as the remote and a stand-in for `gh api` that answers a pull request's
 # state: no network, no fixtures on disk.
