@@ -704,8 +704,8 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 		rel = make_shared_ptr<RQueryRelation>(con->conn->context, std::move(select_stmt), "queryrelation");
 	} catch (std::exception &) {
 		// An R error or interrupt in the lookup reaches here as a generic exception: raise the R condition instead.
-		// The stored cpp11::unwind_exception holds cpp11's single static unwind token, so no other unwind_protect()
-		// may catch a jump between its capture in EnvironmentScanReplacement() and this rethrow.
+		// The stored cpp11::unwind_exception holds the token of its unwind_protect() instantiation; another jump
+		// caught by an unwind_protect() of the same instantiation before this rethrow would overwrite it.
 		if (con->db->env_scan_error) {
 			auto error = con->db->env_scan_error;
 			con->db->env_scan_error = nullptr;
