@@ -1130,7 +1130,8 @@ test_that("only a POSIXct going into a zoned temporal type scans zoned (#2574)",
     d = instant,
     e = instant,
     f = instant,
-    g = instant
+    g = instant,
+    h = instant
   )
   value$s <- data.frame(x = instant)
   value$m <- data.frame(x = instant)
@@ -1142,6 +1143,7 @@ test_that("only a POSIXct going into a zoned temporal type scans zoned (#2574)",
     e = "TIME_NS",
     f = "TIME WITH TIME ZONE[]",
     g = "VARCHAR",
+    h = "ENUM('WITH TIME ZONE')",
     s = "STRUCT(x TIMESTAMPTZ)",
     m = "STRUCT(x TIMESTAMP, y TIMESTAMP WITH TIME ZONE)"
   )

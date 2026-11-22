@@ -83,9 +83,11 @@ the wider type mapping is
   whatever the session zone and whether icu is loaded,
   where the engine's cast from `TIMESTAMPTZ` would take them
   in the session `TimeZone` once icu is loaded.
-  Three targets take the session zone.
-  A `TIME_NS` does, as the engine casts only a `TIMESTAMPTZ` into it.
-  A nested one that mixes a naive field with a zoned one or a `TIME_NS`
+  Two targets take the session zone.
+  A `TIME_NS` takes no `POSIXct` at all:
+  the engine casts neither a `TIMESTAMP` nor a `TIMESTAMPTZ` into it,
+  so the write fails under either setting.
+  A nested one that mixes a naive field with a zoned one
   scans as `dbConnect(posixct = )` says,
   so under the default its naive field gets the session's wall clock,
   and under `posixct = "timestamp"` its zoned field reads the UTC wall clock in the session zone.
@@ -99,7 +101,8 @@ the wider type mapping is
   also under `posixct = "timestamp"`,
   where the cast from `TIMESTAMP` would read the UTC wall clock in the session `TimeZone`.
   The target type decides only where it is known:
-  `duckdb_register()` and a data frame picked up by name scan as the setting says.
+  `duckdb_register()` scans as the setting says;
+  a data frame picked up by name stays on `TIMESTAMP` (see below).
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,

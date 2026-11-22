@@ -139,7 +139,7 @@ duckdb_posixct_columns_into <- function(value, target_types, kind) {
 # Returns TRUE if `type`, as `DESCRIBE` or `typeof()` spell it,
 # holds `TIMESTAMP`, `TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP_NS`, `DATE` or `TIME`, at the top or nested,
 # and none of `TIMESTAMP WITH TIME ZONE`, `TIME WITH TIME ZONE` or `TIME_NS`,
-# which only a `TIMESTAMPTZ` casts into.
+# which the engine casts no `POSIXct` into.
 duckdb_is_naive_temporal_type <- function(type) {
   identical(duckdb_temporal_type_kind(type), "naive")
 }
@@ -154,6 +154,8 @@ duckdb_is_naive_temporal_type <- function(type) {
 duckdb_temporal_type_kind <- function(type) {
   # A quoted field name holds no type
   bare <- gsub('"([^"]|"")*"', "", type)
+  # and neither does a single-quoted literal, such as an `ENUM` value
+  bare <- gsub("'([^']|'')*'", "", bare)
   # A type ends at a comma, a parenthesis, a bracket or the end,
   # where a field name such as `date` in `STRUCT(date INTEGER)` is followed by its type
   type_pattern <- function(names) {
