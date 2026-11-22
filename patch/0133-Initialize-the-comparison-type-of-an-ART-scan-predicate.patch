@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Initialize the comparison type of an ART scan predicate
+
+ART::TryInitializeScan() declares the comparison type of each conjunct
+without a value and has TryMatchComparison() fill it in. Every path that
+returns true assigns it, but GCC 13 at -O2 cannot see that through the
+matcher and reports -Wmaybe-uninitialized where IsLowerBound() reads it.
+Starting it at ExpressionType::INVALID changes nothing at run time.
+
+Carried here until upstream takes it; not proposed upstream yet.
+
+---
+ src/duckdb/src/execution/index/art/art.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/duckdb/src/execution/index/art/art.cpp b/src/duckdb/src/execution/index/art/art.cpp
+index adb87de0da..5bde3c187e 100644
+--- a/src/duckdb/src/execution/index/art/art.cpp
++++ b/src/duckdb/src/execution/index/art/art.cpp
+@@ -298,7 +298,7 @@ unique_ptr<IndexScanState> ART::TryInitializeScan(const Expression &expr, const
+ 			return nullptr;
+ 		}
+ 		for (auto &comparison : comparisons) {
+-			ExpressionType comparison_type;
++			ExpressionType comparison_type = ExpressionType::INVALID;
+ 			Value constant_value;
+ 			if (!TryMatchComparison(expr, comparison.get(), comparison_type, constant_value)) {
+ 				return nullptr;
