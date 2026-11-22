@@ -10,7 +10,7 @@ normalize_rel_text <- function(x) {
     "\\1_<id>",
     x
   )
-  transform_package_name(x)
+  sort_error_json_keys(transform_package_name(x))
 }
 
 show_rel <- function(rel) {
@@ -56,9 +56,14 @@ test_that("build error: filter on a column that does not exist", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- rel_from_df(con, data.frame(a = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_filter(rel, list(expr_reference("zz")))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_filter(rel, list(expr_reference("zz")))
+    }
+  )
 })
 
 test_that("build error: projection with an unknown function", {
@@ -66,9 +71,14 @@ test_that("build error: projection with an unknown function", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- rel_from_df(con, data.frame(a = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_project(rel, list(expr_function("nofunc", list(expr_reference("a")))))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_project(rel, list(expr_function("nofunc", list(expr_reference("a")))))
+    }
+  )
 })
 
 test_that("build error: aggregate", {
@@ -76,16 +86,26 @@ test_that("build error: aggregate", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- rel_from_df(con, data.frame(a = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_aggregate(
-      rel,
-      list(expr_reference("zz")),
-      list(n = expr_function("count", list()))
-    )
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_aggregate(rel, list(), list(n = expr_function("nofunc", list())))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_aggregate(
+        rel,
+        list(expr_reference("zz")),
+        list(n = expr_function("count", list()))
+      )
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_aggregate(rel, list(), list(n = expr_function("nofunc", list())))
+    }
+  )
 })
 
 test_that("build error: order", {
@@ -93,9 +113,14 @@ test_that("build error: order", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- rel_from_df(con, data.frame(a = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_order(rel, list(expr_reference("zz")))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_order(rel, list(expr_reference("zz")))
+    }
+  )
 })
 
 test_that("build error: join with a bad condition", {
@@ -104,9 +129,14 @@ test_that("build error: join with a bad condition", {
   x <- rel_from_df(con, data.frame(a = 1:3))
   y <- rel_from_df(con, data.frame(c = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_join(x, y, list(eq("zz", "c")))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_join(x, y, list(eq("zz", "c")))
+    }
+  )
 })
 
 test_that("build error: cross join with a bad condition", {
@@ -115,9 +145,14 @@ test_that("build error: cross join with a bad condition", {
   x <- rel_from_df(con, data.frame(a = 1:3))
   y <- rel_from_df(con, data.frame(c = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_join(x, y, list(eq("zz", "c")), "cross")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_join(x, y, list(eq("zz", "c")), "cross")
+    }
+  )
 })
 
 test_that("build error: a regular join without conditions is an internal error", {
@@ -138,9 +173,14 @@ test_that("union all of unequal widths fails at build time", {
   x <- rel_from_df(con, data.frame(a = 1:3, b = 1:3))
   y <- rel_from_df(con, data.frame(c = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_union_all(x, y)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_union_all(x, y)
+    }
+  )
 })
 
 test_that("build error: intersect, except and symmetric difference of unequal widths", {
@@ -149,15 +189,30 @@ test_that("build error: intersect, except and symmetric difference of unequal wi
   x <- rel_from_df(con, data.frame(a = 1:3, b = 1:3))
   y <- rel_from_df(con, data.frame(c = 1:3))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_set_intersect(x, y)
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_set_diff(x, y)
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_set_symdiff(x, y)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_set_intersect(x, y)
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_set_diff(x, y)
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_set_symdiff(x, y)
+    }
+  )
 })
 
 test_that("build error: table function", {
@@ -165,15 +220,30 @@ test_that("build error: table function", {
   withr::local_envvar(NO_COLOR = "true")
   withr::local_dir(withr::local_tempdir())
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table_function(con, "nofunc", list())
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table_function(con, "read_csv", list("does-not-exist.csv"))
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table_function(con, "repeat_row", list(1L), list(bogus = 3L))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table_function(con, "nofunc", list())
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table_function(con, "read_csv", list("does-not-exist.csv"))
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table_function(con, "repeat_row", list(1L), list(bogus = 3L))
+    }
+  )
 })
 
 test_that("build error: distinct over a dropped table", {
@@ -181,9 +251,14 @@ test_that("build error: distinct over a dropped table", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- dropped_table_rel(con, "oracle_dropped_distinct")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_distinct(rel)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_distinct(rel)
+    }
+  )
 })
 
 test_that("build error: alias over a dropped table", {
@@ -191,9 +266,14 @@ test_that("build error: alias over a dropped table", {
   withr::local_envvar(NO_COLOR = "true")
   rel <- dropped_table_rel(con, "oracle_dropped_alias")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_set_alias(rel, "foo")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_set_alias(rel, "foo")
+    }
+  )
 })
 
 test_that("limit builds unbound over a dropped table, and reading it fails", {
@@ -204,9 +284,14 @@ test_that("limit builds unbound over a dropped table, and reading it fails", {
   limited <- rel_limit(rel, 1)
   expect_s3_class(limited, "duckdb_relation")
   expect_identical(names(limited), "a")
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    as.data.frame(limited)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      as.data.frame(limited)
+    }
+  )
 })
 
 # Depth
@@ -225,9 +310,14 @@ test_that("depth: 600 filters build and materialize lazily, but not through as.d
   }
 
   expect_equal(nrow(rel_to_altrep(rel)), 3)
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    as.data.frame(rel)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      as.data.frame(rel)
+    }
+  )
 })
 
 test_that("depth: 998 projections build and the 999th fails", {
@@ -239,9 +329,14 @@ test_that("depth: 998 projections build and the 999th fails", {
     rel <- rel_project(rel, list(expr_reference("a")))
   }
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_project(rel, list(expr_reference("a")))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_project(rel, list(expr_reference("a")))
+    }
+  )
 })
 
 # Result mismatch
@@ -253,9 +348,14 @@ test_that("result mismatch: a column added after rel_from_table()", {
   rel <- rel_from_table(con, "oracle_mismatch_df")
   dbExecute(con, "ALTER TABLE oracle_mismatch_df ADD COLUMN y INTEGER")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    as.data.frame(rel)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      as.data.frame(rel)
+    }
+  )
 })
 
 test_that("result mismatch: a lazy data frame fails on every access with the same message", {
@@ -268,9 +368,14 @@ test_that("result mismatch: a lazy data frame fails on every access with the sam
   dbExecute(con, "ALTER TABLE oracle_mismatch_altrep ADD COLUMN y INTEGER")
   df <- rel_to_altrep(rel)
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    nrow(df)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      nrow(df)
+    }
+  )
   first <- tryCatch(nrow(df), error = conditionMessage)
   second <- tryCatch(df$a[1], error = conditionMessage)
   expect_identical(second, first)
@@ -283,12 +388,22 @@ test_that("from sql: more than one statement, or not a SELECT", {
   withr::local_envvar(NO_COLOR = "true")
   dbExecute(con, "CREATE TABLE oracle_from_sql_insert (a INTEGER)")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(con, "SELECT 1; SELECT 2")
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(con, "INSERT INTO oracle_from_sql_insert VALUES (1)")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(con, "SELECT 1; SELECT 2")
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(con, "INSERT INTO oracle_from_sql_insert VALUES (1)")
+    }
+  )
   expect_equal(
     dbGetQuery(con, "SELECT count(*) AS n FROM oracle_from_sql_insert")$n,
     0
@@ -349,9 +464,14 @@ test_that("from sql: the name lookup in the environment is case sensitive", {
 
   upper_text <- new.env(parent = emptyenv())
   upper_text$dd <- data.frame(a = 1:3)
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(scan_con, "SELECT * FROM DD", env = upper_text)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(scan_con, "SELECT * FROM DD", env = upper_text)
+    }
+  )
 
   mixed_name <- new.env(parent = emptyenv())
   mixed_name$Dd <- data.frame(a = 1:3)
@@ -381,15 +501,25 @@ test_that("from sql: R error in lookup reaches the user as that R error", {
 
   promise_env <- new.env(parent = emptyenv())
   delayedAssign("bad", stop("boom from promise"), assign.env = promise_env)
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(scan_con, "FROM bad", env = promise_env)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(scan_con, "FROM bad", env = promise_env)
+    }
+  )
 
   active_env <- new.env(parent = emptyenv())
   makeActiveBinding("act", function() stop("boom from binding"), active_env)
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(scan_con, "FROM act", env = active_env)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(scan_con, "FROM act", env = active_env)
+    }
+  )
 
   interrupt_env <- new.env(parent = emptyenv())
   makeActiveBinding("stop_me", function() rlang::interrupt(), interrupt_env)
@@ -518,15 +648,30 @@ test_that("from table: a table that does not exist, a view, a missing schema", {
   withr::local_envvar(NO_COLOR = "true")
   dbExecute(con, "CREATE VIEW oracle_from_table_view AS SELECT 1 AS a")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table(con, "oracle_no_such_table")
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table(con, "oracle_from_table_view")
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_table(con, "oracle_from_table_view", "oracle_no_such_schema")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table(con, "oracle_no_such_table")
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table(con, "oracle_from_table_view")
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_table(con, "oracle_from_table_view", "oracle_no_such_schema")
+    }
+  )
 })
 
 test_that("from table: a schema name that names an attached database reads its default schema", {
@@ -973,12 +1118,22 @@ test_that("write: insert into an existing table and into a missing one", {
     data.frame(a = c(1:2, 1:2), b = c("x", "y", "x", "y"))
   )
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_insert(rel, "main", "oracle_insert_missing")
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_insert(rel_from_df(con, data.frame(a = 1L)), "main", "oracle_insert")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_insert(rel, "main", "oracle_insert_missing")
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_insert(rel_from_df(con, data.frame(a = 1L)), "main", "oracle_insert")
+    }
+  )
 })
 
 test_that("write: to table, temporary and not, and onto an existing table", {
@@ -1010,9 +1165,14 @@ test_that("write: to table, temporary and not, and onto an existing table", {
     )
   )
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_table(rel, "", "oracle_to_table", FALSE)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_table(rel, "", "oracle_to_table", FALSE)
+    }
+  )
 })
 
 test_that("write: to view over a data frame, queried repeatedly", {
@@ -1030,9 +1190,14 @@ test_that("write: to view over a data frame, queried repeatedly", {
     ignore_attr = TRUE
   )
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_view(rel, "", "oracle_to_view", FALSE)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_view(rel, "", "oracle_to_view", FALSE)
+    }
+  )
 })
 
 test_that("write: to csv and to parquet, and an unknown option", {
@@ -1052,12 +1217,22 @@ test_that("write: to csv and to parquet, and an unknown option", {
     df
   )
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_csv(rel, file.path(dir, "bogus.csv"), list(bogus = 1L))
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_parquet(rel, file.path(dir, "bogus.parquet"), list(bogus = 1L))
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_csv(rel, file.path(dir, "bogus.csv"), list(bogus = 1L))
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_parquet(rel, file.path(dir, "bogus.parquet"), list(bogus = 1L))
+    }
+  )
   expect_false(file.exists(file.path(dir, "bogus.csv")))
   expect_false(file.exists(file.path(dir, "bogus.parquet")))
 })
@@ -1151,18 +1326,38 @@ test_that("after disconnect: reading, building and lazy data frames", {
   expect_equal(nrow(materialized), 3)
   dbDisconnect(closed, shutdown = TRUE)
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    as.data.frame(rel)
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_filter(rel, list(gt("a", 1L)))
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_altrep(rel)
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    nrow(lazy)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      as.data.frame(rel)
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_filter(rel, list(gt("a", 1L)))
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_altrep(rel)
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      nrow(lazy)
+    }
+  )
   expect_error(nrow(lazy), "Connection has already been closed", fixed = TRUE)
 
   expect_s3_class(rel_limit(rel, 1), "duckdb_relation")
@@ -1230,9 +1425,14 @@ test_that("build error: from sql text that does not bind", {
   local_edition(3)
   withr::local_envvar(NO_COLOR = "true")
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_from_sql(con, "SELECT zz FROM range(3)")
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_from_sql(con, "SELECT zz FROM range(3)")
+    }
+  )
 })
 
 test_that("from sql: a parameter binds to a column of unknown type and fails when read", {
@@ -1275,15 +1475,30 @@ test_that("write: into a database attached read-only", {
   dbExecute(ro_con, "USE rodb")
   rel <- rel_from_df(ro_con, data.frame(a = 1L))
 
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_insert(rel, "main", "ro")
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_table(rel, "main", "ro2", FALSE)
-  })
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    rel_to_view(rel, "main", "rov", FALSE)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_insert(rel, "main", "ro")
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_table(rel, "main", "ro2", FALSE)
+    }
+  )
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      rel_to_view(rel, "main", "rov", FALSE)
+    }
+  )
 })
 
 test_that("explicit transaction: a step that fails to bind leaves it usable", {
@@ -1318,9 +1533,14 @@ test_that("aborted transaction: a step builds, and reading it fails until the ro
   filtered <- rel_filter(rel, list(gt("a", 1L)))
   expect_s3_class(filtered, "duckdb_relation")
   expect_s3_class(rel_from_df(txn_con, data.frame(b = 1)), "duckdb_relation")
-  expect_snapshot(error = TRUE, cnd_class = TRUE, {
-    as.data.frame(filtered)
-  })
+  expect_snapshot(
+    error = TRUE,
+    cnd_class = TRUE,
+    transform = sort_error_json_keys,
+    {
+      as.data.frame(filtered)
+    }
+  )
   dbRollback(txn_con)
   expect_equal(as.data.frame(filtered), data.frame(a = 2:3), ignore_attr = TRUE)
 })

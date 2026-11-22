@@ -4,7 +4,7 @@
       rel_filter(rel, list(expr_reference("zz")))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","name":"zz","candidates":"a","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","candidates":"a","error_subtype":"COLUMN_NOT_FOUND","name":"zz"}
 
 # build error: projection with an unknown function
 
@@ -12,7 +12,7 @@
       rel_project(rel, list(expr_function("nofunc", list(expr_reference("a")))))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Scalar Function with name nofunc does not exist!\nDid you mean \"count\"?","type":"Scalar Function","name":"nofunc","candidates":"count","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Scalar Function with name nofunc does not exist!\nDid you mean \"count\"?","candidates":"count","error_subtype":"MISSING_ENTRY","name":"nofunc","type":"Scalar Function"}
 
 # build error: aggregate
 
@@ -21,7 +21,7 @@
         list())))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","name":"zz","candidates":"a","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","candidates":"a","error_subtype":"COLUMN_NOT_FOUND","name":"zz"}
 
 ---
 
@@ -29,7 +29,7 @@
       rel_aggregate(rel, list(), list(n = expr_function("nofunc", list())))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Scalar Function with name nofunc does not exist!\nDid you mean \"count\"?","type":"Scalar Function","name":"nofunc","candidates":"count","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Scalar Function with name nofunc does not exist!\nDid you mean \"count\"?","candidates":"count","error_subtype":"MISSING_ENTRY","name":"nofunc","type":"Scalar Function"}
 
 # build error: order
 
@@ -37,7 +37,7 @@
       rel_order(rel, list(expr_reference("zz")))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","name":"zz","candidates":"a","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","candidates":"a","error_subtype":"COLUMN_NOT_FOUND","name":"zz"}
 
 # build error: join with a bad condition
 
@@ -45,7 +45,7 @@
       rel_join(x, y, list(eq("zz", "c")))
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","name":"zz","candidates":"a","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","candidates":"a","error_subtype":"COLUMN_NOT_FOUND","name":"zz"}
 
 # build error: cross join with a bad condition
 
@@ -53,7 +53,7 @@
       rel_join(x, y, list(eq("zz", "c")), "cross")
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","name":"zz","candidates":"a","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"a\"","candidates":"a","error_subtype":"COLUMN_NOT_FOUND","name":"zz"}
 
 # union all of unequal widths fails at build time
 
@@ -93,7 +93,7 @@
       rel_from_table_function(con, "nofunc", list())
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Table Function with name nofunc does not exist!\nDid you mean \"sniff_csv\"?","type":"Table Function","name":"nofunc","candidates":"sniff_csv","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Table Function with name nofunc does not exist!\nDid you mean \"sniff_csv\"?","candidates":"sniff_csv","error_subtype":"MISSING_ENTRY","name":"nofunc","type":"Table Function"}
 
 ---
 
@@ -117,7 +117,7 @@
       rel_distinct(rel)
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_dropped_distinct does not exist!\nDid you mean \"pg_catalog.pg_collation\"?","type":"Table","name":"oracle_dropped_distinct","candidates":"pg_catalog.pg_collation","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_dropped_distinct does not exist!\nDid you mean \"pg_catalog.pg_collation\"?","candidates":"pg_catalog.pg_collation","error_subtype":"MISSING_ENTRY","name":"oracle_dropped_distinct","type":"Table"}
 
 # build error: alias over a dropped table
 
@@ -125,7 +125,7 @@
       rel_set_alias(rel, "foo")
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_dropped_alias does not exist!\nDid you mean \"pg_catalog.pg_depend\"?","type":"Table","name":"oracle_dropped_alias","candidates":"pg_catalog.pg_depend","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_dropped_alias does not exist!\nDid you mean \"pg_catalog.pg_depend\"?","candidates":"pg_catalog.pg_depend","error_subtype":"MISSING_ENTRY","name":"oracle_dropped_alias","type":"Table"}
 
 # limit builds unbound over a dropped table, and reading it fails
 
@@ -220,7 +220,7 @@
       rel_from_sql(scan_con, "SELECT * FROM DD", env = upper_text)
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Table with name DD does not exist!","type":"Table","name":"DD","location":"[14,2]","position":"14","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Table with name DD does not exist!","error_subtype":"MISSING_ENTRY","location":"[14,2]","name":"DD","position":"14","type":"Table"}
 
 # from sql: R error in lookup reaches the user as that R error
 
@@ -1080,7 +1080,7 @@
       rel_insert(rel, "main", "oracle_insert_missing")
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_insert_missing does not exist!\nDid you mean \"oracle_insert\"?","type":"Table","name":"oracle_insert_missing","candidates":"oracle_insert","error_subtype":"MISSING_ENTRY"}
+      ! {"exception_type":"Catalog","exception_message":"Table with name oracle_insert_missing does not exist!\nDid you mean \"oracle_insert\"?","candidates":"oracle_insert","error_subtype":"MISSING_ENTRY","name":"oracle_insert_missing","type":"Table"}
 
 ---
 
@@ -1096,7 +1096,7 @@
       rel_to_table(rel, "", "oracle_to_table", FALSE)
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Failed to create table 'oracle_to_table': Table with name \"oracle_to_table\" already exists!","type":"Table","name":"oracle_to_table","error_subtype":"ENTRY_ALREADY_EXISTS"}
+      ! {"exception_type":"Catalog","exception_message":"Failed to create table 'oracle_to_table': Table with name \"oracle_to_table\" already exists!","error_subtype":"ENTRY_ALREADY_EXISTS","name":"oracle_to_table","type":"Table"}
 
 # write: to view over a data frame, queried repeatedly
 
@@ -1104,7 +1104,7 @@
       rel_to_view(rel, "", "oracle_to_view", FALSE)
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Catalog","exception_message":"Failed to create view 'oracle_to_view': View with name \"oracle_to_view\" already exists!","type":"View","name":"oracle_to_view","error_subtype":"ENTRY_ALREADY_EXISTS"}
+      ! {"exception_type":"Catalog","exception_message":"Failed to create view 'oracle_to_view': View with name \"oracle_to_view\" already exists!","error_subtype":"ENTRY_ALREADY_EXISTS","name":"oracle_to_view","type":"View"}
 
 # write: to csv and to parquet, and an unknown option
 
@@ -1181,7 +1181,7 @@
       rel_from_sql(con, "SELECT zz FROM range(3)")
     Condition <rlang_error>
       Error:
-      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"range\"","name":"zz","location":"[7,2]","position":"7","candidates":"range","error_subtype":"COLUMN_NOT_FOUND"}
+      ! {"exception_type":"Binder","exception_message":"Referenced column \"zz\" not found in FROM clause!\nCandidate bindings: \"range\"","candidates":"range","error_subtype":"COLUMN_NOT_FOUND","location":"[7,2]","name":"zz","position":"7"}
 
 # write: into a database attached read-only
 
