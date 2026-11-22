@@ -356,19 +356,24 @@ The session hands him the `READY` SHA and this sequence:
 S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto
 sha=...                                     # the SHA READY names
-scripts/series-unfreeze.sh "$B"
 scripts/series-land-push.sh "$S" --sha "$sha" --dry-run
+scripts/series-unfreeze.sh "$B"
 scripts/series-land-push.sh "$S" --sha "$sha"
 ```
 
-[`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) disables `freeze <B>` on both repositories.
+The dry run runs every check and pushes nothing, so it needs no lifted freeze;
+where it refuses, the sequence stops there and nothing is unfrozen.
+[`scripts/series-unfreeze.sh`](/scripts/series-unfreeze.sh) then disables `freeze <B>` on both repositories.
+Where the real push fails after that, [`scripts/series-freeze.sh`](/scripts/series-freeze.sh) `<B>` puts the freeze back
+until the failure is understood.
 [`scripts/series-land-push.sh`](/scripts/series-land-push.sh) refuses unless `--status` prints `READY` for that SHA,
 the tip of `<L>-land-dev`, and the SHA fast-forwards `<B>` on both remotes.
 It pushes `<B>` to `upstream` and then `origin` with plain pushes, which git refuses unless they fast-forward,
 and which need the branch ruleset's admin bypass, because they are not pull requests.
 Then it tags the bump: every landing's bump is tagged, a bump to an upstream release included
 ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md) names the tag):
-the annotated `v<v>`, or `v<v>.9900` for a release, its message `duckdb <version>` and the section `NEWS.md` has for `<v>`.
+the annotated `v<v>`, its message `duckdb <v>`, or for a release `v<v>.9900` and `duckdb <v>.9900`,
+then the section `NEWS.md` has for `<v>`.
 It pushes the same tag object to both repositories.
 It refuses before any push where the landing does not change `NEWS.md`, the section is missing,
 or a tag of that name points elsewhere, and a rerun picks up where a failure stopped.

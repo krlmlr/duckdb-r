@@ -12,7 +12,7 @@
 #   3. A head that does not fast-forward the branch on `origin` is refused.
 #   4. A landing that does not change NEWS.md, or whose NEWS.md has no section for the version, is refused, and so
 #      is a tag of that name that points elsewhere or is lightweight, before anything is pushed.
-#   5. A dry run pushes nothing, and prints the tag's message.
+#   5. A dry run pushes nothing, and prints the tag's message; it succeeds with both branches frozen (6).
 #   6. A push the freeze refuses fails the run, names scripts/series-unfreeze.sh, and tags nothing.
 #   7. A run moves the branch on both remotes, then tags the head with the NEWS.md section and pushes the same tag
 #      object to both; a rerun writes nothing, and a tag one remote lacks is pushed there as the same object.
@@ -245,7 +245,10 @@ is "no tag anywhere" "$(tags)" "/ / "
 
 # --- 6. a frozen branch ------------------------------------------------------
 echo "6. a frozen branch"
-touch "$SCRATCH/frozen-origin"
+touch "$SCRATCH/frozen-upstream" "$SCRATCH/frozen-origin"
+st=0; out=$(land main --dry-run) || st=$?
+rm "$SCRATCH/frozen-upstream"
+is "a dry run needs no lifted freeze" "$st" 0
 st=0; out=$(land main) || st=$?
 rm "$SCRATCH/frozen-origin"
 is "fails" "$st" 1

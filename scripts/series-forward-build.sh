@@ -99,6 +99,11 @@
 #   --prefix is the four-component version to stamp; the counter restarts at
 #   zero unless HEAD already carries that prefix.
 
+# The scripts that run this need bash 4.4, and macOS's /bin/bash is 3.2: say so rather than fail further in.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: $(basename "$0") needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+  exit 1
+fi
 set -euo pipefail
 # shellcheck source=series-lib.sh
 . "$(dirname "$0")/series-lib.sh"
