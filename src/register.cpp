@@ -1,7 +1,6 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/function/table/arrow.hpp"
-#include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -63,8 +62,10 @@ using namespace duckdb;
 		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
 		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
 
-		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
-		    ->CreateView(Identifier(name), overwrite, true);
+		auto scan = make_shared_ptr<RTableFunctionRelation>(conn->conn->context, Identifier("r_dataframe_scan"),
+		                                                    vector<Value> {Value::POINTER((uintptr_t)value.data())},
+		                                                    parameter_map);
+		RRelationCreateView(*scan, Identifier::InvalidSchema(), Identifier(name), overwrite, true);
 
 		signal_handler.HandleInterrupt();
 
@@ -92,6 +93,42 @@ using namespace duckdb;
 	}
 }
 
+EnvScanScope *EnvScanScope::CheckNotNested(DBWrapper &db, ClientContext &context) {
+	for (auto scope = db.env_scan_scope; scope; scope = scope->enclosing) {
+		if (&scope->context == &context) {
+			cpp11::stop(
+			    "Cannot query a connection from R code that looks up a name for a query of the same connection.");
+		}
+	}
+	return db.env_scan_scope;
+}
+
+EnvScanScope::EnvScanScope(DBWrapper &db_p, ClientContext &context_p, SEXP env, const ConvertOpts &convert_opts,
+                           identifier_map_t<unique_ptr<TableRef>> *scan_refs)
+    : db(db_p), context(context_p), enclosing(CheckNotNested(db_p, context_p)), saved_env(db_p.env),
+      saved_registered_dfs(db_p.registered_dfs), saved_convert_opts(db_p.env_convert_opts),
+      saved_scan_refs(db_p.env_scan_refs), saved_scan_context(db_p.env_scan_context),
+      saved_scan_error(std::move(db_p.env_scan_error)) {
+	// The data frames found are kept alive by this list, which the caller attaches to what it returns
+	db.registered_dfs = Rf_cons(R_NilValue, R_NilValue);
+	db.env = env;
+	db.env_convert_opts = &convert_opts;
+	db.env_scan_refs = scan_refs;
+	db.env_scan_context = &context;
+	db.env_scan_error = nullptr;
+	db.env_scan_scope = this;
+}
+
+EnvScanScope::~EnvScanScope() {
+	db.env = saved_env;
+	db.registered_dfs = saved_registered_dfs;
+	db.env_convert_opts = saved_convert_opts;
+	db.env_scan_refs = saved_scan_refs;
+	db.env_scan_context = saved_scan_context;
+	db.env_scan_error = std::move(saved_scan_error);
+	db.env_scan_scope = enclosing;
+}
+
 unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, ReplacementScanInput &input,
                                                         optional_ptr<ReplacementScanData> data_p) {
 	auto &data = (ReplacementDataDBWrapper &)*data_p;
@@ -107,28 +144,39 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	// up forces a promise -- arbitrary R code, and with it a garbage collection.
 	RCallbackScope callback_scope;
 
-	auto table_name_symbol = cpp11::safe[Rf_install](input.table_name.c_str());
 	SEXP rho = db_wrapper->env;
 	if (TYPEOF(rho) != ENVSXP) {
 		return nullptr;
 	}
 
 	SEXP df = R_NilValue;
-
+	try {
+		auto table_name_symbol = cpp11::safe[Rf_install](input.table_name.c_str());
 #if defined(R_VERSION) && R_VERSION >= R_Version(4, 5, 0)
-	df = cpp11::safe[R_getVarEx](table_name_symbol, rho, Rboolean::TRUE, R_NilValue);
+		df = cpp11::safe[R_getVarEx](table_name_symbol, rho, Rboolean::TRUE, R_NilValue);
 #else
-	while (rho != R_EmptyEnv) {
-		df = cpp11::safe[Rf_findVarInFrame3](rho, table_name_symbol, TRUE);
-		if (df != R_UnboundValue) {
-			break;
+		while (rho != R_EmptyEnv) {
+			df = cpp11::safe[Rf_findVarInFrame3](rho, table_name_symbol, TRUE);
+			if (df != R_UnboundValue) {
+				break;
+			}
+			rho = ENCLOS(rho);
 		}
-		rho = ENCLOS(rho);
-	}
-	if (TYPEOF(df) == PROMSXP) {
-		df = cpp11::safe[Rf_eval](df, rho);
-	}
+		if (TYPEOF(df) == PROMSXP) {
+			df = cpp11::safe[Rf_eval](df, rho);
+		}
 #endif
+	} catch (cpp11::unwind_exception &) {
+		// An R error or interrupt, such as from a promise or an active binding.
+		// The engine's bind turns every exception into a generic one, so a relation made from SQL text keeps the
+		// first one for its own connection's bind and rethrows it once the bind has failed (rapi_rel_from_sql()).
+		// The exception holds the token of its cpp11::unwind_protect() instantiation; another jump caught by an
+		// unwind_protect() of the same instantiation before that rethrow would overwrite it.
+		if (&context == db_wrapper->env_scan_context && !db_wrapper->env_scan_error) {
+			db_wrapper->env_scan_error = std::current_exception();
+		}
+		throw;
+	}
 
 	PROTECT(df);
 	if (!Rf_inherits(df, "data.frame")) {
@@ -143,30 +191,36 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	UNPROTECT(1);
 
 	// TODO: do utf conversion
-	auto table_function = make_uniq<TableFunctionRef>();
-	vector<duckdb::unique_ptr<ParsedExpression>> children;
-	children.push_back(ConstantExpression::FromValue(Value::POINTER((uintptr_t)df)));
-	auto add_named_parameter = [&children](const char *name, bool value) {
-		auto parameter = ConstantExpression::FromValue(Value::BOOLEAN(value));
-		parameter->SetAlias(Identifier(name));
-		children.push_back(std::move(parameter));
+	auto make_scan = [experimental, map_list_of](SEXP data_frame) {
+		auto table_function = make_uniq<TableFunctionRef>();
+		vector<duckdb::unique_ptr<ParsedExpression>> children;
+		children.push_back(ConstantExpression::FromValue(Value::POINTER((uintptr_t)data_frame)));
+		auto add_named_parameter = [&children](const char *name, bool value) {
+			auto parameter = ConstantExpression::FromValue(Value::BOOLEAN(value));
+			parameter->SetAlias(Identifier(name));
+			children.push_back(std::move(parameter));
+		};
+		// integer64 := true: an integer64 column scans as BIGINT, as rapi_register_df() registers it
+		add_named_parameter("integer64", true);
+		// experimental and map_list_of follow the connection's conversion options, as in rapi_register_df();
+		// dbConnect() always sets experimental to false
+		add_named_parameter("experimental", experimental);
+		add_named_parameter("map_list_of", map_list_of);
+		table_function->function = make_uniq<FunctionExpression>("r_dataframe_scan", std::move(children));
+		return table_function;
 	};
-	// integer64 := true: an integer64 column scans as BIGINT, as rapi_register_df() registers it
-	add_named_parameter("integer64", true);
-	// experimental and map_list_of follow the connection's conversion options, as in rapi_register_df();
-	// dbConnect() always sets experimental to false
-	add_named_parameter("experimental", experimental);
-	add_named_parameter("map_list_of", map_list_of);
-	table_function->function = make_uniq<FunctionExpression>("r_dataframe_scan", std::move(children));
 
-	// Signal that this table reference depends on external state (the R data
-	// frame found via environment scan). For relations created via
-	// rel_from_sql(), this causes QueryRelation::Bind() to wrap the original
-	// query in a CTE that materializes the data frame pointer, so subsequent
-	// binds (e.g. during rel_to_altrep()) do not need to look up the data
-	// frame from the environment again.
-	table_function->external_dependency = make_shared_ptr<ExternalDependency>();
-	return std::move(table_function);
+	// A relation made from SQL text pins what was found here, under the name as written and once per name, so that
+	// a later bind reads the pointer instead of the environment. Only its own connection's binds count: R code run
+	// by the lookup can query another connection of this database, whose names are not the relation's.
+	if (db_wrapper->env_scan_refs && &context == db_wrapper->env_scan_context) {
+		auto &refs = *db_wrapper->env_scan_refs;
+		if (refs.find(input.name.Name()) == refs.end()) {
+			refs[input.name.Name()] = make_scan(df);
+		}
+	}
+
+	return make_scan(df);
 }
 
 class RArrowTabularStreamFactory : public ArrowScanFactory {

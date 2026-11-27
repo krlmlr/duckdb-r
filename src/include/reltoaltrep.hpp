@@ -38,7 +38,7 @@ struct AltrepRelationWrapper {
 	const size_t n_cells;
 
 	rel_extptr_t rel_eptr;
-	duckdb::shared_ptr<Relation> rel;
+	duckdb::shared_ptr<RRelation> rel;
 	// Released once every ALTREP column has been converted,
 	// see MarkColumnAsTransformed(): handbook/usage/memory/reading/README.md.
 	duckdb::unique_ptr<QueryResult> mat_result;
@@ -79,7 +79,7 @@ private:
 
 // Whether `rel` is a plain scan of a table stored by DuckDB,
 // possibly under projections of bare column references
-bool IsStoredTableScan(Relation &rel);
+bool IsStoredTableScan(RRelation &rel);
 
 } // namespace duckdb
 

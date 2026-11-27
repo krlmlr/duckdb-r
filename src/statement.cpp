@@ -1,8 +1,6 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/parser/statement/relation_statement.hpp"
 #include "duckdb/planner/statement_preprocessor.hpp"
-#include "httplib.hpp"
 #include "rapi.hpp"
 
 #include <atomic>
@@ -172,15 +170,8 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 	// if another query is already executing, providing fast failure instead of deadlock.
 	ScopedInterruptHandler signal_handler(conn->conn->context);
 
-	D_ASSERT(conn->db->env == R_NilValue);
-	conn->db->env = (SEXP)env;
-	conn->db->env_convert_opts = &conn->convert_opts;
-	conn->db->registered_dfs = Rf_cons(R_NilValue, R_NilValue);
-	duckdb_httplib::detail::scope_exit reset_db_env([&]() {
-		conn->db->env = R_NilValue;
-		conn->db->env_convert_opts = nullptr;
-		conn->db->registered_dfs = R_NilValue;
-	});
+	// The scope puts back what an enclosing query or relation had set, when R code run by its lookup calls this
+	EnvScanScope env_scan_scope(*conn->db, *conn->conn->context, env, conn->convert_opts);
 
 	vector<unique_ptr<SQLStatement>> statements;
 	try {

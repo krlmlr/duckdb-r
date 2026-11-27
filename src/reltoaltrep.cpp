@@ -11,13 +11,10 @@
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/query_result.hpp"
-#include "duckdb/main/relation/aggregate_relation.hpp"
-#include "duckdb/main/relation/limit_relation.hpp"
-#include "duckdb/main/relation/projection_relation.hpp"
-#include "duckdb/main/relation/table_relation.hpp"
 #include "duckdb/main/settings.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/statement/select_statement.hpp"
 #include "fmt/format.h"
 #include "httplib.hpp"
 #include "rapi.hpp"
@@ -247,7 +244,7 @@ void AltrepRelationWrapper::Execute(const std::function<void()> &run) {
 	// A query of the same connection would wait for the lock that query holds, so it fails instead, and before
 	// any open result of its connection is ended: ending one takes that lock too.
 	// One of another connection runs nested, and leaves the interrupt to the outer query's handler.
-	if (ScopedInterruptHandler::IsActiveFor(*rel->context->GetContext())) {
+	if (ScopedInterruptHandler::IsActiveFor(*rel->GetContext())) {
 		rapi_error_with_context("GetQueryResult",
 		                        "Cannot materialize a relation of the connection that is running the query.");
 	}
@@ -276,18 +273,18 @@ void AltrepRelationWrapper::Execute(const std::function<void()> &run) {
 	announced = true;
 
 	// Taken after the callback, which may have closed the connection
-	auto &context = *rel->context->GetContext();
+	auto &context = *rel->GetContext();
 
 	EndOpenResults(context);
 	duckdb::unique_ptr<ScopedInterruptHandler> signal_handler;
 	if (!ScopedInterruptHandler::IsActive()) {
-		signal_handler = make_uniq<ScopedInterruptHandler>(rel->context->GetContext());
+		signal_handler = make_uniq<ScopedInterruptHandler>(rel->GetContext());
 	}
 
 	// We need to temporarily allow a deeper execution stack
 	// https://github.com/duckdb/duckdb-r/issues/101
 	auto old_depth = Settings::Get<MaxExpressionDepthSetting>(context);
-	auto &client_config = ClientConfig::GetConfig(*rel->context->GetContext());
+	auto &client_config = ClientConfig::GetConfig(*rel->GetContext());
 	client_config.GetConfig(context).user_settings.SetUserSetting(MaxExpressionDepthSetting::SettingIndex,
 	                                                              Value::UBIGINT(old_depth * 2));
 	duckdb_httplib::detail::scope_exit reset_max_expression_depth([&]() {
@@ -332,10 +329,10 @@ void AltrepRelationWrapper::Materialize() {
 	// For tethered, we push a limit relation and check the number of output rows
 	auto local_rel = rel;
 	if (max_rows < MAX_SIZE_T) {
-		local_rel = make_shared_ptr<LimitRelation>(rel, max_rows + 1, 0);
+		local_rel = make_shared_ptr<RLimitRelation>(rel, max_rows + 1, 0);
 	}
 
-	auto local_res = local_rel->Execute();
+	auto local_res = RRunRelation(*local_rel);
 
 	if (local_res->HasError()) {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", local_res->GetError().c_str());
@@ -409,9 +406,10 @@ void AltrepRelationWrapper::CountRows() {
 	vector<duckdb::unique_ptr<ParsedExpression>> aggregates;
 	aggregates.push_back(
 	    make_uniq<FunctionExpression>(Identifier("count_star"), vector<duckdb::unique_ptr<ParsedExpression>>()));
-	auto count_rel = make_shared_ptr<AggregateRelation>(rel, std::move(aggregates));
+	auto count_rel =
+	    make_shared_ptr<RAggregateRelation>(rel, std::move(aggregates), vector<duckdb::unique_ptr<ParsedExpression>>());
 
-	auto res = count_rel->Execute();
+	auto res = RRunRelation(*count_rel);
 	if (res->HasError()) {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", res->GetError().c_str());
 		return;
@@ -453,7 +451,12 @@ void AltrepRelationWrapper::FetchColumn(idx_t column_index) {
 	auto &columns = rel->Columns();
 	vector<ColumnDefinition> current;
 	try {
-		rel->context->GetContext()->TryBindRelation(*rel, current);
+		auto statement = make_uniq<SelectStatement>();
+		statement->node = rel->GetQueryNode();
+		auto signature = rel->GetContext()->BindStatement(std::move(statement));
+		for (idx_t i = 0; i < signature.names.size(); i++) {
+			current.emplace_back(signature.names[i], signature.types[i]);
+		}
 	} catch (std::exception &e) {
 		ErrorData error(e);
 		auto &message = error.RawMessage();
@@ -491,9 +494,9 @@ void AltrepRelationWrapper::FetchColumn(idx_t column_index) {
 	expressions.push_back(make_uniq<ColumnRefExpression>(column.Name()));
 	vector<Identifier> aliases;
 	aliases.push_back(column.Name());
-	auto column_rel = make_shared_ptr<ProjectionRelation>(rel, std::move(expressions), std::move(aliases));
+	auto column_rel = make_shared_ptr<RProjectionRelation>(rel, std::move(expressions), std::move(aliases));
 
-	auto res = column_rel->Execute();
+	auto res = RRunRelation(*column_rel);
 	if (res->HasError()) {
 		mat_error = duckdb_fmt::format("Error evaluating duckdb query: {}", res->GetError().c_str());
 		return;
@@ -524,7 +527,7 @@ void AltrepRelationWrapper::FetchColumn(idx_t column_index) {
 }
 
 // A column is fetched by its name, which must therefore pick out one column
-static bool HasUniqueColumnNames(Relation &rel) {
+static bool HasUniqueColumnNames(RRelation &rel) {
 	identifier_set_t names;
 	for (auto &column : rel.Columns()) {
 		if (!names.insert(column.Name()).second) {
@@ -534,11 +537,11 @@ static bool HasUniqueColumnNames(Relation &rel) {
 	return true;
 }
 
-bool duckdb::IsStoredTableScan(Relation &rel) {
-	switch (rel.type) {
-	case RelationType::PROJECTION_RELATION: {
+bool duckdb::IsStoredTableScan(RRelation &rel) {
+	switch (rel.kind) {
+	case RRelationKind::PROJECTION_RELATION: {
 		// Bare column references only: anything computed could differ between executions
-		auto &projection = rel.Cast<ProjectionRelation>();
+		auto &projection = static_cast<RProjectionRelation &>(rel);
 		for (auto &expression : projection.expressions) {
 			if (expression->GetExpressionClass() != ExpressionClass::COLUMN_REF) {
 				return false;
@@ -546,8 +549,8 @@ bool duckdb::IsStoredTableScan(Relation &rel) {
 		}
 		return IsStoredTableScan(*projection.child);
 	}
-	case RelationType::TABLE_RELATION: {
-		auto &table = rel.Cast<TableRelation>();
+	case RRelationKind::TABLE_RELATION: {
+		auto &table = static_cast<RTableRelation &>(rel);
 		// A generated column is an expression too
 		for (auto &column : table.description->columns) {
 			if (column.Generated()) {
@@ -556,7 +559,7 @@ bool duckdb::IsStoredTableScan(Relation &rel) {
 		}
 		// A table stored by DuckDB, which scans in insertion order;
 		// a table of another catalog, such as a remote database's, makes no such promise
-		auto &context = *rel.context->GetContext();
+		auto &context = *rel.GetContext();
 		if (!Settings::Get<PreserveInsertionOrderSetting>(context)) {
 			return false;
 		}
@@ -1129,7 +1132,7 @@ bool RelToAltrep::QueriesOn(SEXP x, ClientContext &context) {
 	if (!wrapper || !wrapper->WouldQuery()) {
 		return false;
 	}
-	return wrapper->rel->rel->context->TryGetContext().get() == &context;
+	return wrapper->rel->rel->context.lock().get() == &context;
 }
 
 #if defined(R_HAS_ALTLIST)
@@ -1205,7 +1208,7 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 	auto relation_wrapper = make_shared_ptr<AltrepRelationWrapper>(rel, DoubleToSize(n_rows), DoubleToSize(n_cells));
 	// A relation that reads a stored table is fetched column by column (#2891);
 	// every other relation is materialized as a whole on first access
-	relation_wrapper->column_wise = drel->context && HasUniqueColumnNames(*drel) && IsStoredTableScan(*drel);
+	relation_wrapper->column_wise = !drel->context.expired() && HasUniqueColumnNames(*drel) && IsStoredTableScan(*drel);
 
 	// Row names
 	cpp11::sexp row_names_sexp = RelToAltrep::MakeRowNamesSexp(relation_wrapper);
@@ -1220,12 +1223,9 @@ SEXP rapi_rel_to_altrep_impl(duckdb::shared_ptr<AltrepRelationWrapper> relation_
 	}
 
 	// Capture the session's TimeZone setting so TIMESTAMP WITH TIME ZONE columns
-	// can be decorated with the matching `tzone` attribute. The session settings
-	// can only be queried while the connection is live, which it is here.
+	// can be decorated with the matching `tzone` attribute.
 	ConvertOpts local_convert_opts = rel->convert_opts;
-	if (drel->context) {
-		local_convert_opts.session_time_zone = drel->context->GetContext()->GetClientProperties().time_zone;
-	}
+	local_convert_opts.session_time_zone = drel->GetContext()->GetClientProperties().time_zone;
 
 	return rapi_rel_to_altrep_impl(relation_wrapper, row_names_sexp, types, local_convert_opts);
 }
