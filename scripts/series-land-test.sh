@@ -39,8 +39,8 @@
 #      and names the stamp a worktree holds of an alpha the pointer has moved
 #      past, with the checkout that drops it; it succeeds again on its own stamp, warns on an engine not the source's, and
 #      writes nothing for a release engine, whose bump needs no stamp; a rebuild
-#      drops a bump added to the kept worktree. Step 6's tag block, read off
-#      the series-land skill, runs the tag commands printed with the
+#      drops a bump added to the kept worktree. A tag block, as a
+#      maintainer pastes it, runs the tag commands printed with the
 #      fast-forward only on READY; run once `main` has the bump, they tag it
 #      `duckdb <version>`, with NEWS.md's section for it below where there is,
 #      its heading bare or dated; run before that, even with a tag named like
@@ -381,13 +381,22 @@ ENGINE_FULL=dddd444000000000000000000000000000000000
 write_bump() { # <version> [<engine record>]
   sed -i "/^Config\/duckdb\/upstream:/d; s/^Version: .*/Version: $1\nConfig\/duckdb\/upstream: ${2-$ENGINE_FULL}/" DESCRIPTION
 }
-# Step 6's tag block, read off the skill by the marker above it and set to this
-# fixture's series rather than `main`: it reruns --status and runs the tag
-# commands printed there only on READY, so its gate and its sed are the skill's
-# own, and a drift between the skill and --status fails here.
-awk '$0 == "<!-- series-land: tag block -->" {m = 1; next} m && $0 == "```sh" {f = 1; next} f && $0 == "```" {exit} f' \
-  "$HERE/../.claude/skills/series-land/SKILL.md" | sed 's/^S=main /S=v2.0-x /' > "$SCRATCH/tag-block"
-is "step 6's tag block is read off the skill, for this series" "$(grep -c '^S=v2.0-x ' "$SCRATCH/tag-block")" 1
+# A tag block for this fixture's series, as a maintainer pastes it: it reruns
+# --status and runs the tag commands printed there only on READY. The series-land
+# skill tags with scripts/series-land-push.sh instead, which
+# scripts/series-land-push-test.sh checks; this keeps the printed commands honest.
+cat > "$SCRATCH/tag-block" <<'BLOCK'
+( set -eu
+S=v2.0-x
+B=$(scripts/series-land.sh "$S" --target)
+[[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
+out=$(scripts/series-land.sh "$S" --status) || true
+printf '%s\n' "$out"
+grep -q '^READY' <<<"$out" || { echo "not READY" >&2; exit 1; }
+bash -c "$(sed -n '/^Then tag it on /,$s/^  //p' <<<"$out")"
+git tag -n3 --points-at "refs/remotes/upstream/$B"
+)
+BLOCK
 # Runs it as a maintainer pastes it, and prints whether it failed, then the
 # tag's target and message upstream, or that upstream is as it was.
 tag_as_printed() { # <tag>

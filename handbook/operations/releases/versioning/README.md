@@ -99,8 +99,9 @@ Its message is the subject `duckdb <version>`, or `duckdb <version>.9900` with t
 then the section `NEWS.md` has for `<version>`, its heading matched up to the version so that a date after it is left out,
 and nothing more where it has none,
 the shape the `v1.5.6.90xx` tags have.
-`scripts/series-land.sh --status` prints the commands once the landing is ready,
-and [`series-land`](/.claude/skills/series-land/SKILL.md), step 6, runs them as printed.
+[`scripts/series-land-push.sh`](/scripts/series-land-push.sh) creates it once both repositories have the landing
+and pushes it to both ([`series-land`](/.claude/skills/series-land/SKILL.md), step 6);
+`scripts/series-land.sh --status` prints equivalent commands for the canonical repository alone.
 The release takes `v<version>` itself when it is published, in the same shape,
 by the CRAN submission ([`cran/`](/handbook/operations/releases/cran/README.md))
 or by hand on a line that does not ship to CRAN ([`process/`](/handbook/operations/releases/process/README.md), step 5),

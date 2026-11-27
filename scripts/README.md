@@ -182,7 +182,11 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`series-fold.sh`](series-fold.sh) | Fold fixes into the commits that introduced their defects, and replay everything above them: the landing commits of an iteration (.claude/skills/series-land/... |
 | [`series-forward-build-test.sh`](series-forward-build-test.sh) | Check the forward replay, offline, against a synthetic base series and seed built here: no network, no fixtures on disk. |
 | [`series-forward-build.sh`](series-forward-build.sh) | Populate `<S>-fwd-build`: replay every vendor commit of the old `<S>-dev`, and then of the old `<S>-build` above it, onto HEAD, which must be the freshly fla... |
+| [`series-freeze-test.sh`](series-freeze-test.sh) | Check scripts/series-freeze.sh and scripts/series-unfreeze.sh, offline, against a stand-in for `gh api` that keeps each repository's rulesets in a file: no n... |
+| [`series-freeze.sh`](series-freeze.sh) | Freeze a canonical branch for a landing, or lift the freeze, on the canonical repository and the fork: the ruleset `freeze <B>` with no bypass list stops eve... |
 | [`series-glue.sh`](series-glue.sh) | Every R-side glue adaptation a series carries, in one read. |
+| [`series-land-push-test.sh`](series-land-push-test.sh) | Check scripts/series-land-push.sh, offline, in a checkout whose remotes `origin` and `upstream` name the fork and the canonical repository on GitHub while gi... |
+| [`series-land-push.sh`](series-land-push.sh) | Fast-forward a READY landing's branch on `upstream` and `origin`, and tag it from NEWS.md, with one command run by the maintainer (.claude/skills/series-land... |
 | [`series-land-test.sh`](series-land-test.sh) | Check the landing of a series on `main`, offline, against a synthetic fork, canonical repository and clone built here: no network, no fixtures on disk. |
 | [`series-land.sh`](series-land.sh) | Land a series on `main`: build `<L>-land-dev`, every vendor commit of the series replayed without its flavor onto the `main` it will fast-forward (.claude/sk... |
 | [`series-learned.sh`](series-learned.sh) | What a series' `-dev` learned beyond its buffer: for every vendor commit, the fix the loop folded into it that its `-build` twin does not carry. |
@@ -197,6 +201,7 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`series-stamp-test.sh`](series-stamp-test.sh) | Check the version vendoring stamps the engine with, offline: series_upstream_version() and series_generate_tree() in scripts/series-config.sh, against a synt... |
 | [`series-tests-test.sh`](series-tests-test.sh) | Check how scripts/series-tests.sh reads a tree's tests against `main`'s, offline, against a synthetic repository built here: no network, no fixtures. |
 | [`series-tests.sh`](series-tests.sh) | Which of `main`'s tests does a tree stop running, and which does it change? |
+| [`series-unfreeze.sh`](series-unfreeze.sh) | Lift the freeze of a canonical branch on the canonical repository and the fork, before the landing's push (.claude/skills/series-land/SKILL.md, step 6): scri... |
 | [`series-vendor-test.sh`](series-vendor-test.sh) | Check scripts/series-vendor.sh offline, against a synthetic series built here: no network, no fixtures on disk. |
 | [`series-vendor.sh`](series-vendor.sh) | The vendor strand of a series, `<S>-vendor`: pure vendoring, one commit per upstream commit, vendored once and carried forward by a rebase (handbook/branches... |
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Which of `main`'s tests does a tree stop running, and which does it change?
 #
 # Compares `tests/` of two trees and sorts every difference into what takes a
@@ -58,6 +58,11 @@
 # Exit status: 0 when nothing is lost, 1 when something is, 2 on a usage or
 # lookup error.
 
+# inherit_errexit needs bash 4.4, and macOS's /bin/bash is 3.2: say so rather than fail on the shopt.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: $(basename "$0") needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+  exit 1
+fi
 set -euo pipefail
 # A failure inside `$(...)` stops the run too, rather than reading as empty.
 shopt -s inherit_errexit

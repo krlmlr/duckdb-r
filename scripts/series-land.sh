@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Land a series on `main`: build `<L>-land-dev`, every vendor commit of the
 # series replayed without its flavor onto the `main` it will fast-forward
 # (.claude/skills/series-land/SKILL.md).
@@ -146,6 +146,11 @@
 # --remote and --canonical are spelled the same in every scripts/series-*.sh;
 # see the shared contract in handbook/operations/vendoring/series-loop/README.md.
 
+# inherit_errexit needs bash 4.4, and macOS's /bin/bash is 3.2: say so rather than fail on the shopt.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "Error: $(basename "$0") needs bash 4.4 or newer, not ${BASH_VERSION:-this shell}; on macOS, install it with Homebrew" >&2
+  exit 1
+fi
 set -euo pipefail
 # A failure inside `$(...)` stops the run too, rather than reading as empty.
 shopt -s inherit_errexit
