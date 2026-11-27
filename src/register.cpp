@@ -62,6 +62,21 @@ using namespace duckdb;
 		parameter_map["experimental"] =
 		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
 		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
+		parameter_map["timestamptz"] = Value::BOOLEAN(convert_opts.posixct == ConvertOpts::PosixctType::TIMESTAMPTZ);
+		if (!convert_opts.posixct_naive_columns.empty()) {
+			vector<Value> naive_columns;
+			for (auto &column : convert_opts.posixct_naive_columns) {
+				naive_columns.push_back(Value(column));
+			}
+			parameter_map["timestamp_columns"] = Value::LIST(LogicalType::VARCHAR, std::move(naive_columns));
+		}
+		if (!convert_opts.posixct_tz_columns.empty()) {
+			vector<Value> tz_columns;
+			for (auto &column : convert_opts.posixct_tz_columns) {
+				tz_columns.push_back(Value(column));
+			}
+			parameter_map["timestamptz_columns"] = Value::LIST(LogicalType::VARCHAR, std::move(tz_columns));
+		}
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
 		    ->CreateView(Identifier(name), overwrite, true);

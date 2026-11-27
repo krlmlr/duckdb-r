@@ -42,6 +42,7 @@ static data_ptr_t GetColDataPtr(const RType &rtype, SEXP coldata) {
 	case RType::STRING:
 		return ReadOnlyDataPtr(DATAPTR_RO(coldata));
 	case RType::TIMESTAMP:
+	case RType::TIMESTAMP_TZ:
 		return (data_ptr_t)NUMERIC_POINTER(coldata);
 	case RType::INTERVAL_SECONDS:
 	case RType::INTERVAL_MINUTES:
@@ -219,8 +220,8 @@ static void AppendColumnSegment(SRC *source_data, idx_t sexp_offset, Vector &res
 	}
 }
 
-static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t sexp_offset, Vector &result,
-                                    idx_t count) {
+static void AppendListColumnSegment(const RType &rtype, bool timestamptz, SEXP *source_data, idx_t sexp_offset,
+                                    Vector &result, idx_t count) {
 	source_data += sexp_offset;
 	auto &result_mask = FlatVector::ValidityMutable(result);
 	auto child_rtype = rtype.GetListChildType();
@@ -233,7 +234,7 @@ static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t
 			auto len = RApiTypes::GetVecSize(child_rtype, val);
 			result_data[i].offset = ListVector::GetListSize(result);
 			for (R_len_t child_idx = 0; child_idx < len; ++child_idx) {
-				auto child_item = RApiTypes::SexpToValue(val, child_idx);
+				auto child_item = RApiTypes::SexpToValue(val, child_idx, true, timestamptz);
 				ListVector::PushBack(result, child_item);
 			}
 			result_data[i].length = len;
@@ -244,8 +245,8 @@ static void AppendListColumnSegment(const RType &rtype, SEXP *source_data, idx_t
 // Scan path for the `map = "list_of"` opt-in: each non-NULL cell is either a
 // `data.frame(key, value)` or a named list, and produces a `STRUCT(key, value)`
 // row per entry.
-static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_data, idx_t sexp_offset, Vector &result,
-                                              idx_t count) {
+static void AppendMapEntriesListColumnSegment(const RType &rtype, bool timestamptz, SEXP *source_data,
+                                              idx_t sexp_offset, Vector &result, idx_t count) {
 	source_data += sexp_offset;
 	auto &result_mask = FlatVector::ValidityMutable(result);
 	auto child_rtype = rtype.GetListChildType();
@@ -267,8 +268,8 @@ static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_d
 			len = (R_len_t)Rf_xlength(key_col);
 			for (R_len_t j = 0; j < len; ++j) {
 				child_list_t<Value> kv;
-				kv.push_back({"key", RApiTypes::SexpToValue(key_col, j)});
-				kv.push_back({"value", RApiTypes::SexpToValue(value_col, j)});
+				kv.push_back({"key", RApiTypes::SexpToValue(key_col, j, true, timestamptz)});
+				kv.push_back({"value", RApiTypes::SexpToValue(value_col, j, true, timestamptz)});
 				ListVector::PushBack(result, Value::STRUCT(std::move(kv)));
 			}
 		} else {
@@ -283,7 +284,7 @@ static void AppendMapEntriesListColumnSegment(const RType &rtype, SEXP *source_d
 					// A NULL or empty value writes a SQL NULL of the value type (handbook/usage/types/README.md)
 					kv.push_back({"value", Value()});
 				} else {
-					kv.push_back({"value", RApiTypes::SexpToValue(value_sexp, 0)});
+					kv.push_back({"value", RApiTypes::SexpToValue(value_sexp, 0, true, timestamptz)});
 				}
 				ListVector::PushBack(result, Value::STRUCT(std::move(kv)));
 			}
@@ -360,11 +361,11 @@ static void AppendMatrixColumnSegment(const RType &rtype, bool experimental, SEX
 	}
 }
 
-static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_ptr_t coldata_ptr, idx_t sexp_offset,
-                                   Vector &v, idx_t this_count);
+static void AppendAnyColumnSegment(const RType &rtype, bool experimental, bool timestamptz, data_ptr_t coldata_ptr,
+                                   idx_t sexp_offset, Vector &v, idx_t this_count);
 
-static void AppendStructColumnSegment(const RType &rtype, bool experimental, SEXP source_data, idx_t sexp_offset,
-                                      Vector &result, idx_t count) {
+static void AppendStructColumnSegment(const RType &rtype, bool experimental, bool timestamptz, SEXP source_data,
+                                      idx_t sexp_offset, Vector &result, idx_t count) {
 	// No NULL values for STRUCTs.
 	auto &child_entries = StructVector::GetEntries(result);
 	auto child_rtypes = rtype.GetStructChildTypes();
@@ -372,12 +373,13 @@ static void AppendStructColumnSegment(const RType &rtype, bool experimental, SEX
 		auto coldata = VECTOR_ELT(source_data, i);
 		auto const &child_rtype = child_rtypes[i].second;
 		auto coldata_ptr = GetColDataPtr(child_rtype, coldata);
-		AppendAnyColumnSegment(child_rtype, experimental, coldata_ptr, sexp_offset, child_entries[i], count);
+		AppendAnyColumnSegment(child_rtype, experimental, timestamptz, coldata_ptr, sexp_offset, child_entries[i],
+		                       count);
 	}
 }
 
-static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_ptr_t coldata_ptr, idx_t sexp_offset,
-                                   Vector &v, idx_t this_count) {
+static void AppendAnyColumnSegment(const RType &rtype, bool experimental, bool timestamptz, data_ptr_t coldata_ptr,
+                                   idx_t sexp_offset, Vector &v, idx_t this_count) {
 	switch (rtype.id()) {
 	case RType::LOGICAL: {
 		auto data_ptr = (int *)coldata_ptr;
@@ -433,7 +435,10 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 		}
 		break;
 	}
-	case RType::TIMESTAMP: {
+	case RType::TIMESTAMP:
+	case RType::TIMESTAMP_TZ: {
+		// Both carry microseconds since the UTC epoch in an INT64 payload,
+		// so only the declared type differs
 		auto data_ptr = (double *)coldata_ptr;
 		AppendColumnSegment<double, timestamp_t, RTimestampType>(data_ptr, sexp_offset, v, this_count);
 		break;
@@ -511,7 +516,7 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 	case RTypeId::LIST: {
 		auto data_ptr = (SEXP *)coldata_ptr;
-		AppendListColumnSegment(rtype, data_ptr, sexp_offset, v, this_count);
+		AppendListColumnSegment(rtype, timestamptz, data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	case RTypeId::MATRIX: {
@@ -521,7 +526,7 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 	case RTypeId::STRUCT: {
 		auto data_ptr = (SEXP)coldata_ptr;
-		AppendStructColumnSegment(rtype, experimental, data_ptr, sexp_offset, v, this_count);
+		AppendStructColumnSegment(rtype, experimental, timestamptz, data_ptr, sexp_offset, v, this_count);
 		break;
 	}
 	default:
@@ -529,8 +534,9 @@ static void AppendAnyColumnSegment(const RType &rtype, bool experimental, data_p
 	}
 }
 
+// Options for the relational writers, naive like the rest of the relational path (handbook/usage/relational/README.md)
 identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
-	const bool integer64 = false, experimental = false;
+	const bool integer64 = false, experimental = false, timestamptz = false;
 	identifier_map_t<vector<Value>> output;
 
 	auto names = input_sexps.names();
@@ -539,11 +545,11 @@ identifier_map_t<vector<Value>> ListToVectorOfValue(list input_sexps) {
 	}
 	R_xlen_t input_idx = 0;
 	for (sexp parameter_sexp : input_sexps) {
-		auto rtype = RApiTypes::DetectRType(parameter_sexp, integer64);
+		auto rtype = RApiTypes::DetectRType(parameter_sexp, integer64, timestamptz);
 		auto coldata = GetColDataPtr(rtype, parameter_sexp);
 		auto size = RApiTypes::GetVecSize(parameter_sexp, integer64);
 		Vector v(RApiTypes::LogicalTypeFromRType(rtype, experimental));
-		AppendAnyColumnSegment(rtype, experimental, coldata, 0, v, size);
+		AppendAnyColumnSegment(rtype, experimental, timestamptz, coldata, 0, v, size);
 
 		vector<Value> vv;
 		vv.reserve(size);
@@ -582,6 +588,28 @@ static bool get_map_list_of_param(named_argument_map_t &named_parameters) {
 	return false;
 }
 
+static bool get_timestamptz_param(named_argument_map_t &named_parameters) {
+	auto entry = named_parameters.find("timestamptz");
+	if (entry != named_parameters.end()) {
+		return BooleanValue::Get(entry->second);
+	}
+	return false;
+}
+
+// The columns named by the VARCHAR list parameter `name`:
+// `timestamp_columns`, whose POSIXct scans as TIMESTAMP whatever `timestamptz` says,
+// or `timestamptz_columns`, whose POSIXct scans as TIMESTAMPTZ whatever it says
+static unordered_set<string> get_columns_param(named_argument_map_t &named_parameters, const char *name) {
+	unordered_set<string> result;
+	auto entry = named_parameters.find(name);
+	if (entry != named_parameters.end() && !entry->second.IsNull()) {
+		for (auto &column : ListValue::GetChildren(entry->second)) {
+			result.insert(StringValue::Get(column));
+		}
+	}
+	return result;
+}
+
 // Returns true when `coldata` is a list column whose non-NULL cells are all
 // named lists (and not data frames or blobs) that the caller has opted into
 // scanning as MAP entries via `dbConnect(map = "list_of")`. The cells'
@@ -589,7 +617,7 @@ static bool get_map_list_of_param(named_argument_map_t &named_parameters) {
 //
 // On success, `value_rtype` is set to the common value RType and the column's
 // rtype should be overridden to `LIST(STRUCT(key = STRING, value = V))`.
-static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, RType &value_rtype) {
+static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, bool timestamptz, RType &value_rtype) {
 	if (TYPEOF(coldata) != VECSXP) {
 		return false;
 	}
@@ -625,7 +653,7 @@ static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, RType &value_
 			if (v_j == R_NilValue) {
 				continue;
 			}
-			RType t = RApiTypes::DetectRType(v_j, integer64);
+			RType t = RApiTypes::DetectRType(v_j, integer64, timestamptz);
 			if (!common_set) {
 				value_rtype = t;
 				common_set = true;
@@ -647,8 +675,10 @@ static bool DetectNamedListMapColumn(SEXP coldata, bool integer64, RType &value_
 
 struct DataFrameScanBindData : public TableFunctionData {
 	DataFrameScanBindData(SEXP df_p, idx_t row_count_p, vector<RType> &rtypes_p, vector<data_ptr_t> &dataptrs_p,
-	                      vector<bool> &named_list_map_p, named_argument_map_t &named_parameters)
-	    : df(df_p), row_count(row_count_p), rtypes(rtypes_p), data_ptrs(dataptrs_p), named_list_map(named_list_map_p) {
+	                      vector<bool> &named_list_map_p, vector<bool> &timestamptz_p,
+	                      named_argument_map_t &named_parameters)
+	    : df(df_p), row_count(row_count_p), rtypes(rtypes_p), data_ptrs(dataptrs_p), named_list_map(named_list_map_p),
+	      timestamptz(timestamptz_p) {
 		integer64 = get_integer64_param(named_parameters);
 		experimental = get_experimental_param(named_parameters);
 	}
@@ -657,6 +687,8 @@ struct DataFrameScanBindData : public TableFunctionData {
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
+	// Per column, as `timestamp_columns` and `timestamptz_columns` override `timestamptz` for a column
+	vector<bool> timestamptz;
 	idx_t rows_per_task = 1000000;
 	bool integer64 = false;
 	bool experimental = false;
@@ -695,11 +727,15 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 	auto integer64 = get_integer64_param(input.named_parameters);
 	auto experimental = get_experimental_param(input.named_parameters);
 	auto map_list_of = get_map_list_of_param(input.named_parameters);
+	auto scan_timestamptz = get_timestamptz_param(input.named_parameters);
+	auto timestamp_columns = get_columns_param(input.named_parameters, "timestamp_columns");
+	auto timestamptz_columns = get_columns_param(input.named_parameters, "timestamptz_columns");
 
 	auto df_names = df.names();
 	vector<RType> rtypes;
 	vector<data_ptr_t> data_ptrs;
 	vector<bool> named_list_map;
+	vector<bool> timestamptz_by_column;
 
 	// Touch the columns on R's thread only, the one thread that may run R code.
 	// A task binds on any thread, and there reads only what is in memory already.
@@ -726,12 +762,16 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		if (!error.empty()) {
 			throw InvalidInputException(error);
 		}
-		auto rtype = RApiTypes::DetectRType(coldata, integer64);
+		const string col_name(df_names[col_idx]);
+		const bool timestamptz =
+		    timestamptz_columns.count(col_name) > 0 || (scan_timestamptz && timestamp_columns.count(col_name) == 0);
+		timestamptz_by_column.push_back(timestamptz);
+		auto rtype = RApiTypes::DetectRType(coldata, integer64, timestamptz);
 
 		bool is_named_list_map = false;
 		if (map_list_of && (rtype.id() == RTypeId::LIST || rtype.id() == RTypeId::LIST_OF_NULLS)) {
 			RType value_rtype;
-			if (DetectNamedListMapColumn(coldata, integer64, value_rtype)) {
+			if (DetectNamedListMapColumn(coldata, integer64, timestamptz, value_rtype)) {
 				child_list_t<RType> struct_children;
 				struct_children.push_back({"key", RType(RTypeId::STRING)});
 				struct_children.push_back({"value", value_rtype});
@@ -747,7 +787,8 @@ static duckdb::unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context
 		data_ptrs.push_back(GetColDataPtr(rtype, coldata));
 	}
 	auto row_count = RApiTypes::GetVecSize(rtypes[0], VECTOR_ELT(df, 0));
-	return make_uniq<DataFrameScanBindData>(df, row_count, rtypes, data_ptrs, named_list_map, input.named_parameters);
+	return make_uniq<DataFrameScanBindData>(df, row_count, rtypes, data_ptrs, named_list_map, timestamptz_by_column,
+	                                        input.named_parameters);
 }
 
 static idx_t DataFrameScanMaxThreads(ClientContext &context, const FunctionData *bind_data_p) {
@@ -824,9 +865,11 @@ static void DataFrameScanFunc(ClientContext &context, TableFunctionInput &data, 
 		auto coldata_ptr = bind_data.data_ptrs[src_df_col_idx];
 		auto rtype = bind_data.rtypes[src_df_col_idx];
 		if (bind_data.named_list_map[src_df_col_idx]) {
-			AppendMapEntriesListColumnSegment(rtype, (SEXP *)coldata_ptr, sexp_offset, v, this_count);
+			AppendMapEntriesListColumnSegment(rtype, bind_data.timestamptz[src_df_col_idx], (SEXP *)coldata_ptr,
+			                                  sexp_offset, v, this_count);
 		} else {
-			AppendAnyColumnSegment(rtype, bind_data.experimental, coldata_ptr, sexp_offset, v, this_count);
+			AppendAnyColumnSegment(rtype, bind_data.experimental, bind_data.timestamptz[src_df_col_idx], coldata_ptr,
+			                       sexp_offset, v, this_count);
 		}
 	}
 	operator_data.position += this_count;
@@ -851,7 +894,12 @@ DataFrameScanFunction::DataFrameScanFunction()
 	GetSignature()
 	    .AddKeywordOnly("integer64", LogicalType::BOOLEAN, Value::BOOLEAN(false))
 	    .AddKeywordOnly("experimental", LogicalType::BOOLEAN, Value::BOOLEAN(false))
-	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	    .AddKeywordOnly("map_list_of", LogicalType::BOOLEAN, Value::BOOLEAN(false))
+	    .AddKeywordOnly("timestamptz", LogicalType::BOOLEAN, Value::BOOLEAN(false))
+	    .AddKeywordOnly("timestamp_columns", LogicalType::LIST(LogicalType::VARCHAR),
+	                    Value::LIST(LogicalType::VARCHAR, vector<Value>()))
+	    .AddKeywordOnly("timestamptz_columns", LogicalType::LIST(LogicalType::VARCHAR),
+	                    Value::LIST(LogicalType::VARCHAR, vector<Value>()));
 	projection_pushdown = true;
 	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }

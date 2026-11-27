@@ -21,6 +21,7 @@
 #' **Writing.**
 #' [dbWriteTable()] and [duckdb_register()] take a column's type from its R class,
 #' and `field.types` casts that column to the type it names, from any value that casts.
+#' `dbConnect(posixct = )` chooses the type a `POSIXct` writes, as a column and as a parameter, with default `"timestamptz"`.
 #' [dbAppendTable()] casts to the type of the existing column, and a parameter (`params =`) binds by its R class, cast by the query.
 #' A `character` column holding a value's text form writes every scalar type through `field.types`, because DuckDB parses the text it prints.
 #' Arrow, registered with [duckdb_register_arrow()], writes the types no R class does.
@@ -67,6 +68,7 @@
 #' [timestamp](https://duckdb.org/docs/current/sql/data_types/timestamp) and [interval](https://duckdb.org/docs/current/sql/data_types/interval) types:
 #'
 #' * **`DATE`** reads as `Date`, and a `Date` writes it, stored as double or as integer.
+#'   A `POSIXct` that `dbAppendTable()` or `field.types` writes into it, or into a `TIME`, keeps its UTC date or time of day whatever the session zone.
 #' * **`TIME`** reads as `difftime` in seconds.
 #'   Its text writes it through `field.types`, and so does Arrow (see [duckdb_types_arrow]).
 #' * **`TIME_NS`** reads through Arrow, and to the microsecond through a cast to `TIME` in the query.
@@ -75,12 +77,12 @@
 #'   The offset it drops is a [limitation](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/types/README.md#limitations).
 #'   Its text writes it.
 #' * **`TIMESTAMP_S`, `TIMESTAMP_MS`, `TIMESTAMP`** (`DATETIME`) read as `POSIXct`.
-#'   `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even, and `field.types` names the other precisions.
+#'   Under `posixct = "timestamp"`, `POSIXct` writes `TIMESTAMP`, the instant in UTC to the nearest microsecond, a tie to even.
+#'   Under either setting, `field.types` names these precisions, and `dbAppendTable()` writes into such a column, with that same UTC wall clock whatever the session zone.
 #' * **`TIMESTAMP_NS`** reads as `POSIXct`.
 #'   `POSIXct` writes it to the microsecond through `field.types`, and Arrow writes it directly.
 #' * **`TIMESTAMPTZ`** (`TIMESTAMP WITH TIME ZONE`) reads as `POSIXct`.
-#'   `POSIXct` writes the plain `TIMESTAMP` of the same instant; `field.types` makes it `TIMESTAMPTZ`,
-#'   and Arrow writes it directly.
+#'   `POSIXct` writes it, the instant it names, under the default `posixct = "timestamptz"`, and Arrow writes it directly.
 #' * **`INTERVAL`** reads as `difftime` in seconds, counting a month as 30 days and a day as 24 hours.
 #'   A `difftime` in any unit, or an `hms`, writes `INTERVAL`, to the nearest microsecond, a tie to even.
 #'
@@ -159,7 +161,7 @@
 #' [`experiments/2026-09-27-review-limits/`](https://github.com/duckdb/duckdb-r/blob/main/experiments/2026-09-27-review-limits/README.md),
 #' [`experiments/2026-09-28-type-rereview/`](https://github.com/duckdb/duckdb-r/blob/main/experiments/2026-09-28-type-rereview/README.md)
 #' or, for geometry route by route, [`experiments/2026-08-09-spatial-interop/`](https://github.com/duckdb/duckdb-r/blob/main/experiments/2026-08-09-spatial-interop/README.md).
-#' Which zone labels a timestamp is documented in the handbook's [`timestamps/`](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/timestamps/README.md).
+#' Which zone labels a timestamp, and which type a `POSIXct` writes, is documented in the handbook's [`timestamps/`](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/timestamps/README.md).
 #'
 #' What `expr_constant(NA)` builds in the relational API is documented in the handbook's [`relational/`](https://github.com/duckdb/duckdb-r/blob/main/handbook/usage/relational/README.md).
 #'

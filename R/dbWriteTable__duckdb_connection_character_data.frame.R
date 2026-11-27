@@ -68,9 +68,23 @@ dbWriteTable__duckdb_connection_character_data.frame <- function(
   table_name <- dbQuoteIdentifier(conn, name)
 
   if (!dbExistsTable(conn, name)) {
+    # Auto-fill MAP column types from `dbDataType()`,
+    # so that `vctrs::list_of`-tagged columns produced by `dbConnect(map = "list_of")` round-trip back into MAP columns.
+    field.types <- duckdb_augment_field_types_for_map(conn, value, field.types)
+
     view_name <- sprintf("_duckdb_write_view_%s", duckdb_random_string())
     on.exit(duckdb_unregister(conn, view_name))
-    duckdb_register(conn, view_name, value)
+    resolved_types <- duckdb_resolve_field_types(conn, value, field.types)
+    duckdb_register_impl(
+      conn,
+      view_name,
+      value,
+      posixct_naive_columns = duckdb_posixct_naive_columns(
+        value,
+        resolved_types
+      ),
+      posixct_tz_columns = duckdb_posixct_tz_columns(value, resolved_types)
+    )
 
     temp_str <- ""
     if (temporary) {
@@ -84,10 +98,6 @@ dbWriteTable__duckdb_connection_character_data.frame <- function(
         view_name
       ))
     )$column_name
-
-    # Auto-fill MAP column types from `dbDataType()`,
-    # so that `vctrs::list_of`-tagged columns produced by `dbConnect(map = "list_of")` round-trip back into MAP columns.
-    field.types <- duckdb_augment_field_types_for_map(conn, value, field.types)
 
     cols <- character()
     col_idx <- 1
@@ -160,6 +170,35 @@ duckdb_augment_field_types_for_map <- function(conn, value, field.types) {
     }
   }
   field.types
+}
+
+# The types that `field.types` names for the columns of `value` that carry a `POSIXct`,
+# spelled as `typeof()` spells them, so that `DATETIME` or `timestamp` read as `TIMESTAMP`.
+# One query resolves them all, and none runs when no such column has an entry.
+duckdb_resolve_field_types <- function(conn, value, field.types) {
+  col_names <- intersect(names(field.types), names(value))
+  col_names <- col_names[vapply(
+    col_names,
+    function(col_name) duckdb_has_posixct(value[[col_name]]),
+    logical(1)
+  )]
+  if (length(col_names) == 0) {
+    return(character())
+  }
+  types <- dbGetQuery(
+    conn,
+    SQL(paste0(
+      "SELECT ",
+      paste0(
+        "typeof(NULL::",
+        field.types[col_names],
+        ") AS ",
+        dbQuoteIdentifier(conn, col_names),
+        collapse = ", "
+      )
+    ))
+  )
+  structure(unlist(types, use.names = FALSE), names = col_names)
 }
 
 #' @rdname duckdb_connection-class

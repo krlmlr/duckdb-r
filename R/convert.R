@@ -6,6 +6,7 @@ duckdb_convert_opts <- function(
   array = "none",
   geometry = "blob",
   map = "data.frame",
+  posixct = "timestamptz",
   call = parent.frame()
 ) {
   tz_out_convert <- match.arg(tz_out_convert)
@@ -38,6 +39,10 @@ duckdb_convert_opts <- function(
     abort(paste0("Unsupported map configuration: ", map), call = call)
   }
 
+  if (!posixct %in% c("timestamp", "timestamptz")) {
+    abort(paste0("Unsupported posixct configuration: ", posixct), call = call)
+  }
+
   duckdb_convert_opts_impl(
     timezone_out = timezone_out,
     tz_out_convert = tz_out_convert,
@@ -45,11 +50,24 @@ duckdb_convert_opts <- function(
     array = array,
     geometry = geometry,
     map = map,
+    posixct = posixct,
     arrow = FALSE,
     allow_stream_result = FALSE,
     experimental = FALSE,
     strict_relational = TRUE
   )
+}
+
+# The type a `POSIXct` is sent as.
+# A `convert_opts` list without the field, such as one built by `duckdb_convert_opts_impl()` alone,
+# or with a missing value there,
+# falls back to the `dbConnect(posixct = )` default, as `ConvertOpts` does in C++.
+duckdb_posixct_type <- function(convert_opts) {
+  posixct <- convert_opts$posixct
+  if (length(posixct) != 1 || is.na(posixct)) {
+    return("timestamptz")
+  }
+  posixct
 }
 
 duckdb_convert_opts_impl <- function(
@@ -61,6 +79,7 @@ duckdb_convert_opts_impl <- function(
   array = NULL,
   geometry = NULL,
   map = NULL,
+  posixct = NULL,
   arrow = NULL,
   allow_stream_result = NULL,
   experimental = NULL,
@@ -83,6 +102,9 @@ duckdb_convert_opts_impl <- function(
   }
   if (!is.null(map)) {
     x$map <- map
+  }
+  if (!is.null(posixct)) {
+    x$posixct <- posixct
   }
   if (!is.null(arrow)) {
     x$arrow <- arrow

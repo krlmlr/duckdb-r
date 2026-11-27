@@ -17,6 +17,8 @@ struct ConvertOpts {
 
 	enum class MapShape { DATA_FRAME, LIST_OF };
 
+	enum class PosixctType { TIMESTAMP, TIMESTAMPTZ };
+
 	enum class ArrowConversion { DISABLED, ENABLED };
 
 	// Whether the engine may hand back a result that streams rather than one
@@ -36,6 +38,7 @@ struct ConvertOpts {
 	ArrayConversion array = ArrayConversion::NONE;
 	GeometryConversion geometry = GeometryConversion::BLOB;
 	MapShape map = MapShape::DATA_FRAME;
+	PosixctType posixct = PosixctType::TIMESTAMPTZ;
 	ArrowConversion arrow = ArrowConversion::DISABLED;
 	AllowStreamResult allow_stream_result = AllowStreamResult::DISABLED;
 	ExperimentalFeatures experimental = ExperimentalFeatures::DISABLED;
@@ -47,6 +50,14 @@ struct ConvertOpts {
 	// respected. Empty string means "fall back to `timezone_out`".
 	string session_time_zone = "";
 
+	// Columns of a registered data frame whose `POSIXct` scans as TIMESTAMP whatever `posixct` says,
+	// set by dbAppendTable() and dbWriteTable() for a column going into a naive temporal type.
+	// Handbook: handbook/usage/timestamps/README.md
+	vector<string> posixct_naive_columns;
+	// Columns whose `POSIXct` scans as TIMESTAMPTZ whatever `posixct` says,
+	// set by dbAppendTable() and dbWriteTable() for a column going into a zoned temporal type.
+	vector<string> posixct_tz_columns;
+
 	// Constructor with defaults
 	ConvertOpts() = default;
 
@@ -54,10 +65,10 @@ struct ConvertOpts {
 
 	// Constructor with parameters
 	ConvertOpts(std::string timezone_out_p, TzOutConvert tz_out_convert_p, BigIntType bigint_p, ArrayConversion array_p,
-	            GeometryConversion geometry_p, MapShape map_p, ArrowConversion arrow_p,
+	            GeometryConversion geometry_p, MapShape map_p, PosixctType posixct_p, ArrowConversion arrow_p,
 	            ExperimentalFeatures experimental_p, StrictRelational strict_relational_p)
 	    : timezone_out(std::move(timezone_out_p)), tz_out_convert(tz_out_convert_p), bigint(bigint_p), array(array_p),
-	      geometry(geometry_p), map(map_p), arrow(arrow_p), experimental(experimental_p),
+	      geometry(geometry_p), map(map_p), posixct(posixct_p), arrow(arrow_p), experimental(experimental_p),
 	      strict_relational(strict_relational_p) {
 	}
 };

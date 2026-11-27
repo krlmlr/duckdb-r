@@ -51,6 +51,14 @@ ConvertOpts::MapShape string_to_map_shape(const std::string &str) {
 	rapi_error_with_context("string_to_map_shape", "Invalid map value: " + str);
 }
 
+ConvertOpts::PosixctType string_to_posixct_type(const std::string &str) {
+	if (str == "timestamp")
+		return ConvertOpts::PosixctType::TIMESTAMP;
+	if (str == "timestamptz")
+		return ConvertOpts::PosixctType::TIMESTAMPTZ;
+	rapi_error_with_context("string_to_posixct_type", "Invalid posixct value: " + str);
+}
+
 ConvertOpts::ArrowConversion bool_to_arrow_conversion(bool use_arrow) {
 	return use_arrow ? ConvertOpts::ArrowConversion::ENABLED : ConvertOpts::ArrowConversion::DISABLED;
 }
@@ -91,6 +99,29 @@ ConvertOpts::ConvertOpts(cpp11::sexp options_nullable) {
 
 	// Extract map
 	map = string_to_map_shape(as_cpp<std::string>(options["map"]));
+
+	// Extract posixct; absent or NA, it keeps the documented default, as `duckdb_posixct_type()` does in R
+	SEXP posixct_sexp = options["posixct"];
+	if (posixct_sexp != R_NilValue && !(TYPEOF(posixct_sexp) == STRSXP && Rf_xlength(posixct_sexp) == 1 &&
+	                                    STRING_ELT(posixct_sexp, 0) == NA_STRING)) {
+		posixct = string_to_posixct_type(as_cpp<std::string>(posixct_sexp));
+	}
+
+	// Extract posixct_naive_columns; set only for a registration that dbAppendTable() or dbWriteTable() makes
+	SEXP posixct_naive_columns_sexp = options["posixct_naive_columns"];
+	if (posixct_naive_columns_sexp != R_NilValue) {
+		for (auto column : cpp11::strings(posixct_naive_columns_sexp)) {
+			posixct_naive_columns.push_back(std::string(column));
+		}
+	}
+
+	// Extract posixct_tz_columns, the counterpart for a column going into a zoned temporal type
+	SEXP posixct_tz_columns_sexp = options["posixct_tz_columns"];
+	if (posixct_tz_columns_sexp != R_NilValue) {
+		for (auto column : cpp11::strings(posixct_tz_columns_sexp)) {
+			posixct_tz_columns.push_back(std::string(column));
+		}
+	}
 
 	// Extract arrow
 	arrow = bool_to_arrow_conversion(as_cpp<bool>(options["arrow"]));
