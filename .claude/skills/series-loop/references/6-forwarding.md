@@ -69,9 +69,6 @@ scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepa
 # The rest is a session's, on the maintainer's request: the cutover pull
 # request, a review stack per strand, his sign-off on the SHA above, the swap.
 # See .claude/skills/series-cutover/SKILL.md.
-
-# A retired lineage moves the badge table, and the mirror rules with it.
-scripts/pull-config.sh --check
 ```
 
 `--remote` names whichever remote of that checkout carries `<S>-green`,

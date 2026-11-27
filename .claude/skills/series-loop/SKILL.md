@@ -88,16 +88,6 @@ and `scripts/series-converge.sh <S>`
 into what the forwarding explains and what it does not, stage 6).
 Judgement — repairs, review, vendoring — stays here.
 
-One more runs on an event rather than on every firing:
-`scripts/pull-config.sh`
-(read-only — the fork's mirror rules in [`.github/pull.yml`](/.github/pull.yml)
-against the badges that read them;
-prints the rule the file is missing, `--check` exits non-zero).
-Run it on the firing that sees a series change —
-one opened, one parked, one retired —
-and send what it prints to `main` as a PR, the way stage 7 sends one
-([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-
 ### 0. Setup
 
 Every branch, whole history, with tags, from both repositories:
@@ -342,9 +332,6 @@ scripts/series-converge.sh <S>
   # The rest is a session's, on the maintainer's request: the cutover pull
   # request, a review stack per strand, his sign-off on the SHA above, the swap.
   # See .claude/skills/series-cutover/SKILL.md.
-
-  # A retired lineage moves the badge table, and the mirror rules with it.
-  scripts/pull-config.sh --check
   ```
 
 * The routine does not run the swap, never passes `--confirm`, builds no review stack, opens no cutover pull request,
