@@ -109,12 +109,47 @@ def copy_logos():
 # delete, which is DuckDB's OVERRIDE_NEW_DELETE build option and not something
 # an R package may do to the process it is loaded into. The DuckDB Java client
 # excludes it from its vendoring for the same reason.
+#
+# This script is tooling the series loop syncs from main into every line, and
+# a line whose configure and Makevars.in predate the allocator choice cannot
+# compile the tree. There it is dropped, as it was before. A line can use it
+# when both of its own pieces are there: the `{{ JEMALLOC }}` placeholder in
+# src/Makevars.in, which includes Makevars.jemalloc, and the probe in
+# configure, which writes it -- either alone would ship a tree nothing
+# compiles.
 jemalloc_dir = 'third_party/jemalloc'
 jemalloc_skip = ['jemalloc_cpp.cpp']
+
+# jemalloc's BSD-2-Clause notice, which redistribution in source and binary
+# form must carry. Upstream's packaging copies sources and headers only, so the
+# vendored tree gets its LICENSE here, and inst/COPYRIGHTS -- which an
+# installed package keeps -- must quote it verbatim.
+jemalloc_license = 'LICENSE'
+copyrights_path = os.path.join('inst', 'COPYRIGHTS')
 
 
 def is_jemalloc(path):
     return (jemalloc_dir + '/') in (path.replace('\\', '/') + '/')
+
+
+def jemalloc_supported_here():
+    """Can this line's build use jemalloc? Its Makevars.in and configure say."""
+    with open(os.path.join('src', 'Makevars.in'), 'r', encoding='utf-8') as f:
+        placeholder = '{{ JEMALLOC }}' in f.read()
+    with open('configure', 'r', encoding='utf-8') as f:
+        probe = '-DDUCKDB_ENABLE_JEMALLOC' in f.read()
+    if placeholder != probe:
+        print("Dropping jemalloc: src/Makevars.in {} the placeholder, but configure {} the probe.".format(
+            'has' if placeholder else 'lacks', 'has' if probe else 'lacks'))
+    return placeholder and probe
+
+
+def drop_jemalloc(target_dir, source_list, include_list):
+    """Remove jemalloc from the tree and the lists, for a line without it."""
+    shutil.rmtree(os.path.join(target_dir, 'third_party', 'jemalloc'), ignore_errors=True)
+    source_list = [x for x in source_list if not is_jemalloc(x)]
+    include_list = [x for x in include_list if not is_jemalloc(x)]
+    return source_list, include_list, []
 
 
 def split_jemalloc(target_dir, source_list, include_list):
@@ -123,11 +158,16 @@ def split_jemalloc(target_dir, source_list, include_list):
     The sources are paths relative to the parent of target_dir.
     Returns (source_list, include_list, jemalloc_sources).
     """
+    if not jemalloc_supported_here():
+        return drop_jemalloc(target_dir, source_list, include_list)
+
     jemalloc_sources = [x for x in source_list if is_jemalloc(x)]
     for x in jemalloc_sources:
         if os.path.basename(x) in jemalloc_skip:
             os.remove(os.path.join(os.path.dirname(target_dir), x))
     jemalloc_sources = [x for x in jemalloc_sources if os.path.basename(x) not in jemalloc_skip]
+
+    copy_jemalloc_license(target_dir)
 
     # Every source the packaging emits is one jemalloc's own CMakeLists.txt
     # compiles -- but that is a property of the upstream tree and not a rule,
@@ -161,6 +201,56 @@ def read_jemalloc_roster():
         print("{} no longer declares JEMALLOC_C_FILES.".format(cmakelists))
         exit(1)
     return text.split('set(JEMALLOC_C_FILES', 1)[1].split(')', 1)[0]
+
+
+def copy_jemalloc_license(target_dir):
+    """Vendor jemalloc's LICENSE, and check inst/COPYRIGHTS still quotes it."""
+    source = os.path.join(duckdb_path, jemalloc_dir, jemalloc_license)
+    if not os.path.isfile(source):
+        print("Could not find {}!".format(source))
+        exit(1)
+    shutil.copyfile(source, os.path.join(target_dir, jemalloc_dir, jemalloc_license))
+    with open(source, 'r', encoding='utf-8') as f:
+        notice = f.read().strip()
+    if not os.path.isfile(copyrights_path):
+        print("Warning: {} is missing, so nothing records jemalloc's notice.".format(copyrights_path))
+        return
+    with open(copyrights_path, 'r', encoding='utf-8') as f:
+        recorded = f.read()
+    if notice not in recorded:
+        print("{} no longer quotes {} verbatim.".format(copyrights_path, source))
+        print("  Copy the new notice into it.")
+        exit(1)
+
+
+def allocator_objects(target_dir, source_list):
+    """The objects whose code depends on DUCKDB_ENABLE_JEMALLOC.
+
+    ./configure removes them when the allocator decision changes, so that make
+    rebuilds them rather than link an object compiled for the other allocator.
+    A unity file counts when any file it includes mentions the define.
+    """
+    parent = os.path.dirname(target_dir)
+    result = []
+    for x in source_list:
+        path = x if os.path.isabs(x) else os.path.join(parent, x)
+        with open(path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        members = [path]
+        if os.path.basename(path).startswith('ub_'):
+            members = [os.path.join(target_dir, m) for m in re.findall(r'#include "([^"]+)"', text)]
+        for member in members:
+            if not os.path.isfile(member):
+                continue
+            with open(member, 'r', encoding='utf-8') as f:
+                if 'DUCKDB_ENABLE_JEMALLOC' in f.read():
+                    result.append(x)
+                    break
+    if not result:
+        print("No vendored source mentions DUCKDB_ENABLE_JEMALLOC any more.")
+        print("  Update rconfigure.py: the allocator may have moved.")
+        exit(1)
+    return result
 
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', duckdb_path, 'scripts'))
@@ -292,6 +382,7 @@ def object_list_of(sources):
 
 object_list = object_list_of(source_list)
 jemalloc_object_list = object_list_of(jemalloc_sources)
+allocator_object_list = object_list_of(allocator_objects(target_dir, source_list)) if jemalloc_sources else ''
 
 
 include_list = ' '.join(['-I' + 'duckdb/' + x for x in include_list])
@@ -356,7 +447,9 @@ write_makevars(
 )
 
 text = "SOURCES=" + object_list + '\n'
-text += "SOURCES_JEMALLOC=" + jemalloc_object_list + '\n'
+if jemalloc_sources:
+    text += "SOURCES_JEMALLOC=" + jemalloc_object_list + '\n'
+    text += "SOURCES_ALLOCATOR=" + allocator_object_list + '\n'
 
 with open_utf8(os.path.join('src', 'include', 'sources.mk'), 'w') as f:
     f.write(text)

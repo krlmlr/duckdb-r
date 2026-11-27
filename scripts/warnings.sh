@@ -63,6 +63,21 @@ warnings_of() {
   echo $w
 }
 
+# The scope's flags for a C compile: the same set without the ones that only
+# C++ has, which GCC would otherwise answer with a `cc1: warning:` per file.
+# `ride` cannot split them, because R hands CPPFLAGS to both languages.
+c_warnings_of() {
+  local f out=
+  for f in $(warnings_of "$1"); do
+    case "$f" in
+      -Wno-redundant-move | -Wnon-virtual-dtor | -Woverloaded-virtual | \
+        -Wsuggest-override | -Wextra-semi) ;;
+      *) out="$out $f" ;;
+    esac
+  done
+  echo $out
+}
+
 # Which scope owns the file a diagnostic points at. Paths arrive three ways --
 # relative to src/ (our own compile), absolute (an R CMD INSTALL log), and
 # relative to the *engine's* own root, where a `#line` in a generated file
@@ -217,8 +232,11 @@ ride() {
 prepare_compile() {
   # src/Makevars includes Makevars.rstrtmgr, which only ./configure writes and
   # .gitignore keeps out of the tree; without it the include below has nothing
-  # to read for DUCKDB_RSTRTMGR.
-  [ -f src/Makevars.rstrtmgr ] || ./configure >/dev/null 2>&1
+  # to read for DUCKDB_RSTRTMGR. Makevars.jemalloc likewise carries the
+  # allocator ./configure chose for this machine.
+  if [ ! -f src/Makevars.rstrtmgr ] || [ ! -f src/Makevars.jemalloc ]; then
+    ./configure >/dev/null 2>&1
+  fi
 
   # The compile line, composed from what R reports and what src/Makevars adds.
   #
@@ -237,7 +255,19 @@ prepare_compile() {
   base_flags="$base_flags $(R CMD config CPPFLAGS)"
   base_flags="$base_flags $(sed -n 's/^PKG_CPPFLAGS *= *//p' src/Makevars |
     sed 's/\$(DUCKDB_RSTRTMGR)/1/')"
+  # What Makevars.jemalloc adds where ./configure chose jemalloc: the define,
+  # which the allocator's own translation unit reads, and the include path.
+  jemalloc_flags=$(sed -n 's/^PKG_CPPFLAGS *+= *//p' src/Makevars.jemalloc 2>/dev/null || true)
+  base_flags="$base_flags $jemalloc_flags"
   base_flags="$base_flags $(R CMD config CXX17PICFLAGS) $(R CMD config CXX17FLAGS)"
+
+  # jemalloc is C, compiled by R's C rule with the same preprocessor flags.
+  # DUCKDB_R_WARNINGS_CC points this at another compiler, as above.
+  cc=${DUCKDB_R_WARNINGS_CC:-$(R CMD config CC)}
+  c_flags="$(R CMD config --cppflags) -DNDEBUG $(R CMD config CPPFLAGS)"
+  c_flags="$c_flags $(sed -n 's/^PKG_CPPFLAGS *= *//p' src/Makevars |
+    sed 's/\$(DUCKDB_RSTRTMGR)/1/') $jemalloc_flags"
+  c_flags="$c_flags $(R CMD config CPICFLAGS) $(R CMD config CFLAGS)"
 
   if [ -z "$cxx" ] || ! printf '%s' "$base_flags" | grep -q -- '-Iduckdb/src/include'; then
     echo "Error: could not compose the compile flags." >&2
@@ -251,16 +281,21 @@ prepare_compile() {
 # The roster src/Makevars links, spelled as sources. A vendored `.o` resolves to
 # whichever of .cpp/.cc/.c is on disk, the way R's implicit rules do.
 #
-# Only the SOURCES line: the SOURCES_JEMALLOC line beneath it is C, compiled
-# only where ./configure enables jemalloc and with the include path and define
-# that Makevars.jemalloc adds, none of which this standalone compile has.
+# SOURCES always, and SOURCES_JEMALLOC where ./configure chose jemalloc, as the
+# OBJECTS that Makevars.jemalloc extends; the other lines of sources.mk are
+# subsets of these.
 sources_of() {
   case "$1" in
     glue)
       sed 's/^GLUE=//' src/include/glue.mk | tr ' ' '\n' | sed 's/\.o$/.cpp/' | grep .
       ;;
     vendored)
-      sed -n 's/^SOURCES=//p' src/include/sources.mk | tr ' ' '\n' | grep . |
+      {
+        sed -n 's/^SOURCES=//p' src/include/sources.mk
+        if [ -n "$jemalloc_flags" ]; then
+          sed -n 's/^SOURCES_JEMALLOC=//p' src/include/sources.mk
+        fi
+      } | tr ' ' '\n' | grep . |
         while read -r o; do
           for ext in cpp cc c; do
             if [ -f "src/${o%.o}.$ext" ]; then
@@ -284,8 +319,12 @@ run_scope() {
   {
     echo 'cd src || exit 2'
     echo 'obj=$(echo "$1" | tr / _)'
-    printf 'eval %s\n' \
+    echo 'case "$1" in'
+    printf '  *.c) eval %s ;;\n' \
+      "\"$cc $c_flags $(c_warnings_of "$scope") -fdiagnostics-plain-output -c '\$1' -o '$work/\$obj.o'\""
+    printf '  *) eval %s ;;\n' \
       "\"$cxx $base_flags $(warnings_of "$scope") -fdiagnostics-plain-output -c '\$1' -o '$work/\$obj.o'\""
+    echo 'esac'
   } >"$runner"
 
   sources=$(sources_of "$scope")
