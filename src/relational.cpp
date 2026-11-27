@@ -704,9 +704,13 @@ bool constant_expression_is_not_null(duckdb::expr_extptr_t expr) {
 	// to wrap the query in a CTE that bakes in the data frame pointer, so
 	// subsequent binds (e.g. during materialization) do not need to look up
 	// the data frame from the environment again.
+	// A data frame found there lifts with the connection's options,
+	// except that a POSIXct stays on TIMESTAMP, as in rel_from_df() (handbook/usage/relational/README.md).
+	ConvertOpts env_convert_opts = con->convert_opts;
+	env_convert_opts.posixct = ConvertOpts::PosixctType::TIMESTAMP;
 	D_ASSERT(con->db->env == R_NilValue);
 	con->db->env = (SEXP)env;
-	con->db->env_convert_opts = &con->convert_opts;
+	con->db->env_convert_opts = &env_convert_opts;
 	con->db->registered_dfs = Rf_cons(R_NilValue, R_NilValue);
 	duckdb_httplib::detail::scope_exit reset_db_env([&]() {
 		con->db->env = R_NilValue;

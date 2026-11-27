@@ -188,3 +188,53 @@ test_that("Data frame scan honors `map = \"list_of\"` as `duckdb_register()` doe
     "STRUCT(\"key\" VARCHAR, \"value\" DOUBLE)[]"
   )
 })
+
+test_that("Data frame scan binds with the connection's options as `duckdb_register()` does", {
+  # The replacement scan runs inside the engine, which is handed the database rather than the connection the options live on;
+  # without them the same data frame arrives as different types depending on how it was named.
+  skip_if_not_installed("bit64")
+  skip_if_not_installed("vctrs")
+
+  con <- local_con(
+    drv = duckdb(environment_scan = TRUE),
+    bigint = "integer64",
+    map = "list_of"
+  )
+
+  types <- function(name) {
+    dbGetQuery(con, paste0("DESCRIBE FROM ", name))$column_type
+  }
+  agrees <- function(df, name) {
+    duckdb_register(con, "registered", df)
+    withr::defer(duckdb_unregister(con, "registered"))
+    expect_equal(types(name), types("registered"))
+  }
+
+  big <- bit64::as.integer64("9007199254740993")
+  scanned_i64 <- data.frame(a = big)
+  agrees(scanned_i64, "scanned_i64")
+  expect_equal(dbGetQuery(con, "FROM scanned_i64")$a, big)
+
+  scanned_map <- data.frame(row = 1L)
+  scanned_map$m <- list(list(k = 1L))
+  agrees(scanned_map, "scanned_map")
+
+  scanned_ts <- data.frame(a = as.POSIXct("2024-01-10 13:03:12", tz = "UTC"))
+  agrees(scanned_ts, "scanned_ts")
+  expect_equal(types("scanned_ts"), "TIMESTAMP WITH TIME ZONE")
+})
+
+test_that("Data frame scan honors `posixct = \"timestamp\"` as `duckdb_register()` does", {
+  con <- local_con(drv = duckdb(environment_scan = TRUE), posixct = "timestamp")
+  scanned_ts <- data.frame(a = as.POSIXct("2024-01-10 13:03:12", tz = "UTC"))
+  duckdb_register(con, "registered", scanned_ts)
+
+  sql <- function(from) {
+    paste0("SELECT typeof(a) AS t, a::VARCHAR AS v FROM ", from)
+  }
+  expect_equal(
+    dbGetQuery(con, sql("scanned_ts")),
+    dbGetQuery(con, sql("registered"))
+  )
+  expect_equal(dbGetQuery(con, sql("scanned_ts"))$t, "TIMESTAMP")
+})

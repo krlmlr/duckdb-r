@@ -78,8 +78,9 @@ the wider type mapping is
   column and dropped the R-side zone
   ([#184](https://github.com/duckdb/duckdb-r/issues/184)).
   The setting reaches `dbWriteTable()`, `dbAppendTable()`,
-  `duckdb_register()`, bound parameters, `dbDataType()` and
-  `dbQuoteLiteral()`, nested columns included.
+  `duckdb_register()`, a data frame picked up by name under `duckdb(environment_scan = TRUE)`,
+  bound parameters, `dbDataType()` and `dbQuoteLiteral()`, nested columns included;
+  the relational API stays on `TIMESTAMP` (see below).
 * **Written into a naive column, a `POSIXct` keeps the UTC wall clock.**
   `dbAppendTable()`, `dbWriteTable(append = TRUE)`, and `dbWriteTable()`
   with `field.types` register a column as `TIMESTAMP`, as
@@ -101,6 +102,10 @@ the wider type mapping is
   A `VARCHAR` gets the text of a `TIMESTAMPTZ`,
   which carries the session offset, `2024-01-11 03:03:12+14`
   where the older mapping wrote `2024-01-10 13:03:12`.
+  A data frame read by the environment scan and cast into a naive column,
+  as in `INSERT INTO naive_tbl SELECT a FROM df`, follows the session `TimeZone` instead,
+  unlike `dbAppendTable()`, because the scan has no target table to look at;
+  `dbConnect()` starts the session on UTC, so this matters only after a user sets `TimeZone`.
 * **Written into a zoned column, a `POSIXct` keeps the instant under either setting.**
   The same three paths register a column as `TIMESTAMPTZ`
   when its target holds `TIMESTAMP WITH TIME ZONE` or `TIME WITH TIME ZONE`
@@ -108,8 +113,9 @@ the wider type mapping is
   also under `posixct = "timestamp"`,
   where the cast from `TIMESTAMP` would read the UTC wall clock in the session `TimeZone`.
   The target type decides only where it is known:
-  `duckdb_register()` scans as the setting says;
-  a data frame picked up by name stays on `TIMESTAMP` (see below).
+  `duckdb_register()` and a data frame picked up by name scan as the setting says,
+  so under `posixct = "timestamp"` such a data frame cast into a zoned column
+  reads the UTC wall clock in the session `TimeZone`.
 * **A bound or quoted `POSIXct` meets a naive column in the session zone.**
   A parameter or a `dbQuoteLiteral()` value is a `TIMESTAMPTZ`,
   so comparing it with a `TIMESTAMP` column casts in the session `TimeZone`,
@@ -123,11 +129,11 @@ the wider type mapping is
   ([`relational/`](/handbook/usage/relational/README.md)),
   so against a `TIMESTAMPTZ` column, which `dbWriteTable()` now creates by default,
   it compares in the session zone once a user sets `TimeZone`.
-* **Two paths stay on `TIMESTAMP` whatever the setting says.**
-  A data frame picked up by name under
-  `duckdb(environment_scan = TRUE)` follows the connection's `map` and `experimental`
-  ([`relational/`](/handbook/usage/relational/README.md)) but not yet its `posixct`,
-  which the replacement scan in [`src/register.cpp`](/src/register.cpp) does not pass on.
+* **The relational path stays on `TIMESTAMP` whatever the setting says.**
+  A data frame picked up by name under `duckdb(environment_scan = TRUE)` follows the setting in a DBI query,
+  as it follows the connection's `map` and `experimental`,
+  because the replacement scan in [`src/register.cpp`](/src/register.cpp) passes all three on as `duckdb_register()` does.
+  `rel_from_sql()` pins `TIMESTAMP` for such a data frame, as `rel_from_df()` does.
   `rel_from_df()` declines the setting rather than misses it:
   a relation promises the data frame back unchanged, which a
   `TIMESTAMPTZ` column cannot keep, and what each candidate policy

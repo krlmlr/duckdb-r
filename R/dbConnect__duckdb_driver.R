@@ -64,11 +64,11 @@
 #'   UTC rendering of each instant, and its time zone is lost.
 #'   This is the mapping earlier versions used, and the way back to it.
 #'   The setting reaches [dbWriteTable()], [dbAppendTable()],
-#'   [duckdb_register()], bound parameters, [dbDataType()] and
+#'   [duckdb_register()], a data frame picked up by name under
+#'   `duckdb(environment_scan = TRUE)`, bound parameters, [dbDataType()] and
 #'   [dbQuoteLiteral()].
-#'   It does not reach a data frame picked up by name under
-#'   `duckdb(environment_scan = TRUE)`, nor the relational API behind
-#'   \pkg{duckplyr}, which both stay on `TIMESTAMP`.
+#'   It does not reach the relational API behind \pkg{duckplyr}, which
+#'   stays on `TIMESTAMP`.
 #'
 #' @return `dbConnect()` returns an object of class [duckdb_connection-class].
 #'

@@ -120,6 +120,10 @@ see the \sQuote{Database instances and driver reuse} section.}
 
 \item{environment_scan}{Set to \code{TRUE} to treat data frames from the calling environment as tables.
 If a database table with the same name exists, it takes precedence.
+A data frame found this way is converted with the same options as one passed to \code{\link[=duckdb_register]{duckdb_register()}},
+so the \code{map} and \code{posixct} arguments of \code{\link[DBI:dbConnect]{dbConnect()}} reach both alike
+(except under \code{rel_from_sql()}, which keeps \code{posixct} on \code{TIMESTAMP}),
+and an \code{integer64} column arrives as \code{BIGINT} through both.
 The default of this setting may change in a future version.}
 
 \item{drv}{Object returned by \code{duckdb()}}
@@ -175,11 +179,11 @@ If \code{"timestamp"} is selected, it becomes a \code{TIMESTAMP} column holding 
 UTC rendering of each instant, and its time zone is lost.
 This is the mapping earlier versions used, and the way back to it.
 The setting reaches \code{\link[DBI:dbWriteTable]{dbWriteTable()}}, \code{\link[DBI:dbAppendTable]{dbAppendTable()}},
-\code{\link[=duckdb_register]{duckdb_register()}}, bound parameters, \code{\link[DBI:dbDataType]{dbDataType()}} and
+\code{\link[=duckdb_register]{duckdb_register()}}, a data frame picked up by name under
+\code{duckdb(environment_scan = TRUE)}, bound parameters, \code{\link[DBI:dbDataType]{dbDataType()}} and
 \code{\link[DBI:dbQuoteLiteral]{dbQuoteLiteral()}}.
-It does not reach a data frame picked up by name under
-\code{duckdb(environment_scan = TRUE)}, nor the relational API behind
-\pkg{duckplyr}, which both stay on \code{TIMESTAMP}.}
+It does not reach the relational API behind \pkg{duckplyr}, which
+stays on \code{TIMESTAMP}.}
 
 \item{conn}{A \code{duckdb_connection} object}
 
