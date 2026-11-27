@@ -196,7 +196,7 @@ Each tree and harness row the log matches is answered, in the order the gates ra
 and those fixes are folded into the offending commit together.
 A harness fix is folded too,
 because every commit is judged by the scripts it carries
-([`scripts/each-shard.sh`](/scripts/each-shard.sh)),
+([`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh)),
 so a fix that reaches only `main`, and the port above `<S>-dev`, never changes this commit's verdict.
 A warnings listing is never dropped because another row matched.
 No rerun is pushed while a tree or harness row matched:
