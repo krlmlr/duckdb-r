@@ -27,7 +27,7 @@ Stamp it in the fifth-component commit, before the `-fwd` refs are created.
 The prefix is the previewed line's, not the seed's: previewing 2.1 is `2.0.99.9000`,
 previewing 2.0 is `1.99.99.9000`.
 `main` carries the prefix of the line upstream `main` previews itself, so a seed regenerated on it has it already,
-with `main`'s landing counter as its fourth component, and `scripts/preview-prefix.sh` reads that as stamped.
+with `main`'s development counter as its fourth component, and `scripts/preview-prefix.sh` reads that as stamped.
 
 **A seed on a released `main` takes the first development version as its fourth component.**
 On the day of a release `main` carries the bare `1.5.6`,
@@ -176,7 +176,7 @@ and until one lands the whole buffer replays
 
 **A preview line's buffer opens on a rewind where its base vendors a released engine, and the script rebuilds it.**
 `main`'s own series no longer meets one in the ordinary course:
-`main` takes upstream `main`'s engine by its landings ([`series-land`](/.claude/skills/series-land/SKILL.md)),
+`main` takes upstream `main`'s engine from its series, through the fork and the maintainer's fork-update routine,
 so a seed on it vendors an engine the buffer has, and the replay starts above it, as for a release line.
 A series seeded on a released engine still does,
 so its first vendor commit walks back to where the lines fork:

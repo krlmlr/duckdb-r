@@ -1,12 +1,12 @@
 #!/bin/bash
-# Land a series on `main`: build `<L>-land-dev`, every vendor commit of the
-# series replayed without its flavor onto the `main` it will fast-forward
-# (.claude/skills/series-land/SKILL.md).
+# Land a series on its release branch: build `<L>-land-dev`, every vendor
+# commit of the series replayed without its flavor onto the branch it will
+# fast-forward (.claude/skills/series-land/SKILL.md).
 #
-# **The branch landed on is the one the series releases from.** The routine
-# landing is `main`'s own series, a batch of upstream `main` commits onto
-# `main`; a release branch such as `v2.0-cyanoptera` takes its own series the
-# same way. Which branch is read from `releases_from` in `main`'s
+# **The branch landed on is the one the series releases from**, a release
+# branch such as `v2.0-cyanoptera` taking its own line's series. `main` takes
+# its changes through the maintainer's fork-update routine instead, so the
+# skill lands nothing there. Which branch is read from `releases_from` in `main`'s
 # scripts/series.yaml, `main` where the series has no row, so nothing typed can
 # disagree with what the loop ports from. Wherever `main` appears below, it is
 # that branch, read from --canonical. Only a serving series lands: a `-fwd`

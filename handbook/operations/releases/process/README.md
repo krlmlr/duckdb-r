@@ -61,8 +61,9 @@ which is what keeps the release branch CRAN-releasable at all times.
 Between releases the release branch may take its line's batches by landings too, each ending on a bump of the fourth component and its tag
 ([`versioning/`](/handbook/operations/releases/versioning/README.md));
 CUT's is the landing that ends on the released version.
-`main` stands outside this machine: it lands batches of upstream `main` whenever one is ready, and waits for no release
-([`series-land`](/.claude/skills/series-land/SKILL.md)).
+`main` stands outside this machine and waits for no release:
+its changes, upstream `main`'s engine among them, are staged in the fork's `main`,
+and the maintainer's fork-update routine lands them on `duckdb/duckdb-r`'s `main`.
 
 ## State diagram
 

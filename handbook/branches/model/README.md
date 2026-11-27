@@ -179,11 +179,12 @@ and `<S>-rc-alpha` the same stamp on its rc twin,
 because upstream publishes extensions under that version and never under the commit a `-dev` stamp looks in.
 Each is one commit on a verified one, moved by the loop when a newer alpha appears
 ([`series-alpha`](/.claude/skills/series-alpha/SKILL.md)).
-**`<L>-land-dev` is a batch of a series on its way onto the canonical branch it lands on**:
+**`<L>-land-dev` is a batch of a series on its way onto the release branch it lands on**:
 the frozen branch plus the series' vendor commits, unflavored, and a hand-written version bump,
 which the branch fast-forwards onto once CI has passed every one.
-`<L>` is the series' line, so `main`'s own series lands as `main-land-dev` onto `main`,
-and the v2.0 series as `v2.0-cyanoptera-land-dev` onto `v2.0-cyanoptera`; one landing per line is in flight at a time.
+`<L>` is the series' line, so the v2.0 series lands as `v2.0-cyanoptera-land-dev` onto `v2.0-cyanoptera`;
+one landing per line is in flight at a time.
+`main` takes no such landing: its changes reach it through the maintainer's fork-update routine.
 `<L>-land-green` marks how far CI has passed it, starting at the frozen branch.
 The pair exists only while a landing is in flight, and has no buffer, so the loop never serves it.
 `<L>-land-review`, in the canonical repository, is the landing without its engine,

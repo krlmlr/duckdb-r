@@ -24,8 +24,9 @@ version bump `VERSION` and does not port it
 A `-dev` version says which release line the series was seeded from
 and how far its own vendoring has run;
 what `main` is at today is read from `main`.
-On `main` and on a release branch the 4th counts landings,
+On a release branch the 4th counts landings,
 each landing without an upstream release taking it one up.
+`main` takes no landing of its own series, so its 4th rises only by a bump staged in the fork like any other change.
 The 5th exists only on `-dev` branches, making every vendor commit
 installable as a distinct version on r-universe.
 Each strand owns one counter and freezes the other,
@@ -93,7 +94,7 @@ A landing ends on a bump, its last commit
 After a release `X.Y.Z` the branch released from moves on to `X.Y.Z.9000`, the first development version,
 in a bump that takes no tag.
 
-**Every landing's bump takes the annotated tag `v<version>`, `v2.0.99.9001`, in the canonical repository,
+**Every landing's bump takes the annotated tag `v<version>`, `v2.0.0.9001`, in the canonical repository,
 and a bump to a release's three components takes `v<version>.9900`, `v2.1.0.9900`.**
 Its message is the subject `duckdb <version>`, or `duckdb <version>.9900` with that tag,
 then the section `NEWS.md` has for `<version>`, its heading matched up to the version so that a date after it is left out,
@@ -137,15 +138,13 @@ it renames the heading to `# duckdb (development version)`, keeps the one link l
 and adds its own section below.
 
 **A landing without an upstream release takes the fourth component one up; one with a release takes the release.**
-`main` lands a batch of upstream `main` whenever one is ready, and no release names it,
-so its bump raises the fourth component by one above the version the branch carries, `2.0.99.9000` to `2.0.99.9001`.
-Where the series carries a newer prefix than the branch, the bump opens it at `.9000`:
-`main`'s first landing of its own series takes it from `2.0.0.9000` to `2.0.99.9000`.
+A release branch landing its own line's commits short of an upstream patch release
+raises the fourth component by one above the version the branch carries, `2.0.0.9000` to `2.0.0.9001`.
+Where the series carries a newer prefix than the branch, the bump opens it at `.9000`.
 A branch on a released version without a fourth component opens it at `.9000`, `2.0.1` to `2.0.1.9000`,
 whatever older prefix the series still carries.
 [`scripts/landing-version.sh`](/scripts/landing-version.sh) prints that version.
-A release branch landing its own line's commits short of an upstream patch release does the same, `2.0.0.9000` to `2.0.0.9001`,
-and a landing that brings an upstream release sets that release's three components, `2.0.1`.
+A landing that brings an upstream release sets that release's three components, `2.0.1`.
 [`scripts/series-land.sh`](/scripts/series-land.sh) refuses a bump that keeps the fifth component or falls below the series' first four,
 and one that does not rise above the branch's version,
 because a series not forwarded since the last landing still stamps the older fourth.
@@ -204,7 +203,7 @@ The prefix names the line being previewed, never the one seeded from, so it is r
 a series previewing **2.1** takes `2.0.99.9000`, one previewing **2.0** takes `1.99.99.9000`.
 Once the line CRAN ships releases from a branch of its own, `main` carries the prefix itself
 ([`branches/model/`](/handbook/branches/model/README.md) says when that is),
-`2.0.99` while upstream `main` heads for 2.1, and its fourth component counts landings above `.9000`,
+`2.0.99` while upstream `main` heads for 2.1, and its fourth component counts up from `.9000`,
 so the series tracking upstream `main`, seeded on it, takes `main`'s version as it stands,
 which `preview-prefix.sh` reads as stamped,
 and the vendor counter hangs off it as usual.

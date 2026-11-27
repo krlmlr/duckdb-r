@@ -1,6 +1,6 @@
 ---
 name: series-land
-description: Land a batch of a series on the canonical branch it serves, `main`'s own series onto `main` or a line's series onto its release branch. Only a serving series lands; a forward is cut over first. Freeze the branch, build `<L>-land-dev` from the series' rc strand as vendor commits and a hand-written version bump, let CI judge every commit, and fast-forward the branch onto it. After a landing on a release branch, that branch is merged forward into the newer lines. Also the rarer change of the line CRAN ships, when upstream releases a new line. Use when `main` should take newer upstream `main` commits, when a release branch should take its line's commits or release, or when asked to land, move or promote a series.
+description: Land a batch of a line's series on its release branch, the canonical branch it serves. Only a serving series lands; a forward is cut over first. Freeze the branch, build `<L>-land-dev` from the series' rc strand as vendor commits and a hand-written version bump, let CI judge every commit, and fast-forward the branch onto it. After a landing on a release branch, that branch is merged forward into the newer lines. Also the rarer change of the line CRAN ships, when upstream releases a new line. Use when a release branch should take its line's commits or release, or when asked to land, move or promote a series.
 ---
 
 # Landing a series on its branch
@@ -8,7 +8,7 @@ description: Land a batch of a series on the canonical branch it serves, `main`'
 *Handbook: [`operations/releases/process/`](/handbook/operations/releases/process/README.md),
 the release process, of which a landing is how a canonical branch takes vendored commits.*
 
-Every canonical branch that carries an engine takes it from its own series, a batch at a time,
+Every release branch takes its engine from its own series, a batch at a time,
 by **fast-forwarding onto that series' vendor commits**:
 every upstream commit the series vendored since the branch's last landing, with the R-side fix CI demanded folded into it,
 replayed without the flavor onto the branch itself and judged by CI one by one,
@@ -16,15 +16,16 @@ and then the version bump written by hand, the landing's last commit (step 3).
 Nothing else reaches the branch:
 no flavor, no seed, and no port, because everything a port carries is the branch's already.
 
-* **`main`'s own series onto `main`** is the routine case.
-  `main` carries upstream `main`'s engine and releases nothing, so it lands whenever a batch is worth it,
-  with no upstream release to wait for, and the bump takes the fourth component one up.
-* **A line's series onto its release branch**, `v2.0-cyanoptera`, is the same procedure:
+* **A line's series onto its release branch**, `v2.0-cyanoptera`, is the routine case:
   short of an upstream patch release the bump takes the fourth component one up, and with one it takes the release,
   and the branch is merged forward into the newer lines afterwards ([step 8](#8-merge-the-release-branch-forward)).
 * **Changing the line CRAN ships**, when upstream releases the line `main` previewed, is the rarer case:
   a release branch is cut from `main` first, and the landing goes onto it
   ([Changing the line CRAN ships](#changing-the-line-cran-ships)).
+
+`main` takes no landing from this skill.
+Its changes, the engine included, reach `duckdb/duckdb-r` through the fork like any other package the maintainer develops in a fork:
+staged in the fork's `main` and landed by the maintainer's fork-update routine.
 
 The landings come often and stay small, so a rewind is rare:
 the series is forwarded onto a branch that already vendors what the previous landing brought
@@ -32,8 +33,8 @@ the series is forwarded onto a branch that already vendors what the previous lan
 
 `<S>` is the series that lands, always the serving one: a forward is cut over first, and never landed,
 and `series-land.sh` refuses a `-fwd` series.
-`<L>` names the landing's refs and is `<S>` itself: `main` for `main`'s series, `v2.0-cyanoptera` for v2.0's.
-`<B>` is the canonical branch it lands on, `main` or the line's release branch:
+`<L>` names the landing's refs and is `<S>` itself: `v2.0-cyanoptera` for v2.0's series.
+`<B>` is the canonical branch it lands on, the line's release branch:
 the series' `releases_from` in `scripts/series.yaml`, which `series-land.sh` reads from the canonical `main`,
 and `<v>` the version the bump sets ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
 Every command block below pastes as it stands, from the repository's root,
@@ -91,7 +92,7 @@ A human runs these, and reads each output before the next.
 Inspect: the rulesets on `<B>`, and the commit it freezes at.
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 R=duckdb/duckdb-r
 gh api repos/$R/rulesets --jq '.[] | [.id, .name, .enforcement] | @tsv'
@@ -102,7 +103,7 @@ Freeze:
 
 ```sh
 ( set -eu
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 [[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
 gh api -X POST repos/duckdb/duckdb-r/rulesets --input - <<EOF
@@ -125,7 +126,7 @@ EOF
 Verify: an `update` row from the new ruleset, and `never`.
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 gh api repos/duckdb/duckdb-r/rules/branches/$B --jq '.[] | [.type, .ruleset_id] | @tsv'
 id=$(gh api repos/duckdb/duckdb-r/rulesets --jq ".[] | select(.name == \"freeze $B\") | .id")
@@ -140,7 +141,7 @@ The landing goes up to the tip of `<S>-rc-dev` as it stands when the build start
 Read off the engine it vendors and the engine `<B>` vendors, for the review's description and the record the bump sets (step 3):
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 git fetch origin "$S-rc-dev" && git fetch upstream "$B"
 engine() { git show "$1:src/duckdb/src/function/table/version/pragma_version.cpp" |
@@ -160,12 +161,13 @@ An engine that is an upstream release needs no alpha, and the command's failure 
 ## 3. Build the landing
 
 ```sh
-S=main   # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera   # the serving series that lands, a line's own
 scripts/series-land.sh "$S" --remote origin --canonical upstream          # build and check
 scripts/series-land.sh "$S" --remote origin --canonical upstream --push   # and write both refs
 ```
 
-It prints `<B>`'s tip as the commit it builds on; a series `scripts/series.yaml` does not declare lands on `main`.
+It prints `<B>`'s tip as the commit it builds on.
+The script reads `main` for a series `scripts/series.yaml` does not declare, which this skill does not land on, so land only a declared one.
 
 **Tests that pin what the line must keep go underneath, not into the series afterwards.**
 A pull request of tests written on `<B>`'s engine, one commit on the frozen `<B>`,
@@ -219,7 +221,7 @@ and CI does not judge a commit twice.
 **The version bump is the landing's last commit.**
 [`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md) owns how it is written and which version `<v>` it sets:
 the next one above `<B>`'s that [`scripts/landing-version.sh`](/scripts/landing-version.sh) prints,
-`2.0.99.9000` to `2.0.99.9001` on `main` and `2.0.99.9000` on `main`'s first landing,
+`2.0.0.9000` to `2.0.0.9001`,
 or the release's three components where the batch brings an upstream release.
 The build ends on the series' version, five components;
 once it is pushed, add the bump in its kept worktree and push it onto `<L>-land-dev`, a plain fast-forward:
@@ -230,7 +232,7 @@ once it is pushed, add the bump in its kept worktree and push it onto `<L>-land-
 
   ```sh
   RELEASE=''   # the upstream release this landing brings, such as 2.0.1; empty for none
-  S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+  S=v2.0-cyanoptera                           # the serving series that lands, a line's own
   B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
   cur=$(git show "upstream/$B:DESCRIPTION" | sed -n 's/^Version: //p')
   ser=$(sed -n 's/^Version: //p' DESCRIPTION)   # the series' version the build ends on
@@ -296,7 +298,7 @@ The landing's own diff is the engine's, hundreds of thousands of lines.
 What changes for `<B>`'s maintainers is the rest: the glue, R code and tests the series changed on the way.
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 scripts/series-land.sh "$S" --remote origin --canonical upstream --review --push
 gh pr create --repo duckdb/duckdb-r --draft --base "$B" --head "$S-land-review" \
@@ -335,7 +337,7 @@ Pushing `<L>-land-dev` starts the per-commit build over `<L>-land-green..<L>-lan
 Open the landing's pull request from the fork along with it, never to be merged by a button, which would write commits the landing does not have:
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 gh pr create --repo duckdb/duckdb-r --base "$B" --head "krlmlr:$S-land-dev" \
   --title "Land $S onto $B" --body "Closed as merged by the fast-forward of $B, never merged here."
@@ -347,7 +349,7 @@ and the fast-forward in step 6 closes it as merged.
 Read and advance the build with
 
 ```sh
-S=main   # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera   # the serving series that lands, a line's own
 scripts/series-land.sh "$S" --status --push
 ```
 
@@ -371,7 +373,7 @@ because `READY` reads the fork, and the copy covers a commit only while its pull
 pushed first, the landing's commits would sit on `<B>` with no verdict shown there.
 
 ```sh
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto
 git fetch upstream "$B" && git fetch origin "$S-land-dev"
 for c in $(git rev-list "upstream/$B..origin/$S-land-dev"); do   # the commit that is not shown passing, if any
@@ -391,7 +393,7 @@ and puts the freeze back on its way out whether the push succeeded or not
 <!-- series-land: fast-forward block -->
 ```sh
 ( set -eu
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 [[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
 sha=$(scripts/series-land.sh "$S" --status | sed -n 's/^  git push [^ ]* \([0-9a-f]\{40\}\):refs\/heads\/.*/\1/p')
@@ -419,7 +421,7 @@ which the block runs as printed, and only on `READY`: they tag nothing `<B>` lac
 <!-- series-land: tag block -->
 ```sh
 ( set -eu
-S=main                                                # the serving series that landed: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                                     # the serving series that landed, a line's own
 B=$(scripts/series-land.sh "$S" --target)             # the branch it landed onto
 [[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
 out=$(scripts/series-land.sh "$S" --status) || true   # READY again, now that the branch is the bump
@@ -439,7 +441,7 @@ Delete the freeze, so that `<B>` takes pull requests again:
 
 ```sh
 ( set -eu
-S=main                                      # the serving series that lands: main, or v2.0-cyanoptera
+S=v2.0-cyanoptera                           # the serving series that lands, a line's own
 B=$(scripts/series-land.sh "$S" --target)   # the branch it lands onto, its releases_from
 [[ $B =~ ^(main|v[0-9]+\.[0-9]+-[a-z]+)$ ]] || { echo "no branch to land onto: '$B'" >&2; exit 1; }
 id=$(gh api repos/duckdb/duckdb-r/rulesets --jq ".[] | select(.name == \"freeze $B\") | .id")
@@ -465,7 +467,6 @@ Then the series:
 
 After a landing on a release branch, and after any fix merged into it, the branch is merged forward into the next newer line,
 `main` today ([`branches/model/`](/handbook/branches/model/README.md) owns the rule).
-A landing on `main` itself skips this step.
 List what the merge brings: FORWARD-PORT counts the vendor commits and version bumps and lists each R-side commit:
 
 ```sh
@@ -592,7 +593,7 @@ and `main` moves on to preview the next line; CRAN moves to the new line with it
 3. **Land `<N>`'s series onto `<N>`**, steps 1 to 7 with `<B>` = `<N>`, ending on the bump to its first release, or short of it to `<N>`'s fourth component one up.
    Where `main` had landed past the fork point, the first pick vendors an older engine than the branch, and the build takes its strand whole.
 4. **`main` previews the next line from here**:
-   its next landing's bump takes the new prefix, `2.1.99.9001` once 2.1 is out
+   its next version bump takes the new prefix, `2.1.99.9000` once 2.1 is out
    ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).
    From here `<P>` is merged forward into `<N>`, and `<N>` into `main`, while `<P>` stays active
    ([`branches/model/`](/handbook/branches/model/README.md)).
