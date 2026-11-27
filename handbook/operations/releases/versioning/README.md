@@ -137,8 +137,8 @@ R CMD build and check accept it, as they accept any field under `Config/`
 No port carries a bump, so a series lacks the line or lags it, and a landing's tree check takes it as the branch's.
 The merge driver resolves it as it resolves `Version:`:
 ours, always, so a pick, a port or a cutover's replay never rewrites the engine a branch records, and a field changed near it merges cleanly.
-`usethis::use_tidy_description()` sorts the `Config/` fields and so moves the record into that sorted block;
-after each tidy run, move it back by hand to the line right below `Version:`, where the driver keeps it.
+`usethis::use_tidy_description()` sorts the `Config/` fields and so moves the record into that sorted block.
+After each tidy run, move it back by hand to the line right below `Version:`, where the driver keeps it.
 A bump that is itself replayed over a changed `DESCRIPTION`, by a fold or a rebase, therefore arrives with the record of the commit it lands on,
 and with its vendor counter back, and `series-land.sh` refuses it until it is stamped again ([`series-land`](/.claude/skills/series-land/SKILL.md), step 3).
 A forward merge meets the driver like any merge, so the newer line keeps its own record.
