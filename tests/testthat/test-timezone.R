@@ -1121,6 +1121,170 @@ test_that("only a POSIXct going into a naive temporal type scans naive (#2574)",
   )
 })
 
+test_that("dbConnect() sets the session TimeZone to UTC (#2646)", {
+  skip_if_no_icu()
+
+  # Installed before the connection opens, so the alignment finds it
+  setup <- local_con()
+  dbExecute(setup, "INSTALL icu")
+
+  # A machine zone that is not UTC, which icu would default to
+  withr::local_timezone("America/New_York")
+  con <- local_con()
+
+  # Whatever zone the machine is on, a fresh connection starts on UTC
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "UTC"
+  )
+  expect_true(
+    dbGetQuery(
+      con,
+      "SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'icu'"
+    )$loaded
+  )
+
+  # Which is the zone a naive TIMESTAMP is read in, so one round-trips
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP)")
+  dbAppendTable(con, "t", data.frame(a = instant))
+  expect_equal(dbReadTable(con, "t")$a, instant, ignore_attr = TRUE)
+  expect_equal(
+    nrow(dbGetQuery(
+      con,
+      "SELECT * FROM t WHERE a = ?",
+      params = list(instant)
+    )),
+    1L
+  )
+})
+
+test_that("the alignment is a default, and `SET TimeZone` still wins (#2646)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+  dbExecute(con, "SET TimeZone = 'America/New_York'")
+
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "America/New_York"
+  )
+
+  # And a bound `POSIXct` stops matching a naive column once it does:
+  # the write keeps the UTC wall clock, but the parameter is a TIMESTAMPTZ
+  # that the comparison casts in the session zone
+  instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
+  dbExecute(con, "CREATE TABLE t (a TIMESTAMP)")
+  dbAppendTable(con, "t", data.frame(a = instant))
+  expect_equal(
+    dbGetQuery(con, "SELECT a::VARCHAR AS a FROM t")$a,
+    "2024-01-10 13:03:12"
+  )
+  expect_equal(
+    nrow(dbGetQuery(
+      con,
+      "SELECT * FROM t WHERE a = ?",
+      params = list(instant)
+    )),
+    0L
+  )
+})
+
+test_that("a connection still opens where icu cannot be loaded (#2646)", {
+  con <- local_con(drv = duckdb(allow_extensions = FALSE))
+
+  # The alignment asks `duckdb_extensions()` first and gives up quietly,
+  # rather than reaching for a setting that would try to autoload icu
+  expect_true(dbIsValid(con))
+  expect_equal(dbGetQuery(con, "SELECT 1 AS a")$a, 1)
+})
+
+test_that("a TimeZone named in duckdb(config =) is kept (#2646)", {
+  skip_if_no_icu()
+
+  con <- local_con()
+  dbExecute(con, "INSTALL icu")
+
+  con <- local_con(drv = duckdb(config = list(TimeZone = "Asia/Tokyo")))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Asia/Tokyo"
+  )
+})
+
+test_that("a TimeZone named in dbConnect(config =) on a live instance is kept (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  setup <- local_con(drv = drv)
+  dbExecute(setup, "INSTALL icu")
+
+  # The instance exists already and cannot take the setting,
+  # so the session does
+  con <- dbConnect(drv, config = list(TimeZone = "Europe/Paris"))
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Europe/Paris"
+  )
+})
+
+test_that("SET GLOBAL TimeZone survives later connections (#2646)", {
+  skip_if_no_icu()
+
+  drv <- duckdb()
+  first <- local_con(drv = drv)
+  dbExecute(first, "INSTALL icu")
+  dbExecute(first, "LOAD icu")
+  dbExecute(first, "SET GLOBAL TimeZone = 'Asia/Tokyo'")
+
+  # A session `SET TimeZone = 'UTC'` on the next connection would mask
+  # the global choice, so the alignment leaves that connection alone
+  con <- dbConnect(drv)
+  withr::defer(dbDisconnect(con))
+  expect_equal(
+    dbGetQuery(con, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "Asia/Tokyo"
+  )
+
+  # Until the global setting goes back to its default
+  dbExecute(first, "RESET GLOBAL TimeZone")
+  again <- dbConnect(drv)
+  withr::defer(dbDisconnect(again))
+  expect_equal(
+    dbGetQuery(again, "SELECT current_setting('TimeZone') AS tz")$tz,
+    "UTC"
+  )
+})
+
+test_that("a connection opens and leaves icu alone where it is not installed (#2646)", {
+  skip_if_no_icu()
+
+  dir <- withr::local_tempdir()
+  drv <- duckdb(
+    config = list(
+      extension_directory = dir,
+      secret_directory = file.path(dir, "secrets"),
+      autoload_known_extensions = "FALSE"
+    ),
+    allow_extensions = TRUE
+  )
+  con <- local_con(drv = drv)
+  skip_if_builtin_icu(con)
+
+  # Nothing was installed under `dir`, so nothing was loaded or set
+  expect_true(dbIsValid(con))
+  expect_false(icu_loaded(con))
+  expect_equal(
+    dbGetQuery(
+      con,
+      "SELECT installed FROM duckdb_extensions() WHERE extension_name = 'icu'"
+    )$installed,
+    FALSE
+  )
+})
+
 test_that("only a POSIXct going into a zoned temporal type scans zoned (#2574)", {
   instant <- as.POSIXct("2024-01-10 13:03:12", tz = "UTC")
   value <- data.frame(

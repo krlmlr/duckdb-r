@@ -52,6 +52,10 @@ rapi_connection_valid <- function(conn) {
   .Call(`_duckdb_rapi_connection_valid`, conn)
 }
 
+rapi_extension_setting_set_globally <- function(conn, name) {
+  .Call(`_duckdb_rapi_extension_setting_set_globally`, conn, name)
+}
+
 rapi_startup <- function(dbdir, readonly, configsexp, environment_scan, allow_extensions) {
   .Call(`_duckdb_rapi_startup`, dbdir, readonly, configsexp, environment_scan, allow_extensions)
 }

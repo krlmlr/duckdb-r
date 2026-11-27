@@ -101,6 +101,13 @@ extern "C" SEXP _duckdb_rapi_connection_valid(SEXP conn) {
     return cpp11::as_sexp(rapi_connection_valid(cpp11::as_cpp<cpp11::decay_t<duckdb::conn_eptr_t>>(conn)));
   END_CPP11
 }
+// connection.cpp
+bool rapi_extension_setting_set_globally(duckdb::conn_eptr_t conn, std::string name);
+extern "C" SEXP _duckdb_rapi_extension_setting_set_globally(SEXP conn, SEXP name) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(rapi_extension_setting_set_globally(cpp11::as_cpp<cpp11::decay_t<duckdb::conn_eptr_t>>(conn), cpp11::as_cpp<cpp11::decay_t<std::string>>(name)));
+  END_CPP11
+}
 // database.cpp
 duckdb::db_eptr_t rapi_startup(std::string dbdir, bool readonly, cpp11::list configsexp, bool environment_scan, bool allow_extensions);
 extern "C" SEXP _duckdb_rapi_startup(SEXP dbdir, SEXP readonly, SEXP configsexp, SEXP environment_scan, SEXP allow_extensions) {
@@ -561,6 +568,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_duckdb_rapi_expr_set_alias",                     (DL_FUNC) &_duckdb_rapi_expr_set_alias,                      2},
     {"_duckdb_rapi_expr_tostring",                      (DL_FUNC) &_duckdb_rapi_expr_tostring,                       1},
     {"_duckdb_rapi_expr_window",                        (DL_FUNC) &_duckdb_rapi_expr_window,                        12},
+    {"_duckdb_rapi_extension_setting_set_globally",     (DL_FUNC) &_duckdb_rapi_extension_setting_set_globally,      2},
     {"_duckdb_rapi_fetch_arrow_array",                  (DL_FUNC) &_duckdb_rapi_fetch_arrow_array,                   3},
     {"_duckdb_rapi_fetch_arrow_stream_into",            (DL_FUNC) &_duckdb_rapi_fetch_arrow_stream_into,             3},
     {"_duckdb_rapi_get_null_SEXP_ptr",                  (DL_FUNC) &_duckdb_rapi_get_null_SEXP_ptr,                   0},
