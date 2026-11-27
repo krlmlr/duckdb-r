@@ -298,7 +298,7 @@ unique_ptr<IndexScanState> ART::TryInitializeScan(const Expression &expr, const 
 			return nullptr;
 		}
 		for (auto &comparison : comparisons) {
-			ExpressionType comparison_type;
+			ExpressionType comparison_type = ExpressionType::INVALID;
 			Value constant_value;
 			if (!TryMatchComparison(expr, comparison.get(), comparison_type, constant_value)) {
 				return nullptr;

@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Start the byte-wise tail of TemplatedReverseMemCpy at a constant offset
+
+TemplatedReverseMemCpy<LENGTH> copies whole 32-bit words first when
+LENGTH exceeds eight bytes, then the remaining bytes one at a time,
+starting where the word loop stopped. GCC 13 and 14 at -O2 do not carry
+that offset through the inlined word loop and report -Warray-bounds
+(array subscript 16 outside hugeint_t, uhugeint_t and string_t) on the
+byte loop, which never runs for those lengths.
+
+The number of bytes the word loop covers is now a compile-time constant
+and the byte loop starts there, so the bound is visible to the compiler.
+The bytes copied are the same for every LENGTH.
+
+Carried here until upstream takes it; not proposed upstream yet.
+
+---
+ .../scalar/compressed_materialization/compress_string.cpp   | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/duckdb/src/function/scalar/compressed_materialization/compress_string.cpp b/src/duckdb/src/function/scalar/compressed_materialization/compress_string.cpp
+index 6f0dcc14eb..a909aab62b 100644
+--- a/src/duckdb/src/function/scalar/compressed_materialization/compress_string.cpp
++++ b/src/duckdb/src/function/scalar/compressed_materialization/compress_string.cpp
+@@ -17,13 +17,14 @@ string StringCompressFunctionName(const LogicalType &result_type) {
+ 
+ template <idx_t LENGTH>
+ inline void TemplatedReverseMemCpy(const data_ptr_t &__restrict dest, const const_data_ptr_t &__restrict src) {
+-	idx_t offset = 0;
+-	if (LENGTH > sizeof(uint64_t)) {
+-		for (; offset + sizeof(uint32_t) <= LENGTH; offset += sizeof(uint32_t)) {
+-			Store<uint32_t>(BSwap(Load<uint32_t>(src + LENGTH - offset - sizeof(uint32_t))), dest + offset);
+-		}
++	// The number of bytes copied a word at a time is a constant, so the
++	// byte-wise tail below starts at a constant offset as well.
++	static constexpr idx_t WORD_BYTES =
++	    LENGTH > sizeof(uint64_t) ? LENGTH / sizeof(uint32_t) * sizeof(uint32_t) : 0;
++	for (idx_t offset = 0; offset < WORD_BYTES; offset += sizeof(uint32_t)) {
++		Store<uint32_t>(BSwap(Load<uint32_t>(src + LENGTH - offset - sizeof(uint32_t))), dest + offset);
+ 	}
+-	for (; offset < LENGTH; offset++) {
++	for (idx_t offset = WORD_BYTES; offset < LENGTH; offset++) {
+ 		dest[offset] = src[LENGTH - offset - 1];
+ 	}
+ }

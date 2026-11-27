@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 12:00:00 +0000
+Subject: [PATCH] Default the copy and move members of ParquetString
+
+ParquetString pulls in the assignment operators of its basic_string base
+with `using base::operator=;`. GCC 10 (Rtools42) counts the base's
+copy assignment brought in that way as a user-provided copy assignment
+of ParquetString itself and reports -Wdeprecated-copy wherever the
+Thrift-generated code in parquet_types.cpp assigns one ParquetString
+to another, at 19 sites. GCC 11 and later do not.
+
+Declaring the copy and move constructors and assignment operators as
+defaulted states what the compiler generated anyway, so nothing changes
+at run time and no compiler has anything left to infer.
+
+Carried here until upstream takes it; not proposed upstream yet.
+
+---
+ src/duckdb/third_party/parquet/parquet_arena.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/duckdb/third_party/parquet/parquet_arena.h b/src/duckdb/third_party/parquet/parquet_arena.h
+index fa8fa3f7cf..25a50f7210 100644
+--- a/src/duckdb/third_party/parquet/parquet_arena.h
++++ b/src/duckdb/third_party/parquet/parquet_arena.h
+@@ -73,6 +73,11 @@ public:
+ 	using base::base;
+ 	using base::operator=;
+ 
++	ParquetString(const ParquetString &other) = default;
++	ParquetString(ParquetString &&other) = default;
++	ParquetString &operator=(const ParquetString &other) = default;
++	ParquetString &operator=(ParquetString &&other) = default;
++
+ 	ParquetString &operator=(const std::string &value) {
+ 		assign(value.data(), value.size());
+ 		return *this;
