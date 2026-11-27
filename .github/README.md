@@ -113,9 +113,10 @@ The three after it track a `.dev` series:
 *ahead* counts commits ahead of the branch the series releases from,
 *in flight* counts commits in CI but not yet trusted,
 *buffered* counts commits vendored but not yet verified.
-*ahead* is counted here, where the branch a series releases from lives and
-`<S>-green` is mirrored to; the other two are counted in the fork, which is the
-only repository carrying `<S>-dev` and `<S>-build`.
+*ahead* is counted in `duckdb/duckdb-r`, which carries copies of the branch a
+series releases from and of `<S>-green`; the other two are counted in the fork,
+`krlmlr/duckdb-r`, which releases the package and is the only repository carrying
+`<S>-dev` and `<S>-build`.
 So the two greens either side of *in flight* are the same commit because one
 push writes both and the loop stops if the second cannot fast-forward.
 

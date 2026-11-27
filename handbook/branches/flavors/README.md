@@ -12,8 +12,8 @@ An LTS line is frozen for its year
 Because the names differ, flavors coexist in one library.
 
 Every one of them is built from a branch of `duckdb/duckdb-r`, the `.dev`
-flavors included: their `-green` refs live in the fork and are mirrored there for
-r-universe to read ([`mirrors/`](/handbook/branches/mirrors/README.md)).
+flavors included: the branches live in the fork, which releases the package,
+and are copied there for r-universe to read ([`mirrors/`](/handbook/branches/mirrors/README.md)).
 This table and the archive list under it are generated from
 [`scripts/series.yaml`](/scripts/series.yaml) by
 [`scripts/series-table.R`](/scripts/series-table.R); the root
@@ -133,8 +133,8 @@ and [`scripts/r-universe-check.sh`](/scripts/r-universe-check.sh) says it took.
 **Every base flavor names `duckdb/duckdb-r`, and a `.dev` one names `<S>-green`.**
 r-universe reads ownership from that URL, so a `duckdb.*` package built from the
 fork is published as the fork owner's.
-The `-green` refs are therefore mirrored from the fork into the canonical
-repository, every series' including the forward's, which is the only strand that travels that way
+The branches it builds are therefore copied from the fork into `duckdb/duckdb-r`,
+the base flavors' branches by the maintainer and every series' `-green` by the loop, the forward's included
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 
 The fork's own universe carries the `-fwd-green` refs and nothing else.

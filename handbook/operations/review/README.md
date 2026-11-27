@@ -5,6 +5,9 @@ Little of this is written down yet; the flow lives in practice.
 
 What is settled:
 
+* **A pull request is opened in `krlmlr/duckdb-r`**, the canonical repository,
+  never in `duckdb/duckdb-r`, which is a copy that takes the fork's branches by plain pushes
+  ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 * **A pull request targets the oldest active release branch the change applies to**, `v2.0-cyanoptera` today,
   and the change reaches the newer lines by a forward merge
   ([`branches/model/`](/handbook/branches/model/README.md)).

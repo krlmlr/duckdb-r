@@ -23,7 +23,7 @@ that carry it.
 
 Four refs matter here:
 
-* **the release branch** — the `vX-codename` branch of the line in `duckdb/duckdb-r`,
+* **the release branch** — the `vX-codename` branch of the line in `krlmlr/duckdb-r`, the canonical repository,
   `v2.0-cyanoptera` for the current line and a parked one for a line that is no longer current.
   It sits at the last landing, and CRAN releases are cut from it;
   r-universe builds plain `duckdb` from `main` instead ([`branches/flavors/`](/handbook/branches/flavors/README.md)).
@@ -260,10 +260,11 @@ the bump sets it explicitly to `X.Y.Z`, so `DESCRIPTION` matches the upstream ta
 in the one commit [`versioning/`](/handbook/operations/releases/versioning/README.md) describes.
 
 Then rebase the LTS branch, one rename commit on top of the release branch.
-These blocks run on a maintainer's machine and push over SSH, so they name the canonical repository by its SSH URL:
+These blocks run on a maintainer's machine and push over SSH, so they name the canonical repository by its SSH URL,
+and each move is then copied to `duckdb/duckdb-r` ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)):
 
 ```bash
-C=git@github.com:duckdb/duckdb-r.git   # the canonical repository, where both branches live
+C=git@github.com:krlmlr/duckdb-r.git   # the canonical repository, where both branches live
 S=v1.4-andium                          # the LTS line just released
 git fetch "$C" "+refs/heads/$S:refs/remotes/canonical/$S" "+refs/heads/$S-lts:refs/remotes/canonical/$S-lts"
 git switch -C "$S-lts" "canonical/$S-lts"   # from the canonical tip, never a stale local branch
@@ -279,7 +280,7 @@ preflight before tagging (`cran/`).
 Tag the release `vX.Y.Z` in the shape `versioning/` describes, and push; r-universe rebuilds automatically:
 
 ```bash
-C=git@github.com:duckdb/duckdb-r.git   # the canonical repository
+C=git@github.com:krlmlr/duckdb-r.git   # the canonical repository
 S=v1.4-andium                          # the line just released
 R=$S-lts                               # the branch the release is tagged on: "$S" where the line has no -lts branch
 git fetch "$C" "+refs/heads/$R:refs/remotes/canonical/$R" &&   # the tip as it is now, after the rebase
@@ -293,6 +294,7 @@ From the fetch on, the block is one chain that stops at the first failure:
 a local `v<version>` left from an earlier attempt fails the tag and is never pushed,
 and what it tags is the branch's tip as just fetched, so the branch has it.
 The landing that brought the release tagged its bump under a name of its own (`versioning/`), so `vX.Y.Z` is the release's alone.
+The tag, the release branch and the `-lts` branch then go to the copy in `duckdb/duckdb-r` by a plain push.
 
 For the **current** line only, submit to CRAN (`cran/`);
 the submission workflow sets the tag itself and drafts the GitHub release,
@@ -335,7 +337,7 @@ coordinate at the **cluster** level:
   ([`plan/PLAN-v2-series-open.md`](/plan/PLAN-v2-series-open.md))
   lives in a long-running TRACK/STABILIZE:
   its STABILIZE *is* the upstream release-candidate window.
-  The line's release branch is cut in `duckdb/duckdb-r` from `main`, whose R side the line keeps,
+  The line's release branch is cut in the fork from `main`, whose R side the line keeps,
   and its CUT is a **landing** onto that branch: the series' vendor commits,
   replayed without the flavor onto the frozen branch, ending on the bump to the release, and judged by CI one by one.
   CRAN releases are then cut from the new branch, and the line CRAN shipped before keeps its own as a parked baseline

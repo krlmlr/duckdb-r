@@ -1,9 +1,15 @@
 # Verdicts upstream
 
-The per-commit verdicts shown in the canonical repository:
+The per-commit verdicts shown in `duckdb/duckdb-r`:
 the `each-rcc (fork)` status on the commits of an open pull request from the fork
 and of every series' green branch,
 and the workflow that copies it there.
+
+`duckdb/duckdb-r` was the canonical repository when this was built, and is now the fork's downstream copy
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+Pull requests and landings happen in the fork, which shows its own verdicts,
+so only the green branches' coverage still serves a reader there.
+"The canonical repository" below means `duckdb/duckdb-r`.
 
 `each.yaml` runs in `krlmlr/duckdb-r` alone ([`branches/model/`](/handbook/branches/model/README.md)),
 so the `rcc` status its legs write lands on the fork's copy of a commit,

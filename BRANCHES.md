@@ -134,8 +134,10 @@ The leaf carries the live table of flavors and the ref each publishes from.
 Three moving parts work together to produce the published R packages:
 
 ```txt
-duckdb/duckdb        krlmlr/duckdb-r         duckdb/duckdb-r       CRAN / r-universe
-(upstream C++)       (CI/CD fork)            (canonical R pkg)
+duckdb/duckdb        krlmlr/duckdb-r         krlmlr/duckdb-r       CRAN / r-universe
+(upstream C++)       (series refs)           (canonical R pkg,     (r-universe builds
+                                             copied to             duckdb/duckdb-r)
+                                             duckdb/duckdb-r)
 ──────────────       ──────────────          ───────────────       ─────────────────
 main            ──►  main-dev           ──►  main               ──►  duckdb (r-universe)
                                                                      duckdb.dev (r-universe)
@@ -151,10 +153,11 @@ v1.4-andium     ──►  v1.4-andium-dev    ──►  v1.4-andium        ─�
    │  + patches   │        │       │   at a time    │
    │  from patch/ │        │       └────────────────┘
    └──────────────┘        │
-                    the Pull app (mirrors the canonical branches into the fork)
+           the port stage (the branch each series releases from)
 ```
 
-The arrow from upstream to the CI/CD fork represents automated vendoring; the arrow from the fork to the canonical repo represents a landing:
+The arrow from upstream to the series refs represents automated vendoring;
+the arrow from the series refs to the canonical branches represents a landing:
 `main` takes batches of upstream `main`, and the release branch of the line CRAN ships takes its own line's batches and releases
 ([`series-land`](/.claude/skills/series-land/SKILL.md)). Patches from `patch/` are applied to the vendored C++ code during every vendor run (see [Patch Stack](#patch-stack) below).
 
@@ -162,12 +165,12 @@ The arrow from upstream to the CI/CD fork represents automated vendoring; the ar
 
 Absorbed into
 [`branches/model/`](/handbook/branches/model/README.md):
-`duckdb/duckdb-r` is canonical, `krlmlr/duckdb-r` is the CI/CD fork,
+`krlmlr/duckdb-r` is canonical and releases the package, `duckdb/duckdb-r` is its downstream copy,
 and the engine is vendored from `duckdb/duckdb` into the fork.
 
 ## Branch Overview
 
-Each supported DuckDB minor version has a series of branches organised into two repos.
+Each supported DuckDB minor version has a series of branches in the fork, and its canonical branches are copied to `duckdb/duckdb-r`.
 The branches that publish something are below, and which package each publishes is
 [`branches/flavors/`](/handbook/branches/flavors/README.md)'s live table.
 Three more refs sit beside every `<S>-dev` in the fork —
@@ -180,15 +183,15 @@ its refs archived in `krlmlr/duckdb-r-old`.
 
 | Branch                    | Repo              | `Package:`       | Purpose                                                    |
 |---------------------------|-------------------|------------------|------------------------------------------------------------|
-| `main`                    | `duckdb/duckdb-r` | `duckdb`         | Preview of the next line; the tooling every series runs    |
+| `main`                    | `krlmlr/duckdb-r` | `duckdb`         | Preview of the next line; the tooling every series runs    |
 | `main-dev`                | `krlmlr/duckdb-r` | `duckdb.dev`     | Vendored dev on upstream `main`; the preview line          |
-| `v2.0-cyanoptera`         | `duckdb/duckdb-r` | `duckdb`         | Release branch CRAN ships from; R-side work starts here    |
+| `v2.0-cyanoptera`         | `krlmlr/duckdb-r` | `duckdb`         | Release branch CRAN ships from; R-side work starts here    |
 | `v2.0-cyanoptera-dev`     | `krlmlr/duckdb-r` | `duckdb.2.0.dev` | Bleeding edge on v2.0 upstream                             |
-| `v1.5-variegata`          | `duckdb/duckdb-r` | `duckdb`         | Parked baseline of the previous line                       |
+| `v1.5-variegata`          | `krlmlr/duckdb-r` | `duckdb`         | Parked baseline of the previous line                       |
 | `v1.5-variegata-lts`      |                   |                  | Does not exist, v1.5 is not an LTS                         |
 | `v1.5-variegata-dev`      | `krlmlr/duckdb-r` | `duckdb.1.5.dev` | Bleeding edge on v1.5 upstream                             |
-| `v1.4-andium`             | `duckdb/duckdb-r` | `duckdb`         | Stable baseline for LTS release                            |
-| `v1.4-andium-lts`         | `duckdb/duckdb-r` | `duckdb.1.4`     | `v1.4-andium` + one rename commit; published to r-universe |
+| `v1.4-andium`             | `krlmlr/duckdb-r` | `duckdb`         | Stable baseline for LTS release                            |
+| `v1.4-andium-lts`         | `krlmlr/duckdb-r` | `duckdb.1.4`     | `v1.4-andium` + one rename commit; published to r-universe |
 | `v1.4-andium-dev`         | `krlmlr/duckdb-r` | `duckdb.1.4.dev` | Bleeding edge on v1.4 upstream                             |
 
 ### Branch series structure
@@ -200,9 +203,9 @@ What each may do, and what would be a violation, is
 [`branches/model/`](/handbook/branches/model/README.md)'s.
 The `-lts`-suffixed branch only exists when the minor version is designated an LTS release.
 
-Stable branches (`duckdb/duckdb-r`) track released R package versions and are the source for CRAN
-releases and numbered r-universe releases (without the `.dev` suffix).
-Dev branches (`krlmlr/duckdb-r`) track the corresponding bleeding-edge upstream branches and are
+Stable branches track released R package versions and are the source for CRAN
+releases and numbered r-universe releases (without the `.dev` suffix), which build from their copies in `duckdb/duckdb-r`.
+Dev branches track the corresponding bleeding-edge upstream branches and are
 published as `.dev` packages.
 
 ## Source of Truth

@@ -14,22 +14,21 @@ sibling `<S>-dev`, so opening one is creating refs
 ([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md)).
 
 **Two repositories.**
-`duckdb/duckdb-r` is canonical:
-`main`, the release branch of the line CRAN ships, the stale baselines awaiting retirement, the LTS flavor branch;
-CRAN and the numbered r-universe packages publish from here.
+`krlmlr/duckdb-r` is canonical, and the package is released from it:
+`main`, the release branch of the line CRAN ships, the stale baselines awaiting retirement, the LTS flavor branch,
+the tags, and every series' working refs live there,
+and pull requests, landings, forward merges and CRAN submissions happen there.
 `main` carries the engine of upstream `main` and makes no CRAN release;
 the line CRAN ships has a branch of its own, named as upstream names it, `v2.0-cyanoptera`, from which its releases are cut
 ([`operations/releases/process/`](/handbook/operations/releases/process/README.md)).
 Plain `duckdb` on r-universe is built from `main` all the same, by decision, so r-universe shows the next line and CRAN the current one:
 that is why the flavor table names `main` as where `duckdb` is published from
 ([`flavors/`](/handbook/branches/flavors/README.md)).
-`krlmlr/duckdb-r` is a fork of it — a fork object in the same fork
-network, not a copy that shares its name — used for CI/CD
-so the per-commit builds do not consume
-the `duckdb` organization's Actions quota;
-every series' working refs live there,
-beside mirrors of the canonical branches
-they are seeded from and measured against
+It is a GitHub fork of `duckdb/duckdb-r`, a fork object in the same fork network,
+first used for CI/CD so that the per-commit builds do not consume the `duckdb` organization's Actions quota.
+`duckdb/duckdb-r` is now its downstream copy:
+it takes `main`, the release branches, `<S>-green` and the tags from the fork by plain pushes,
+so that `duckdb.r-universe.dev`, the installs and the links that name it keep working
 ([`mirrors/`](/handbook/branches/mirrors/README.md)).
 The fork carries only the refs the loop serves;
 what it does not carry stands in `krlmlr/duckdb-r-old`,
@@ -186,7 +185,7 @@ which the branch fast-forwards onto once CI has passed every one.
 and the v2.0 series as `v2.0-cyanoptera-land-dev` onto `v2.0-cyanoptera`; one landing per line is in flight at a time.
 `<L>-land-green` marks how far CI has passed it, starting at the frozen branch.
 The pair exists only while a landing is in flight, and has no buffer, so the loop never serves it.
-`<L>-land-review`, in the canonical repository, is the landing without its engine,
+`<L>-land-review`, in the fork, is the landing without its engine,
 which a draft pull request shows for review and never merges
 ([`series-land`](/.claude/skills/series-land/SKILL.md)).
 **`retry-<S>-dev` is the rerun ledger**: pushed at one commit of `<S>-dev` to have it judged again on its own SHA,
@@ -207,15 +206,16 @@ shields.io renders a count from the public repository:
 https://img.shields.io/github/commits-difference/krlmlr/duckdb-r?base=<S>-green&head=<S>-dev&label=in%20flight
 ```
 
-It compares **within one repository**, which is what forces every ref a badge names
-to live in `krlmlr/duckdb-r`, release branches included, and kept fresh
+It compares **within one repository**, so every ref a badge names has to live in the repository it is counted in:
+*in flight* and *buffered* are counted in `krlmlr/duckdb-r`,
+and *ahead* in `duckdb/duckdb-r`, whose copies of the release branch and of `<S>-green` keep it fresh
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 Link each badge to `https://github.com/krlmlr/duckdb-r/compare/<base>...<head>`, its drill-down.
 An upstream-lag badge — how far behind `duckdb/duckdb` itself — is not expressible this way,
 because that comparison crosses repositories.
 The table's upkeep is [`series-open`](/.claude/skills/series-open/SKILL.md)'s.
 
-**The canonical branches of `duckdb/duckdb-r` are the source of truth** for four of the seven components
+**The canonical branches of `krlmlr/duckdb-r` are the source of truth** for four of the seven components
 a branch is made of, and the other three come from elsewhere:
 
 | Component | Source of truth | |
@@ -278,7 +278,7 @@ counting its vendor commits and version bumps and listing each R-side commit.
 A path-limited walk of the engine follows a forward merge's first parent by itself, since the merge keeps that side of the engine,
 and the port stage walks the newer line's first parents, offering each forward merge as one port of its change outside the engine,
 so the commits behind it, the older line's vendor commits and fixes, never reach the newer line's series one by one.
-The fork's `main` takes no part in it: it is a mirror and moves on its own
+The merge is made in the fork, and its copy in `duckdb/duckdb-r` takes it afterwards
 ([`mirrors/`](/handbook/branches/mirrors/README.md)).
 
 That ordering is what makes the vendor strand the only thing a series owns.

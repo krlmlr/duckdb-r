@@ -24,7 +24,7 @@ Apart from the known package-size NOTE, every error, warning, and note is a bloc
 
 **Submitting:**
 [`cran-submission.yaml`](/.github/workflows/cran-submission.yaml) runs only when started by hand,
-from the Actions tab or with `gh workflow run cran-submission.yaml --repo duckdb/duckdb-r --ref <ref>`,
+from the fork's Actions tab or with `gh workflow run cran-submission.yaml --repo krlmlr/duckdb-r --ref <ref>`,
 and submits the commit that ref points to.
 It first stops on a development version, one with more than three components such as `1.99.99.9001`,
 unless it was dispatched with the input `allow-dev-version`.
@@ -47,6 +47,8 @@ With the input `dry-run` (`-f dry-run=true`), a run tags, drafts and sends nothi
 after the same version check, the tag job prints the release and the tag it would write, and whether it would update a draft or move a tag,
 and the submission job builds, verifies and keeps the tarball as a real run does,
 then lists every field the upload would post, under a banner on the summary page that says it was a dry run.
+The tag it writes and the GitHub release it drafts are the fork's, and the tag is copied to `duckdb/duckdb-r` with the branch
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 Acceptance is asynchronous — days, overlapping the next cycle —
 so the release is tagged and published to r-universe without
 waiting; a rejection is fixed on the release branch and

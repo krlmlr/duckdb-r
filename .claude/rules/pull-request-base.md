@@ -14,6 +14,7 @@ _Derived from [`handbook/operations/review/`](/handbook/operations/review/README
 This is the short form, and it loads in every session.
 Fix the leaf first and re-derive this, never the other way around._
 
+- Open the pull request in `krlmlr/duckdb-r`, the canonical repository, never in `duckdb/duckdb-r`, its downstream copy.
 - Branch from, and open the pull request against, the oldest active release branch the change applies to: `v2.0-cyanoptera` today.
   The active ones are the CRAN row's `upstream` in `scripts/series.yaml`
   and every `releases_from` other than `main` on a row not declared `stale: true`.

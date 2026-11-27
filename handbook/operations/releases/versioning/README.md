@@ -93,7 +93,7 @@ A landing ends on a bump, its last commit
 After a release `X.Y.Z` the branch released from moves on to `X.Y.Z.9000`, the first development version,
 in a bump that takes no tag.
 
-**Every landing's bump takes the annotated tag `v<version>`, `v2.0.99.9001`, in the canonical repository,
+**Every landing's bump takes the annotated tag `v<version>`, `v2.0.99.9001`, in the canonical repository, the fork,
 and a bump to a release's three components takes `v<version>.9900`, `v2.1.0.9900`.**
 Its message is the subject `duckdb <version>`, or `duckdb <version>.9900` with that tag,
 then the section `NEWS.md` has for `<version>`, its heading matched up to the version so that a date after it is left out,

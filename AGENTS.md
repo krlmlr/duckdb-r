@@ -51,7 +51,8 @@ searching the tree is the slower path.
 * Every document outside `handbook/` either derives from it or backreferences the node it serves.
   In Claude Code the prose rules load on their own when you touch a file carrying prose;
   run `/docs:check` after touching documentation.
-* Open a pull request against the oldest active release branch the change applies to, `v2.0-cyanoptera` today, never `main` by habit,
+* Open a pull request in `krlmlr/duckdb-r`, which releases the package,
+  against the oldest active release branch the change applies to, `v2.0-cyanoptera` today, never `main` by habit,
   and name the base explicitly, since `main` is the default
   ([`operations/review/`](/handbook/operations/review/README.md) says which changes target `main`).
   In Claude Code this rule loads in every session.
