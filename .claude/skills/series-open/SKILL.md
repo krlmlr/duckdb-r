@@ -195,9 +195,9 @@ until now.
 
    One entry, and both tables are written from it — the `Flavors` table in
    [`README.Rmd`](/README.Rmd) and the one in
-   [`branches/flavors/`](/handbook/branches/flavors/README.md) — along with the
-   mirror rules step 7 checks. The entry is the only place a new series is named
-   by hand; everything else is discovered from refs or derived from it.
+   [`branches/flavors/`](/handbook/branches/flavors/README.md). The entry is the
+   only place a new series is named by hand; everything else is discovered from
+   refs or derived from it.
    See below for what the fields mean and what a badge row gets wrong.
 
    **The entry may already be there.** A loop firing that saw the line cut
@@ -206,27 +206,7 @@ until now.
    ([`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md), "What a firing reports").
    The loop never cuts the refs — only steps 1–5 above do.
 
-7. **Update the fork's mirror configuration — derived, not remembered.**
-   A series' *ahead* badge measures against a branch the fork mirrors, which stays
-   current only while [`.github/pull.yml`](/.github/pull.yml) carries a rule for
-   it. Which rules the file owes is a function of the table step 6 just moved, so
-   [`scripts/pull-config.sh`](/scripts/pull-config.sh) evaluates that function and
-   prints what is missing (`--check` exits non-zero). A line still releasing from
-   `main` is measured against `main`, which is ruled already, so most openings add
-   no rule.
-
-   Two halves the script cannot do. **Push the branch into the fork first** — a
-   rule whose base the fork lacks is skipped silently and forever. **Then carry
-   the merged file to the fork's default branch**, where Pull reads it; `pull.yml`
-   names the URL that triggers a sync, so it takes effect today rather than within
-   six hours ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-
-   Nothing else lives outside the refs: the loop discovers every series from them,
-   and reports the rule the mirror configuration is missing on the firing that sees a series change,
-   as a change to `main` like any other, since the script is read-only
-   ([`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md)).
-
-8. **Register the new flavor with r-universe.**
+7. **Register the new flavor with r-universe.**
    `<F>` is a package nothing in this repository creates: a universe is configured
    by `<user>/<user>.r-universe.dev`, whose `packages.json` gives each package a
    `url` and the `branch` to build — `<S>-green` for a series. Adding `<F>` is an
@@ -267,8 +247,7 @@ entry is eight fields:
 `series` is the prefix of the four refs; `publishes_from` is what r-universe
 builds. `releases_from` is the one to get right, and it does two jobs: it is the
 base the *ahead* badge measures from, and it is the branch the series seeds and
-forward-ports from, which is why the fork mirrors it and why
-`pull-config.sh` reads it rather than the badge
+forward-ports from, which the scripts read from the canonical repository
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 
 Two things the generator settles that a hand-copied row used to get wrong.
@@ -288,8 +267,9 @@ comparisons do not all live in the same one:
   repository carrying `<S>-dev` and `<S>-build`.
 
 A badge whose base the named repository lacks renders as an error rather than a
-count, and one reading a stale mirror is worse because it renders: it counts
-commits that have already shipped. Step 7 settles both.
+count, and one reading a stale copy is worse because it renders: it counts
+commits that have already shipped. Counting *ahead* where the release branch is
+native settles both.
 
 **The table must stay clear of `scripts/flavor.patch`.**
 `README.Rmd` is a flavored file and the patch rewrites the installation hunks near
@@ -310,10 +290,6 @@ cut from `main` ([`series-land`](/.claude/skills/series-land/SKILL.md), "Changin
 and keeps that branch when a newer line takes CRAN over and it parks.
 Its `.dev` badge follows it there — the *ahead* base is the branch the series
 releases from, which is no longer `main`.
-That move is what earns the line a mirror and a rule, on the day its branch is cut
-rather than on the day it was opened, and `pull-config.sh` reports it as
-soon as the badge base moves: step 7 arriving by itself rather than being
-remembered.
 The same `releases_from` freezes the line's R side against `main`'s: `scripts/series-port.sh`
 takes only the tooling sync for a line declared on a branch of its own,
 which matters because that branch was cut from `main` and no lineage test can tell it from a live line's.

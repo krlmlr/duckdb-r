@@ -8,7 +8,7 @@ and the ones worth setting repo-wide are repository variables:
 
 | Knob | Input | Variable | Default |
 |---|---|---|---|
-| Earliest commit date | `since` | `EACH_RCC_SINCE` | `2026-01-01` |
+| Earliest commit date | `since` | `EACH_RCC_SINCE` | none: the variable must be set unless the input is (`2026-01-01`) |
 | Concurrent shards | `max-parallel` | `EACH_RCC_MAX_PARALLEL` | `20` |
 | Build-time target per shard | `shard-budget-minutes` | — | `300` |
 | Compute traded for wall clock | `split-factor` | `EACH_RCC_SPLIT_FACTOR` | `1.5` |
@@ -21,9 +21,10 @@ Most of these defaults are the workflow's, set in
 [`each.yaml`](/.github/workflows/each.yaml);
 the summary tail and the gate list default in the scripts that read them
 instead.
-The scripts carry their own fallbacks for a direct invocation too,
-and those differ — `each-plan.sh` falls back to `MAX_PARALLEL=8`,
-for instance, where the workflow passes 20.
+The scan start and the four cost constants have no default anywhere:
+they are the repository variables `EACH_RCC_SINCE` and those of
+[`planning/`](/handbook/operations/ci/per-commit/planning/README.md),
+and the plan job fails first, naming any that is empty.
 
 `EACH_GATES` can drop individual gates, but `pkgdown` is **not** a candidate:
 a pkgdown failure is a real failure and has to be dealt with,
@@ -41,7 +42,8 @@ behaviour back.
 
 ## Reading a failure without opening the log
 
-A leg is one job for up to ~20 commits and up to five hours of output.
+A leg is one job for as many commits as fit its deadline
+([`planning/`](/handbook/operations/ci/per-commit/planning/README.md)), up to five hours of output.
 The leg's job summary says which commit went red and why.
 The result table names the stages that failed —
 a commit's cell reads `failure (check, pkgdown)`, not just `failure` —

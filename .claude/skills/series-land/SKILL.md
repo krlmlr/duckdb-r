@@ -53,7 +53,7 @@ flowchart LR
 ```
 
 * **`<L>-land-dev`**, in the fork: `<B>` plus the vendor commits and, last, the version bump, and nothing else.
-  CI judges it like any `-dev` ([`scripts/each-plan.sh`](/scripts/each-plan.sh)).
+  CI judges it like any `-dev` ([`each-plan.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-plan.sh)).
 * **`<L>-land-green`**, in the fork: where CI's judgement starts.
   It is pushed at the frozen `<B>` and advanced over the commits that passed;
   the landing is ready when it equals `<L>-land-dev`, the bump included.
@@ -584,8 +584,7 @@ and `main` moves on to preview the next line; CRAN moves to the new line with it
    the CRAN flavor's `upstream` becomes `<N>` with `<N>`'s first release,
    and its `publishes_from` stays `main`, since plain `duckdb` on r-universe shows the next line while CRAN's releases are cut from `<N>`,
    and a line that retires then is declared `stale: true`;
-   then `.github/pull.yml` from `scripts/pull-config.sh` and the tables from `scripts/series-table.R`,
-   checked with `--check` ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+   then the tables from `scripts/series-table.R`, checked with `--check`.
    A retiring line moves the oldest active release branch,
    so the base [`operations/review/`](/handbook/operations/review/README.md) names as today's moves with it,
    and so do its copies in `AGENTS.md` and `.claude/rules/pull-request-base.md`.

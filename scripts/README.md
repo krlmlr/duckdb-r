@@ -47,12 +47,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`flavor.sh`](flavor.sh) | Apply a package flavor: rewrite scripts/flavor.patch to the target name (say, duckdb.dev), apply it, and commit the rename; see BRANCHES.md. |
 | [`reflavor.sh`](reflavor.sh) | Change an already-flavored tree from one flavor to another, in place: `duckdb.dev` -> `duckdb.2.0.dev`, renamed files and regenerated binding included. |
 
-## [`branches/mirrors/`](/handbook/branches/mirrors/README.md)
-
-| File | Purpose |
-|---|---|
-| [`pull-config.sh`](pull-config.sh) | Read-only: does `.github/pull.yml` rule every mirror a badge measures against? |
-
 ## [`branches/model/`](/handbook/branches/model/README.md)
 
 | File | Purpose |
@@ -89,9 +83,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 
 | File | Purpose |
 |---|---|
-| [`each-follow-up-test.sh`](each-follow-up-test.sh) | Check scripts/each-follow-up.sh, offline, against a synthetic branch, a synthetic store and a stand-in for `gh api` built here, and the part of scripts/each-... |
-| [`each-follow-up.sh`](each-follow-up.sh) | Dispatch one more `each-rcc` run when this one left planned commits undecided. |
-| [`each-shard.sh`](each-shard.sh) | Build one shard of an `each-rcc` plan: many commits, one job, one workspace. |
 | [`rcc-one.sh`](rcc-one.sh) | Run the per-commit `rcc` gate against the working tree, once. |
 
 ## [`operations/ci/per-commit/planning/`](/handbook/operations/ci/per-commit/planning/README.md)
@@ -99,8 +90,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | File | Purpose |
 |---|---|
 | [`each-cost.py`](each-cost.py) | Estimate how many unity objects a change invalidates. |
-| [`each-partition.py`](each-partition.py) | Partition a commit range into contiguous, cost-balanced `each-rcc` shards. |
-| [`each-plan.sh`](each-plan.sh) | Plan the sharded per-commit `rcc` build for the checked-out branch. |
 
 ## [`operations/ci/per-commit/selection/`](/handbook/operations/ci/per-commit/selection/README.md)
 
