@@ -9,9 +9,9 @@
 # decided, a commit without one has not -- so the answer is one `ls-tree` over a
 # tree-only fetch rather than a request per commit.
 #
-# This is what work selection reads: scripts/each-plan.sh to choose what to
-# build, scripts/each-shard.sh to skip what a previous attempt already decided,
-# and scripts/each-follow-up.sh to tell what a run left undecided.
+# This is what work selection reads: the each-plan action to choose what to
+# build, the each-shard action to skip what a previous attempt already decided,
+# and the each-follow-up action to tell what a run left undecided.
 # The first two used to read commit statuses instead, which made the record
 # store and the status store two answers to the same question that had to be
 # reconciled -- newest-writer rules, a `PENDING_TTL_HOURS` heuristic, and a
@@ -39,7 +39,7 @@
 #                             harness points this at a local bare repository
 #   RCC_READ_DIR            - where the branch clone is cached between calls
 #                             (default: $RUNNER_TEMP/rcc-read); must be outside
-#                             the workspace, which scripts/each-shard.sh wipes.
+#                             the workspace, which the each-shard action wipes.
 #                             Deliberately not RCC_DIR: that one belongs to
 #                             scripts/rcc-publish.sh, and the two clones want
 #                             different fetch filters.
