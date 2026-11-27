@@ -88,14 +88,9 @@ and `scripts/series-converge.sh <S>`
 into what the forwarding explains and what it does not, stage 6).
 Judgement — repairs, review, vendoring — stays here.
 
-One more runs on an event rather than on every firing:
-`scripts/pull-config.sh`
-(read-only — the fork's mirror rules in [`.github/pull.yml`](/.github/pull.yml)
-against the badges that read them;
-prints the rule the file is missing, `--check` exits non-zero).
-Run it on the firing that sees a series change —
-one opened, one parked, one retired —
-and send what it prints to `main` as a PR, the way stage 7 sends one
+On the firing that sees a series change, one opened, one parked or one retired,
+report any branch the badges now measure against that `duckdb/duckdb-r` does not carry yet:
+the maintainer copies it there from the fork, since no app does
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 
 ### 0. Setup
@@ -111,8 +106,10 @@ git fetch --prune --tags origin
 git fetch -q upstream main
 ```
 
-* `upstream` is the canonical repository, the same remote `--canonical` takes everywhere;
-  every read of `main` a firing makes takes that ref, and a checkout that cannot reach it says so and falls back to the fork's mirror.
+* `upstream` is `duckdb/duckdb-r`, the downstream copy, and the same remote `--canonical` takes everywhere;
+  every read of `main` a firing makes takes that ref, and a checkout that cannot reach it says so and falls back to the fork's own `main`.
+  The fork is canonical, so a copy that lags the fork's `main` is a stale read: report it rather than run on it
+  ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
   A shallow or single-branch clone enumerates zero series or answers wrong; the scripts refuse one without tags.
 * **Establish how this firing reads results, once**:
   list the most recent `each-rcc` runs.
@@ -335,16 +332,14 @@ scripts/series-converge.sh <S>
   scripts/series-converge.sh <S>
 
   # The refs to swap, coverage, convergence, package and versions, and the
-  # tip of <S>-fwd-green to decide on, with nothing moved. The canonical
-  # repository is the remote named with --canonical where it is not `upstream`.
+  # tip of <S>-fwd-green to decide on, with nothing moved. The copy in
+  # duckdb/duckdb-r is the remote named with --canonical where it is not `upstream`.
   scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare
 
   # The rest is a session's, on the maintainer's request: the cutover pull
   # request, a review stack per strand, his sign-off on the SHA above, the swap.
   # See .claude/skills/series-cutover/SKILL.md.
 
-  # A retired lineage moves the badge table, and the mirror rules with it.
-  scripts/pull-config.sh --check
   ```
 
 * The routine does not run the swap, never passes `--confirm`, builds no review stack, opens no cutover pull request,

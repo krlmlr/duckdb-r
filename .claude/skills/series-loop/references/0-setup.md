@@ -16,15 +16,16 @@ git fetch --prune --tags origin
 git fetch -q upstream main
 ```
 
-**Both repositories, because `main` is one of them.**
-The series refs live in the fork and `main` belongs to the canonical
-repository, which the fork mirrors on the Pull app's six-hour cycle
+**Both repositories, because the scripts read `main` from the copy.**
+The fork is canonical and carries the series refs, `main` and the release branches;
+`duckdb/duckdb-r` is the downstream copy the maintainer pushes them to, and the loop copies green there
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-Every read of `main` a firing makes takes the canonical ref:
+Every read of `main` a firing makes still takes the copy's ref:
 stage 4's port and its tooling sync,
 and the flavor declaration stage 7 reports on.
-A checkout that cannot reach it falls back to whatever the mirror last copied,
+A checkout that cannot reach it falls back to the fork's own `main`,
 and the scripts say so when they do.
+A copy behind the fork's `main` feeds the port stale tooling, so a firing that finds one reports it.
 `upstream` is the remote name, the same one `--canonical` takes everywhere;
 add it where a checkout has none.
 

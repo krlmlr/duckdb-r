@@ -62,16 +62,14 @@ scripts/series-check.sh <S> <S>-fwd --upstream ../../../duckdb
 scripts/series-converge.sh <S>
 
 # The refs to swap, coverage, convergence, package and versions, and the
-# tip of <S>-fwd-green to decide on, with nothing moved. The canonical
-# repository is the remote named with --canonical where it is not `upstream`.
+# tip of <S>-fwd-green to decide on, with nothing moved. The copy in
+# duckdb/duckdb-r is the remote named with --canonical where it is not `upstream`.
 scripts/series-cutover.sh <S> --remote origin --upstream ../../../duckdb --prepare
 
 # The rest is a session's, on the maintainer's request: the cutover pull
 # request, a review stack per strand, his sign-off on the SHA above, the swap.
 # See .claude/skills/series-cutover/SKILL.md.
 
-# A retired lineage moves the badge table, and the mirror rules with it.
-scripts/pull-config.sh --check
 ```
 
 `--remote` names whichever remote of that checkout carries `<S>-green`,
@@ -83,9 +81,9 @@ the names are the same in every `scripts/series-*.sh`
 (`handbook/operations/vendoring/series-loop/README.md`),
 and naming them is what makes the remote-for-path swap unsayable
 rather than merely diagnosable.
-Check that the `main` the block lands on is the canonical one:
-a fork's mirror lags by however long the mirroring takes,
-and a report run off a stale mirror runs a stale `series-cutover.sh`.
+Check that the `main` the block lands on is the fork's own:
+the copy in `duckdb/duckdb-r` lags until the maintainer pushes it,
+and a report run off a stale copy runs a stale `series-cutover.sh`.
 
 **Emit the block whole, on every firing the condition holds**,
 with `<S>` and the paths substituted rather than left as placeholders.

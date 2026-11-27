@@ -47,12 +47,6 @@ Root of the documentation tree: [`handbook/`](/handbook/README.md).
 | [`flavor.sh`](flavor.sh) | Apply a package flavor: rewrite scripts/flavor.patch to the target name (say, duckdb.dev), apply it, and commit the rename; see BRANCHES.md. |
 | [`reflavor.sh`](reflavor.sh) | Change an already-flavored tree from one flavor to another, in place: `duckdb.dev` -> `duckdb.2.0.dev`, renamed files and regenerated binding included. |
 
-## [`branches/mirrors/`](/handbook/branches/mirrors/README.md)
-
-| File | Purpose |
-|---|---|
-| [`pull-config.sh`](pull-config.sh) | Read-only: does `.github/pull.yml` rule every mirror a badge measures against? |
-
 ## [`branches/model/`](/handbook/branches/model/README.md)
 
 | File | Purpose |
