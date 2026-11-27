@@ -364,6 +364,107 @@ test_that("converted ALTREP columns scan from engine threads (#2890)", {
   }
 })
 
+test_that("reads of converted ALTREP columns never enter the guarded path (#2890)", {
+  con <- local_con()
+  con2 <- local_con()
+  dbExecute(con2, "SET threads = 4")
+  df <- rel_to_altrep(rel_from_sql(
+    con,
+    paste(
+      "SELECT",
+      "CASE WHEN range % 7 = 0 THEN NULL ELSE range % 3 = 0 END AS l,",
+      "CASE WHEN range % 5 = 0 THEN NULL ELSE (range % 100)::INTEGER END AS i,",
+      "CASE WHEN range % 11 = 0 THEN NULL ELSE range / 4 END AS d,",
+      "CASE WHEN range % 13 = 0 THEN NULL ELSE 'v' || (range % 10) END AS s",
+      "FROM range(5000) ORDER BY range"
+    )
+  ))
+  # One read per column enters the guarded path and converts the column
+  for (col in names(df)) {
+    df[[col]][[1]]
+  }
+  expect_true(df_is_materialized(df))
+
+  before <- rapi_altrep_slow_path_count()
+  for (col in names(df)) {
+    x <- df[[col]]
+    x[[2]]
+    x[[5000]]
+    x[2990:3010]
+    x[!is.na(x)]
+    range(x)
+    range(x, na.rm = TRUE)
+    anyNA(x)
+    unique(x)
+    c(x, x)
+    if (col != "s") {
+      mean(x)
+      mean(x, na.rm = TRUE)
+      sum(x, na.rm = TRUE)
+    }
+  }
+  duckdb_register(con2, "lazy", df)
+  scanned <- dbGetQuery(
+    con2,
+    "SELECT count(l), sum(i), sum(d), max(s) FROM lazy"
+  )
+  duckdb_unregister(con2, "lazy")
+  expect_equal(nrow(scanned), 1L)
+  expect_identical(rapi_altrep_slow_path_count(), before)
+})
+
+test_that("Elt of an unconverted ALTREP column enters the guarded path (#2890)", {
+  con <- local_con()
+  sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d, 'v' || range AS s FROM range(10)"
+  slow_paths <- function(expr) {
+    before <- rapi_altrep_slow_path_count()
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
+  for (col in c("l", "i", "d", "s")) {
+    # A fresh data frame per column, so that no column is converted beforehand
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # Length's entries alone: an out-of-bounds subscript fails before it reaches Elt, converting nothing
+    length_only <- slow_paths(.subset2(x, 11L))
+    # The same Length entries, then Elt, which converts the column
+    expect_gt(slow_paths(.subset2(x, 1L)), length_only, label = col)
+  }
+})
+
+test_that("Dataptr of an unconverted ALTREP column enters the guarded path (#2890)", {
+  con <- local_con()
+  sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d FROM range(10)"
+  slow_paths <- function(expr) {
+    before <- rapi_altrep_slow_path_count()
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
+  for (col in c("l", "i", "d")) {
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # One Length entry alone: a zero subscript fails before reading
+    length_only <- slow_paths(.subset2(x, 0L))
+    # One Length entry, then Dataptr, which converts the column
+    expect_gt(slow_paths(-x), length_only, label = col)
+  }
+})
+
+test_that("Get_region of an unconverted ALTREP column enters the guarded path (#2890)", {
+  con <- local_con()
+  sql <- "SELECT range % 2 = 0 AS l, range::INTEGER AS i, range / 4 AS d FROM range(10)"
+  slow_paths <- function(expr) {
+    before <- rapi_altrep_slow_path_count()
+    tryCatch(expr, error = function(e) NULL)
+    rapi_altrep_slow_path_count() - before
+  }
+  for (col in c("l", "i", "d")) {
+    x <- rel_to_altrep(rel_from_sql(con, sql))[[col]]
+    # Two Length entries alone, as many as sum() makes before it reads
+    length_only <- slow_paths(.subset2(x, 11L))
+    # Two Length entries, then Get_region, which converts the column
+    expect_gt(slow_paths(sum(x)), length_only, label = col)
+  }
+})
+
 test_that("we can create various expressions and don't crash", {
   expect_snapshot({
     expr_reference("asdf")
