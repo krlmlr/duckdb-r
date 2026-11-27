@@ -74,7 +74,6 @@
 ├── patch/                          # R-specific patches applied to src/duckdb/     [1]
 ├── scripts/                        # Build and maintenance; index in its README   [5]
 ├── .github/
-│   ├── pull.yml                    # Pull app config — the fork's mirrors          [5]
 │   └── workflows/
 │       ├── each.yaml               # Per-commit rcc, as a sharded matrix           [5]
 │       └── R-CMD-check*.yaml       # Package check workflows                       [5]
@@ -135,13 +134,12 @@
 <span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>v1.4-andium     ──►  v1.4-andium-dev    ──►  v1.4-andium        ──►  duckdb.1.4 (r-universe)</span>
 <span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>                                             v1.4-andium-lts         duckdb.1.4.dev (r-universe)</span>
 <span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>   │              ^        ^       │                ^</span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>   │  vendor      │        │       │   landings,    │</span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>   │  (daily)     │        │       │   one batch    │</span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>   │  + patches   │        │       │   at a time    │</span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>   │  from patch/ │        │       └────────────────┘</span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>   └──────────────┘        │</span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a>                    the Pull app (mirrors the canonical branches into the fork)</span></code></pre></div>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>   │              ^                │                ^</span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>   │  vendor      │                │   landings,    │</span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>   │  (daily)     │                │   one batch    │</span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>   │  + patches   │                │   at a time    │</span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>   │  from patch/ │                └────────────────┘</span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>   └──────────────┘</span></code></pre></div>
 <p>The arrow from upstream to the CI/CD fork represents automated vendoring; the arrow from the fork to the canonical repo represents a landing: <code>main</code> takes batches of upstream <code>main</code>, and the release branch of the line CRAN ships takes its own line’s batches and releases (<a href="/.claude/skills/series-land/SKILL.html"><code>series-land</code></a>). Patches from <code>patch/</code> are applied to the vendored C++ code during every vendor run (see <a href="#patch-stack">Patch Stack</a> below).</p>
 </div>
 <div class="section level2">

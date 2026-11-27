@@ -83,7 +83,6 @@ The seven components are:
     ├── patch/                          # R-specific patches applied to src/duckdb/     [1]
     ├── scripts/                        # Build and maintenance; index in its README   [5]
     ├── .github/
-    │   ├── pull.yml                    # Pull app config — the fork's mirrors          [5]
     │   └── workflows/
     │       ├── each.yaml               # Per-commit rcc, as a sharded matrix           [5]
     │       └── R-CMD-check*.yaml       # Package check workflows                       [5]
@@ -150,13 +149,12 @@ v1.5-variegata  ──►  v1.5-variegata-dev ──►  v1.5-variegata     ─�
 v1.4-andium     ──►  v1.4-andium-dev    ──►  v1.4-andium        ──►  duckdb.1.4 (r-universe)
                                              v1.4-andium-lts         duckdb.1.4.dev (r-universe)
 
-   │              ^        ^       │                ^
-   │  vendor      │        │       │   landings,    │
-   │  (daily)     │        │       │   one batch    │
-   │  + patches   │        │       │   at a time    │
-   │  from patch/ │        │       └────────────────┘
-   └──────────────┘        │
-                    the Pull app (mirrors the canonical branches into the fork)
+   │              ^                │                ^
+   │  vendor      │                │   landings,    │
+   │  (daily)     │                │   one batch    │
+   │  + patches   │                │   at a time    │
+   │  from patch/ │                └────────────────┘
+   └──────────────┘
 ```
 
 The arrow from upstream to the CI/CD fork represents automated
