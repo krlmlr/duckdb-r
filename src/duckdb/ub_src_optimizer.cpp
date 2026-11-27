@@ -6,6 +6,8 @@
 
 #include "src/optimizer/aggregate_rewrite_helper.cpp"
 
+#include "src/optimizer/apply_functional_dependencies.cpp"
+
 #include "src/optimizer/build_probe_side_optimizer.cpp"
 
 #include "src/optimizer/column_binding_replacer.cpp"
@@ -30,7 +32,17 @@
 
 #include "src/optimizer/cte_join_filter_pusher.cpp"
 
+#include "src/optimizer/cte_runtime_filter_pushdown.cpp"
+
+#include "src/optimizer/cte_semi_join_filter_transfer.cpp"
+
 #include "src/optimizer/deliminator.cpp"
+
+#include "src/optimizer/disjunctive_join_rewriter.cpp"
+
+#include "src/optimizer/distinctness.cpp"
+
+#include "src/optimizer/duplicate_eliminated_domain_optimizer.cpp"
 
 #include "src/optimizer/empty_result_pullup.cpp"
 
@@ -50,9 +62,15 @@
 
 #include "src/optimizer/in_clause_rewriter.cpp"
 
+#include "src/optimizer/join_build_properties.cpp"
+
 #include "src/optimizer/join_elimination.cpp"
 
 #include "src/optimizer/join_filter_pushdown_optimizer.cpp"
+
+#include "src/optimizer/join_simplification.cpp"
+
+#include "src/optimizer/join_to_semi_join.cpp"
 
 #include "src/optimizer/late_materialization.cpp"
 
@@ -66,8 +84,6 @@
 
 #include "src/optimizer/optimizer.cpp"
 
-#include "src/optimizer/outer_join_simplification.cpp"
-
 #include "src/optimizer/partial_aggregate_pushdown.cpp"
 
 #include "src/optimizer/partitioned_execution.cpp"
@@ -76,11 +92,17 @@
 
 #include "src/optimizer/projection_pullup.cpp"
 
+#include "src/optimizer/recursive_join_planning.cpp"
+
 #include "src/optimizer/regex_range_filter.cpp"
 
 #include "src/optimizer/remote_pushdown_optimizer.cpp"
 
 #include "src/optimizer/remove_duplicate_groups.cpp"
+
+#include "src/optimizer/remove_redundant_distinct.cpp"
+
+#include "src/optimizer/remove_redundant_order.cpp"
 
 #include "src/optimizer/remove_redundant_order_keys.cpp"
 
@@ -94,7 +116,13 @@
 
 #include "src/optimizer/sampling_pushdown.cpp"
 
+#include "src/optimizer/scalar_aggregate_merger.cpp"
+
 #include "src/optimizer/scalar_fn_pushdown.cpp"
+
+#include "src/optimizer/self_join_aggregate.cpp"
+
+#include "src/optimizer/set_operation_aggregate.cpp"
 
 #include "src/optimizer/statistics_propagator.cpp"
 
@@ -105,6 +133,10 @@
 #include "src/optimizer/type_pushdown.cpp"
 
 #include "src/optimizer/unnest_rewriter.cpp"
+
+#include "src/optimizer/window_fusion.cpp"
+
+#include "src/optimizer/window_join_pushdown.cpp"
 
 #include "src/optimizer/window_self_join.cpp"
 

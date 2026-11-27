@@ -22,6 +22,8 @@
 
 #include "src/main/connection_manager.cpp"
 
+#include "src/main/context.cpp"
+
 #include "src/main/database.cpp"
 
 #include "src/main/database_file_path_manager.cpp"
@@ -45,6 +47,8 @@
 #include "src/main/external_resource_type_registry.cpp"
 
 #include "src/main/external_resources_manager.cpp"
+
+#include "src/main/os_util.cpp"
 
 #include "src/main/parse_iterator.cpp"
 

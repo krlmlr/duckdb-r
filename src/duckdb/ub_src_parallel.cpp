@@ -32,7 +32,13 @@
 
 #include "src/parallel/progress_verifier.cpp"
 
+#include "src/parallel/runtime_filter_schedule.cpp"
+
+#include "src/parallel/scan_affinity_queue.cpp"
+
 #include "src/parallel/scan_read_ahead.cpp"
+
+#include "src/parallel/sharded_counter.cpp"
 
 #include "src/parallel/task_executor.cpp"
 

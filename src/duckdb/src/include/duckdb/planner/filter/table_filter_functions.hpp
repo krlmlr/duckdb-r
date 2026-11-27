@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
+#include "duckdb/common/limits.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/enums/expression_type.hpp"
@@ -60,7 +61,7 @@ struct SelectivityOptionalFilterState final : public TableFilterState {
 	}
 };
 
-enum class SelectivityOptionalFilterType : uint8_t { MIN_MAX = 0, BF = 1, PRF = 3 };
+enum class SelectivityOptionalFilterType : uint8_t { MIN_MAX = 0, BF = 1, PRF = 3, IN_FILTER = 4 };
 
 void GetThresholdAndVectorsToCheck(SelectivityOptionalFilterType type, float &selectivity_threshold,
                                    idx_t &n_vectors_to_check);
@@ -92,8 +93,16 @@ struct TableFilterFunctions {
 //! describes a complete key set, so only a sealed filter may be looked up or handed to a scan.
 class BloomFilter {
 public:
+	//! Deferred buffers must be cleared through InitializeRange before inserting any keys.
+	enum class Initialization { IMMEDIATE, DEFERRED };
+
 	BloomFilter() = default;
-	void Initialize(ClientContext &context_p, idx_t number_of_rows);
+	//! Cap the bitmap size without reducing its desired bits per key.
+	void Initialize(ClientContext &context_p, idx_t number_of_rows,
+	                idx_t max_bitmap_bytes = NumericLimits<idx_t>::Maximum(),
+	                Initialization initialization = Initialization::IMMEDIATE);
+	//! Deferred initialization must cover disjoint ranges of [0,total) before insertion begins.
+	void InitializeRange(idx_t begin, idx_t end, idx_t total);
 
 	//! VectorOperations::Hash writes at the source row positions, so the hashes to insert are the ones sel
 	//! points at rather than the first count entries
@@ -107,10 +116,11 @@ public:
 
 	void InsertOne(hash_t hash);
 	bool LookupOne(hash_t hash) const;
-	//! Folds the filter down to the smallest size that still meets the target false positive rate, releases the
-	//! memory that folding freed up, and marks the filter complete.
+	//! Folds the filter down to the smallest size that still meets the target false positive rate, releases excess
+	//! spare capacity, and marks the filter complete.
 	void Seal(ClientContext &context);
 
+	//! Allocation and geometry are configured; only a sealed filter is ready for lookup.
 	bool IsInitialized() const {
 		return initialized;
 	}
@@ -121,6 +131,14 @@ public:
 	bool IsUseful() const {
 		D_ASSERT(sealed);
 		return useful;
+	}
+	bool IsPublished() const {
+		return published;
+	}
+	//! Marks the filter as handed to a probe-side consumer: it must stay immutable afterwards
+	void MarkPublished() {
+		D_ASSERT(initialized && sealed);
+		published = true;
 	}
 
 	static idx_t GetNumberOfSectors(idx_t number_of_rows);
@@ -135,12 +153,16 @@ private:
 
 private:
 	idx_t num_sectors;
+	//! Sector capacity of buf_, so an unpublished filter can be reused across recursive iterations
+	idx_t allocated_sectors = 0;
 	uint64_t bitmask; // num_sectors - 1 -> used to get the sector offset
 
 	bool initialized = false;
 	bool sealed = false;
 	bool useful = false;
-	AllocatedData buf_;
+	bool published = false;
+	Initialization initialization = Initialization::IMMEDIATE;
+	HugeAllocation buf_;
 	uint64_t *bf;
 };
 
@@ -185,7 +207,8 @@ public:
 	virtual unique_ptr<BuildState> InitializeBuildState(ClientContext &context) const = 0;
 	virtual void InsertKeys(Vector &keys, BuildState &state) const = 0;
 	virtual void InsertKeysParallel(Vector &keys, BuildState &state) const = 0;
-	virtual void MergeBuildState(BuildState &state) = 0;
+	//! Consumes a completed state after all writers have finished.
+	virtual void MergeBuildState(unique_ptr<BuildState> state) = 0;
 	virtual idx_t GetBuildStateSize() const = 0;
 	virtual idx_t LookupKeys(Vector &keys, SelectionVector &result_sel, idx_t count) const = 0;
 	//! result_sel contains local positions into sel rather than source row ids.
@@ -193,9 +216,19 @@ public:
 	                         idx_t count) const = 0;
 	virtual FilterPropagateResult LookupRange(const Value &lower_bound, const Value &upper_bound) const = 0;
 	virtual bool IsInitialized() const = 0;
+	bool IsPublished() const {
+		return published;
+	}
+	void MarkPublished() {
+		D_ASSERT(IsInitialized());
+		published = true;
+	}
 	static bool SupportedType(const LogicalType &type);
 	static unique_ptr<PrefixRangeFilter> CreatePrefixRangeFilter(const LogicalType &key_type);
 	static bool TryComputeSpan(const Value &lower_bound, const Value &upper_bound, uhugeint_t &result);
+
+private:
+	bool published = false;
 };
 
 //! FunctionData for prefix range internal function

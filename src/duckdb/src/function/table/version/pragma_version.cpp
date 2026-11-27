@@ -1,17 +1,17 @@
 #ifndef DUCKDB_PATCH_VERSION
-#define DUCKDB_PATCH_VERSION "0"
+#define DUCKDB_PATCH_VERSION "0-alpha56621"
 #endif
 #ifndef DUCKDB_MINOR_VERSION
-#define DUCKDB_MINOR_VERSION 0
+#define DUCKDB_MINOR_VERSION 1
 #endif
 #ifndef DUCKDB_MAJOR_VERSION
 #define DUCKDB_MAJOR_VERSION 2
 #endif
 #ifndef DUCKDB_VERSION
-#define DUCKDB_VERSION "v2.0.0"
+#define DUCKDB_VERSION "v2.1.0-alpha56621"
 #endif
 #ifndef DUCKDB_SOURCE_ID
-#define DUCKDB_SOURCE_ID "d54cbbe3df"
+#define DUCKDB_SOURCE_ID "bc04be044b"
 #endif
 #include "duckdb/function/table/system_functions.hpp"
 #include "duckdb/main/database.hpp"
@@ -95,6 +95,9 @@ const char *DuckDB::ReleaseCodename() {
 	}
 	if (StringUtil::StartsWith(DUCKDB_VERSION, "v2.0.")) {
 		return "Cyanoptera";
+	}
+	if (StringUtil::StartsWith(DUCKDB_VERSION, "v2.1.")) {
+		return "Islandica";
 	}
 	// add new version names here
 

@@ -21,7 +21,6 @@ static unique_ptr<Expression> TryRemoveEmptyStringConcat(ClientContext &context,
 		}
 		Value value;
 		if (!ExpressionExecutor::TryEvaluateScalar(context, *children[child_idx], value)) {
-			// leave the error to execution, which may never evaluate it
 			continue;
 		}
 		if (value.IsNull() || value.type().id() != LogicalTypeId::VARCHAR || !StringValue::Get(value).empty()) {
@@ -50,6 +49,10 @@ unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector
 	D_ASSERT(root.GetChildren().size() == 2);
 	if (root.Function().GetName() == "||") {
 		return TryRemoveEmptyStringConcat(GetContext(), root);
+	}
+	auto &input_expr = bindings[1].get();
+	if (input_expr.GetReturnType().InternalType() != PhysicalType::VARCHAR) {
+		return nullptr;
 	}
 	auto &prefix_expr = bindings[2].get();
 

@@ -60,6 +60,8 @@
 
 #include "src/parser/peg/transformer/transform_external_resource_source.cpp"
 
+#include "src/parser/peg/transformer/transform_frame_plan.cpp"
+
 #include "src/parser/peg/transformer/transform_generated_trampoline.cpp"
 
 #include "src/parser/peg/transformer/transform_generic_copy_option.cpp"
@@ -67,6 +69,8 @@
 #include "src/parser/peg/transformer/transform_insert.cpp"
 
 #include "src/parser/peg/transformer/transform_load.cpp"
+
+#include "src/parser/peg/transformer/transform_match_recognize.cpp"
 
 #include "src/parser/peg/transformer/transform_merge_into.cpp"
 
