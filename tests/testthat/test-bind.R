@@ -19,7 +19,9 @@ test_convert <- function(con, type, val) {
   )
   q <- dbSendStatement(con, "INSERT INTO bind_test VALUES ($1, $2)")
   dbBind(q, list(1, val))
+  expect_equal(dbGetRowsAffected(q), 1)
   dbBind(q, list(2, NA))
+  expect_equal(dbGetRowsAffected(q), 1)
   dbClearResult(q)
   res3 <- dbGetQuery(con, "SELECT a FROM bind_test ORDER BY i")
   dbExecute(con, "DROP TABLE bind_test")
@@ -100,6 +102,52 @@ test_that("test blobs", {
   expect_equal(res[[1]][[1]], charToRaw("hello"))
 })
 
+test_that("structural bind errors surface at dbBind(), before execution", {
+  con <- local_con()
+
+  q <- dbSendQuery(con, "SELECT CAST (? AS INTEGER), CAST (? AS INTEGER)")
+  withr::defer(dbClearResult(q))
+
+  # The rethrow names the frame that called `dbBind()`, as for any glue error
+  bind_unequal <- function() dbBind(q, list(1:2, 1:3))
+  err <- expect_error(
+    bind_unequal(),
+    "Bind parameter values need to have the same length"
+  )
+  expect_s3_class(err, "duckdb_error")
+  expect_equal(err$context, "rapi_bind")
+  expect_equal(err$call, quote(bind_unequal()))
+
+  inner <- data.frame(a = c("x", "y"))
+  inner$m <- array(1:8, c(2L, 2L, 2L))
+  err <- expect_error(
+    dbBind(q, list(inner, 1:2)),
+    "Affected parameter: `params[[1]]$m`.",
+    fixed = TRUE
+  )
+  expect_s3_class(err, "duckdb_error")
+  expect_equal(err$context, "rapi_bind")
+})
+
+test_that("a refused dbBind() leaves an empty result, not the previous bind", {
+  con <- local_con()
+
+  # A pending bind is dropped
+  rs <- dbSendQuery(con, "SELECT ?::INT AS a, ?::INT AS b")
+  dbBind(rs, list(1, 2))
+  expect_error(dbBind(rs, list(1:2, 3)), "same length")
+  expect_equal(nrow(dbFetch(rs)), 0)
+  dbClearResult(rs)
+
+  # So are the rows an executed bind has left unfetched
+  rs <- dbSendQuery(con, "SELECT ?::INT AS a")
+  dbBind(rs, list(1:3))
+  expect_equal(dbFetch(rs, 1)$a, 1L)
+  expect_error(dbBind(rs, list(1:2, 3)), "list of length 1")
+  expect_equal(nrow(dbFetch(rs)), 0)
+  dbClearResult(rs)
+})
+
 test_that("various error cases for dbBind()", {
   con <- local_con()
 
@@ -109,12 +157,16 @@ test_that("various error cases for dbBind()", {
 
   expect_error(dbBind(q, list()))
   expect_error(dbBind(q, list(1, 2)))
-  expect_error(dbBind(q, list("asdf")))
+  # Type errors are detected at execution time (dbFetch), not bind time
+  dbBind(q, list("asdf"))
+  expect_error(dbFetch(q))
   expect_error(dbBind(q, list("asdf", "asdf")))
 
   expect_error(dbBind(q))
 
-  expect_error(dbBind(q, "asdf"))
+  # Type errors are detected at execution time (dbFetch), not bind time
+  dbBind(q, "asdf")
+  expect_error(dbFetch(q))
 
   dbClearResult(q)
 

@@ -284,10 +284,10 @@ static cpp11::list construct_retlist(duckdb::unique_ptr<PreparedStatement> stmt,
 
 static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &convert_opts, bool allow_stream_result);
 
-[[cpp11::register]] cpp11::list rapi_bind(duckdb::stmt_eptr_t stmt, cpp11::list params,
-                                          duckdb::ConvertOpts convert_opts) {
-	RCallbackScope::Drain();
-
+// The structural checks on the parameters, which `dbBind()` makes through `rapi_bind_check()`
+// before it defers execution, and `rapi_bind()` makes again when it executes.
+// Returns the number of rows to bind.
+static R_len_t CheckBindParameters(const duckdb::stmt_eptr_t &stmt, const cpp11::list &params) {
 	CheckStatement(stmt, "rapi_bind");
 
 	auto n_param = stmt->stmt->GetParameterCount();
@@ -300,9 +300,6 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 		std::string error_msg = "Bind parameters need to be a list of length " + std::to_string(n_param);
 		rapi_error_with_context("rapi_bind", error_msg);
 	}
-
-	stmt->parameters.clear();
-	stmt->parameters.resize(n_param);
 
 	// Refused before the rows are counted in the first parameter
 	for (R_xlen_t param_idx = 0; param_idx < params.size(); param_idx++) {
@@ -321,6 +318,23 @@ static SEXP rapi_execute_impl(RStatement *stmt, const duckdb::ConvertOpts &conve
 			rapi_error_with_context("rapi_bind", "Bind parameter values need to have the same length");
 		}
 	}
+
+	return n_rows;
+}
+
+[[cpp11::register]] void rapi_bind_check(duckdb::stmt_eptr_t stmt, cpp11::list params) {
+	CheckBindParameters(stmt, params);
+}
+
+[[cpp11::register]] cpp11::list rapi_bind(duckdb::stmt_eptr_t stmt, cpp11::list params,
+                                          duckdb::ConvertOpts convert_opts) {
+	RCallbackScope::Drain();
+
+	R_len_t n_rows = CheckBindParameters(stmt, params);
+	auto n_param = stmt->stmt->GetParameterCount();
+
+	stmt->parameters.clear();
+	stmt->parameters.resize(n_param);
 
 	bool arrow = convert_opts.arrow == ConvertOpts::ArrowConversion::ENABLED;
 	bool allow_stream = convert_opts.allow_stream_result == ConvertOpts::AllowStreamResult::ENABLED;

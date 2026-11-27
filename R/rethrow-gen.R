@@ -594,6 +594,15 @@ rethrow_rapi_prepare <- function(conn, query, env, call = parent.frame(2)) {
   )
 }
 
+rethrow_rapi_bind_check <- function(stmt, params, call = parent.frame(2)) {
+  rlang::try_fetch(
+    rapi_bind_check(stmt, params),
+    error = function(e) {
+      rethrow_error_from_rapi(e, call)
+    }
+  )
+}
+
 rethrow_rapi_bind <- function(stmt, params, convert_opts, call = parent.frame(2)) {
   rlang::try_fetch(
     rapi_bind(stmt, params, convert_opts),
@@ -724,6 +733,7 @@ rethrow_restore <- function() {
   rethrow_rapi_rel_from_altrep_df <<- rapi_rel_from_altrep_df
   rethrow_rapi_release <<- rapi_release
   rethrow_rapi_prepare <<- rapi_prepare
+  rethrow_rapi_bind_check <<- rapi_bind_check
   rethrow_rapi_bind <<- rapi_bind
   rethrow_rapi_execute <<- rapi_execute
   rethrow_rapi_adbc_init_func <<- rapi_adbc_init_func

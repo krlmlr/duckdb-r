@@ -74,7 +74,7 @@ DBI names that second connection a clone, `dbConnect(con)`, and this package has
 **A result outlives its connection, and holds the instance with it.**
 `dbDisconnect()` deletes the `Connection`, and with it the context, unless a result of the Arrow route still holds it.
 A `dbSendQuery()` result keeps its rows in R and still fetches them,
-but `dbBind()` fails: "Attempting to execute a prepared statement after its connection was closed!".
+but a bound statement fails where it runs, at the first `dbFetch()` or `dbGetRowsAffected()` after `dbBind()`: "Attempting to execute a prepared statement after its connection was closed!".
 A `dbSendQueryArrow()` result keeps the context it ran on, and fetches,
 and an Arrow stream keeps it the same way until it is released, one from `dbGetQueryArrow()` included.
 The instance stays open with the context, known to neither the driver, whose `dbIsValid()` says `FALSE`,

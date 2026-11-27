@@ -19,7 +19,9 @@ The departures from that baseline are what this leaf owns:
 
 * `dbSendQuery()` does not defer:
   a statement executes at `dbSendQuery()` time —
-  at `dbBind()` time when it has parameters —
+  at the first use of the result after `dbBind()` when it has parameters,
+  in `dbFetch()` or `dbGetRowsAffected()`,
+  so a bound result cleared unused never runs —
   and the full result is fetched into R before `dbFetch()` is ever
   called, so `dbFetch(n = )` limits what is returned, not what is held
   ([#1997](https://github.com/duckdb/duckdb-r/issues/1997);
