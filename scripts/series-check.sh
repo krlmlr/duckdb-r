@@ -107,7 +107,7 @@ usage='usage: series-check.sh [<series>...] [--remote <name>] [--upstream <path>
 remote=${SERIES_REMOTE:-origin}
 rcc=${RCC_BRANCH:-rcc2}
 
-# The repository `main` belongs to, which the fork mirrors. Read only for the
+# The repository `main` belongs to, which the fork copies. Read only for the
 # flavor declaration below, and never written here.
 canonical=${SERIES_CANONICAL-upstream}
 
@@ -419,13 +419,13 @@ flavor_of() { # v<major>.<minor>-<codename> -> duckdb.<major>.<minor>.dev
 # series branches, whose trees lag `main` by whatever stage 4 has not ported
 # yet, and the declaration is `main`'s.
 #
-# The canonical repository comes first, and the fork's mirror of it second. The
-# question this answers is whether the flavor PR has merged, so a mirror the
-# Pull app has not refreshed yet answers "undeclared" for a PR that merged
+# The canonical repository comes first, and the fork's copy of it second. The
+# question this answers is whether the flavor PR has merged into the canonical
+# `main`, so a copy that lacks it answers "undeclared" for a PR that merged
 # hours ago -- and the skill's rule on an undeclared line is to open one, which
 # is how a firing would file the same PR twice
-# (.claude/skills/series-loop/SKILL.md, "What a firing reports"). Whichever ref
-# is fresher is right, and only the canonical one is guaranteed to be.
+# (.claude/skills/series-loop/SKILL.md, "What a firing reports"). Nothing keeps
+# the fork's copy level with the canonical one (handbook/branches/mirrors/).
 declaration() { # -> the file, empty and non-zero when no ref carries it
   local r
   for r in ${canonical:+"refs/remotes/$canonical/main"} \
@@ -533,11 +533,48 @@ fork_point() { # <upstream branch> -> sha, empty without a clone
 }
 
 # The tests every series is held to are `main`'s: the canonical copy where this
-# run could fetch it, the fork's mirror otherwise.
+# run could fetch it, the fork's copy otherwise, which nothing keeps level
+# (handbook/branches/mirrors/README.md).
 main_ref=''
 for r in ${canonical:+"refs/remotes/$canonical/main"} "refs/remotes/$remote/main"; do
   if git rev-parse -q --verify "$r" >/dev/null; then main_ref=$r; break; fi
 done
+
+# The branch a series releases from, as the declaration names it; `main` when
+# it names none. A forward is seeded on that branch (series-forward/SKILL.md).
+releases_from_of() { # <series> -> branch
+  local rf
+  rf=$({ declaration 2>/dev/null || true; } | awk -v s="$1" '
+    function val(v) { gsub(/["'"'"']/, "", v); return v }
+    /^  - / { if (ser == s) print x; ser = ""; x = "" }
+    /^    series:/ { ser = val($2) }
+    /^    releases_from:/ { x = val($2) }
+    END { if (ser == s) print x }' | head -n 1)
+  echo "${rf:-main}"
+}
+
+# The mainline a forward's coverage is counted above: the canonical copy of the
+# branch its series releases from, the fork's copy where the canonical one
+# cannot be read, and empty when neither is. The caller warns about a fork's
+# copy and reports an empty bound as missing data.
+coverage_bound() { # <series> -> ref, empty when none
+  local rf
+  rf=$(releases_from_of "$1")
+  if [ "$rf" = main ]; then
+    echo "$main_ref"
+    return 0
+  fi
+  if [ -n "$canonical" ] && git remote get-url "$canonical" >/dev/null 2>&1; then
+    git fetch -q "$canonical" "+refs/heads/$rf:refs/remotes/$canonical/$rf" 2>/dev/null || true
+    if git rev-parse -q --verify "refs/remotes/$canonical/$rf" >/dev/null; then
+      echo "refs/remotes/$canonical/$rf"
+      return 0
+    fi
+  fi
+  if git rev-parse -q --verify "refs/remotes/$remote/$rf" >/dev/null; then
+    echo "refs/remotes/$remote/$rf"
+  fi
+}
 
 tip=$(rcc_tip) || { echo "no $rcc branch on $remote"; exit 1; }
 echo "harvest: $(git log -1 --format='%ci (%ar)' "$tip")"
@@ -571,14 +608,30 @@ for S in "${series[@]}"; do
       # Ready to cut over once the forward green vendors the upstream commit the
       # base green vendors: coverage may never regress. Tested by subject, like
       # every other equivalence here, and bounded by the mainline the forward
-      # seed was built on — `main`'s own vendor commits sit below that seed and
-      # must not answer for the forward chain. A base green that vendors nothing
-      # asks for no coverage, exactly as in series-cutover.sh.
+      # seed was built on — that branch's own vendor commits sit below that seed
+      # and must not answer for the forward chain. That mainline is the canonical
+      # copy of the branch the series releases from, `main` or a release branch
+      # (coverage_bound): a landing's vendor commits are in it and may be missing
+      # from the fork's copy, and counted as coverage they would call a forward
+      # ready. With no mainline read at all nothing is counted, and that is said
+      # as missing data. A base green that vendors nothing asks for no coverage,
+      # exactly as in series-cutover.sh.
       base_up=$(series_vendored_sha "$remote/$base-green")
       # The vendor subjects, collected rather than piped into `grep -q`:
       # it leaves early, and under `pipefail` the SIGPIPE it hands its writer would read as a failed test.
       # `grep -E` reads its input whole, so `git log` may feed it.
-      fwd_vendored=$(git log --format=%s "$remote/main..$green" -- "$series_scan_dir" | grep -E "$series_vendor_ere" || true)
+      fwd_vendored=''
+      bound=$(coverage_bound "$base")
+      if [ -z "$bound" ]; then
+        echo "$S: could not read $(releases_from_of "$base"), the branch $base releases from, from '$canonical' or $remote;"
+        echo "          no CUTOVER line below means missing data, not a clean result"
+      else
+        case "$bound" in
+          "refs/remotes/$remote/"*)
+            echo "$S: warning: ${bound#refs/remotes/} is the fork's copy, which nothing keeps level; readiness may over-count" ;;
+        esac
+        fwd_vendored=$(git log --format=%s "$bound..$green" -- "$series_scan_dir" | grep -E "$series_vendor_ere" || true)
+      fi
       if [ -z "$base_up" ] || grep -qF "@$base_up" <<<"$fwd_vendored"; then
         cutover=$base
       fi

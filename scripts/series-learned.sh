@@ -84,6 +84,8 @@ done
 
 if [ -z "$since" ]; then
   since=$(series_seed_of "$dev")
+  # The fork's `main`, which nothing keeps level with the canonical one: it may
+  # be stale or ahead (handbook/branches/mirrors/README.md).
   [ -n "$since" ] || since=$(git merge-base "$dev" "$remote/main" 2>/dev/null || true)
   [ -n "$since" ] || { echo "Error: $S-$upper has no seed and no merge base with $remote/main; pass --since" >&2; exit 2; }
 fi
