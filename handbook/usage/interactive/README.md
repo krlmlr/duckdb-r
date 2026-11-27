@@ -64,8 +64,12 @@ What a reader of R needs from it:
   (`ClientConfig` in [`src/duckdb/src/include/duckdb/main/client_config.hpp`](/src/duckdb/src/include/duckdb/main/client_config.hpp)),
   the smaller of 10 MiB and the available memory after `RESET`
   (`ClientConfig::SetDefaultStreamingBufferSize()` in [`src/duckdb/src/main/client_config.cpp`](/src/duckdb/src/main/client_config.cpp)).
-  A result that fits the buffer, or the expensive part of a sort or an aggregate, is computed by the first read,
+  A result that fits the buffer, or the expensive part of a sort or an aggregate, is computed by the first read at the latest,
   and a smaller buffer spreads the calls over more reads.
+  Since [duckdb/duckdb#28761](https://github.com/duckdb/duckdb/pull/28761), the engine starts a streamed query at its submission,
+  because the glue submits every streamed query as a prepared execution
+  (`Submit()` in `rapi_execute_impl()` in [`src/statement.cpp`](/src/statement.cpp)).
+  With more than one thread, the engine can then compute ahead of the reads, which send few calls or none.
 
 ## Interrupting a query
 
