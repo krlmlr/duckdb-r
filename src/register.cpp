@@ -51,6 +51,21 @@ using namespace duckdb;
 		}
 	}
 
+	auto time_hms = convert_opts.time == ConvertOpts::TimeConversion::HMS;
+	auto interval_period = convert_opts.interval == ConvertOpts::IntervalConversion::PERIOD;
+	// Checked on R's thread before the engine binds the scan, so that the error can name the column
+	for (R_xlen_t col_idx = 0; col_idx < value.size(); col_idx++) {
+		string r_error;
+		auto invalid = RApiTypes::FindInvalidValueCaught(value[col_idx], string(df_names[col_idx]), time_hms,
+		                                                 interval_period, r_error);
+		if (!r_error.empty()) {
+			rapi_error_with_context("rapi_register_df", r_error);
+		}
+		if (!invalid.empty()) {
+			rapi_error_with_context("rapi_register_df", "Column " + invalid);
+		}
+	}
+
 	EndOpenResults(*conn->conn->context);
 	ScopedInterruptHandler signal_handler(conn->conn->context);
 
@@ -62,6 +77,10 @@ using namespace duckdb;
 		parameter_map["experimental"] =
 		    Value::BOOLEAN(convert_opts.experimental == ConvertOpts::ExperimentalFeatures::ENABLED);
 		parameter_map["map_list_of"] = Value::BOOLEAN(convert_opts.map == ConvertOpts::MapShape::LIST_OF);
+		// An hms writes TIME rather than INTERVAL with `time = "hms"` (handbook/usage/types/README.md)
+		parameter_map["time_hms"] = Value::BOOLEAN(time_hms);
+		// A lubridate Period writes INTERVAL with `interval = "Period"`
+		parameter_map["interval_period"] = Value::BOOLEAN(interval_period);
 
 		conn->conn->TableFunction("r_dataframe_scan", {Value::POINTER((uintptr_t)value.data())}, parameter_map)
 		    ->CreateView(Identifier(name), overwrite, true);
@@ -102,6 +121,8 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	auto convert_opts = db_wrapper->env_convert_opts;
 	const bool experimental = convert_opts && convert_opts->experimental == ConvertOpts::ExperimentalFeatures::ENABLED;
 	const bool map_list_of = convert_opts && convert_opts->map == ConvertOpts::MapShape::LIST_OF;
+	const bool time_hms = convert_opts && convert_opts->time == ConvertOpts::TimeConversion::HMS;
+	const bool interval_period = convert_opts && convert_opts->interval == ConvertOpts::IntervalConversion::PERIOD;
 
 	// The binder holds the client context lock across this, and looking the name
 	// up forces a promise -- arbitrary R code, and with it a garbage collection.
@@ -136,6 +157,40 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 		return nullptr;
 	}
 
+	// DataFrameScanBind() reads a name for each column and the rows of the first:
+	// refused here, where an R error raised there would leave the connection inside the query
+	SEXP names = GET_NAMES(df);
+	if (Rf_xlength(df) == 0 || TYPEOF(names) != STRSXP || Rf_xlength(names) != Rf_xlength(df)) {
+		UNPROTECT(1);
+		throw BinderException("Data frame `%s` must have at least one column, and one name for each column",
+		                      input.table_name);
+	}
+
+	// The data frame writes as with duckdb_register() on the connection the query runs on:
+	// with its `time` and `interval`, and refused where rapi_register_df() refuses it.
+	// The columns are touched first, as DataFrameScanBind() touches them, so that a lazy data frame
+	// of this connection is refused before the search below would start its query on the busy connection.
+	try {
+		TouchColumnsOrThrow(context, df);
+	} catch (...) {
+		UNPROTECT(1);
+		throw;
+	}
+	string invalid;
+	string r_error;
+	for (R_xlen_t col_idx = 0; col_idx < Rf_xlength(df) && invalid.empty() && r_error.empty(); col_idx++) {
+		invalid = RApiTypes::FindInvalidValueCaught(VECTOR_ELT(df, col_idx), CHAR(STRING_ELT(names, col_idx)), time_hms,
+		                                            interval_period, r_error);
+	}
+	if (!r_error.empty()) {
+		UNPROTECT(1);
+		throw InvalidInputException(r_error);
+	}
+	if (!invalid.empty()) {
+		UNPROTECT(1);
+		throw BinderException("Column " + invalid);
+	}
+
 	// Avoid garbage collection of data frame
 	SEXP node = Rf_cons(df, CDR(db_wrapper->registered_dfs));
 	SETCDR(db_wrapper->registered_dfs, node);
@@ -157,6 +212,9 @@ unique_ptr<TableRef> duckdb::EnvironmentScanReplacement(ClientContext &context, 
 	// dbConnect() always sets experimental to false
 	add_named_parameter("experimental", experimental);
 	add_named_parameter("map_list_of", map_list_of);
+	// time_hms and interval_period follow them too
+	add_named_parameter("time_hms", time_hms);
+	add_named_parameter("interval_period", interval_period);
 	table_function->function = make_uniq<FunctionExpression>("r_dataframe_scan", std::move(children));
 
 	// Signal that this table reference depends on external state (the R data

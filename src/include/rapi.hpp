@@ -428,6 +428,10 @@ unique_ptr<TableRef> ArrowScanReplacement(ClientContext &context, ReplacementSca
 unique_ptr<TableRef> EnvironmentScanReplacement(ClientContext &context, ReplacementScanInput &input,
                                                 optional_ptr<ReplacementScanData> data);
 
+// Reads every column of a data frame on R's thread, materializing an ALTREP one,
+// and throws an exception for an R error that raises (src/scan.cpp)
+void TouchColumnsOrThrow(ClientContext &context, SEXP df);
+
 struct ReplacementDataDBWrapper : public ReplacementScanData {
 	DBWrapper *wrapper;
 };
@@ -457,6 +461,7 @@ struct RStrings {
 	SEXP factor_str;
 	SEXP dataframe_str;
 	SEXP difftime_str;
+	SEXP hms_difftime_str;
 	SEXP secs_str;
 	SEXP arrow_str; // StringsToSexp
 	SEXP duckdb_str;
@@ -465,6 +470,9 @@ struct RStrings {
 	SEXP tbl_df_tbl_dataframe_str;
 	SEXP wk_wkb_wk_vctr_str;
 	SEXP vctrs_list_of_str;
+	SEXP blob_vctrs_list_of_str;
+	SEXP empty_raw;  // Rf_allocVector
+	SEXP period_str; // with its `package` attribute, as an S4 class is spelled
 	SEXP cxx_stdlib_libstdcxx_str;
 	SEXP cxx_stdlib_libcxx_str;
 	SEXP cxx_stdlib_unknown_str;
@@ -485,6 +493,10 @@ struct RStrings {
 	SEXP duckdb_vector_sym;
 	SEXP crs_sym;
 	SEXP geodesic_sym;
+	// The S3 classes an S4 object that contains one inherits from
+	SEXP s3class_sym;
+	// The slots of a lubridate Period, in the order lubridate gives them
+	SEXP period_slot_syms[5];
 
 	static const RStrings &get() {
 		// On demand
@@ -540,6 +552,11 @@ SEXP duckdb_r_allocate(const duckdb::LogicalType &type, duckdb::idx_t nrows, con
 void duckdb_r_df_decorate_impl(SEXP dest, SEXP rownames, SEXP class_);
 void duckdb_r_df_decorate(SEXP dest, duckdb::idx_t nrows, SEXP class_ = R_NilValue);
 void duckdb_r_decorate(const duckdb::LogicalType &type, SEXP dest, const duckdb::ConvertOpts &convert_opts);
+void duckdb_r_check_period_arrays(const duckdb::LogicalType &type, const duckdb::string &name,
+                                  const duckdb::ConvertOpts &convert_opts, const char *caller);
+// One slot of the lubridate Period an INTERVAL reads as, by its index in RStrings::period_slot_syms
+void duckdb_r_transform_period_slot(const duckdb::Vector &src_vec, SEXP dest, duckdb::idx_t dest_offset,
+                                    duckdb::idx_t n, duckdb::idx_t slot_idx);
 void duckdb_r_transform(const duckdb::Vector &src_vec, SEXP dest, duckdb::idx_t dest_offset, duckdb::idx_t n,
                         const duckdb::ConvertOpts &convert_opts, const duckdb::string &name);
 

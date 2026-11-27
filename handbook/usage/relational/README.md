@@ -106,6 +106,12 @@ against first
   An `ARRAY` column also makes `rel_to_altrep()` run the relation at once,
   so a row or cell budget such as `n_rows` fails it before any value is touched
   ([`experiments/2026-09-28-matrix-limits/`](/experiments/2026-09-28-matrix-limits/README.md)).
+* `as.data.frame()` of a relation and `rel_sql()` convert with the defaults of the reading options `dbConnect()` takes,
+  whatever the connection set, where `rel_to_altrep()` follows the connection,
+  so they refuse an `ARRAY` column even under `array = "matrix"`.
+  `rel_from_df()` writes with the defaults too, where `duckdb_register()` follows the connection:
+  under `time = "hms"` an `hms` column lands as `INTERVAL`, and under `map = "list_of"` named lists land as nested lists
+  ([`experiments/2026-09-28-relational-convert-opts/`](/experiments/2026-09-28-relational-convert-opts/README.md)).
 
 *To deepen: state which verbs duckplyr actually calls, so a change can be
 scoped against real use rather than the whole surface.*

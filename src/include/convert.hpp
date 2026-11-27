@@ -17,6 +17,12 @@ struct ConvertOpts {
 
 	enum class MapShape { DATA_FRAME, LIST_OF };
 
+	enum class TimeConversion { DIFFTIME, HMS };
+
+	enum class BlobConversion { LIST, BLOB };
+
+	enum class IntervalConversion { DIFFTIME, PERIOD };
+
 	enum class ArrowConversion { DISABLED, ENABLED };
 
 	// Whether the engine may hand back a result that streams rather than one
@@ -36,6 +42,9 @@ struct ConvertOpts {
 	ArrayConversion array = ArrayConversion::NONE;
 	GeometryConversion geometry = GeometryConversion::BLOB;
 	MapShape map = MapShape::DATA_FRAME;
+	TimeConversion time = TimeConversion::DIFFTIME;
+	BlobConversion blob = BlobConversion::LIST;
+	IntervalConversion interval = IntervalConversion::DIFFTIME;
 	ArrowConversion arrow = ArrowConversion::DISABLED;
 	AllowStreamResult allow_stream_result = AllowStreamResult::DISABLED;
 	ExperimentalFeatures experimental = ExperimentalFeatures::DISABLED;
