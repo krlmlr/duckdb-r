@@ -31,6 +31,8 @@ changes, not reviewed by a maintainer.*
 
 ## duckdb 2.0.1 (2026-11-20)
 
+CRAN release: 2026-11-23
+
 ### Features
 
 - Update to DuckDB v2.0.1, see
