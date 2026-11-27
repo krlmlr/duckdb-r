@@ -6,7 +6,7 @@
 # workflow that used to dispatch it went with the rest of the `rcc2` workflows
 # (duckdb/duckdb-r#2815), so this runs the way consolidation does, from an
 # operator's checkout. The `each-rcc` legs publish their own
-# verdicts within seconds of deciding them (scripts/each-shard.sh), and that is
+# verdicts within seconds of deciding them (the each-shard action), and that is
 # now the store's only automatic writer. This is what covers the case where the
 # leg never published, because the whole workflow was cancelled -- it can
 # reconstruct a record from the commit status and the run object, and a

@@ -14,9 +14,13 @@ estimate_minutes = SETUP + FULL + Σ min(FLOOR + OBJECT_SECONDS × objects, FULL
 build_minutes    = estimate_minutes − SETUP
 ```
 
-Four constants, each measuring one thing:
+Four constants, each measuring one thing.
+They are this package's own fit, kept as the repository variables
+`EACH_RCC_SETUP_MINUTES`, `EACH_RCC_FULL_BUILD_MINUTES`, `EACH_RCC_FLOOR_MINUTES` and `EACH_RCC_OBJECT_SECONDS`,
+which `each.yaml` passes to the `each-plan` action;
+its plan job fails first, naming any of them that is empty, and `EACH_RCC_SINCE` with them where no `since` input is given:
 
-| Constant | Default | What it is |
+| Constant | Value | What it is |
 |---|---|---|
 | `SETUP_MINUTES` | 5 | checkout, `install/action.yml`, `style` — paid once per leg |
 | `FULL_BUILD_MINUTES` | 48 | a build on an empty ccache: every object of `src/include/sources.mk` |
@@ -29,7 +33,7 @@ no matter how little it changed.
 Every later commit pays only for the objects it invalidates,
 capped at `FULL` — a commit that touches a wide header cannot cost more than
 building the world.
-`build_minutes` is what [`each-shard.sh`](/scripts/each-shard.sh) measures
+`build_minutes` is what [`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh) measures
 itself against, since its deadline starts after setup;
 `estimate_minutes` is what the job takes.
 
@@ -54,7 +58,7 @@ and its follow-up [44932760627](https://github.com/krlmlr/duckdb-r/actions/runs/
 
 The 61 cold builds came in at 35 to 62 minutes, mean 48.7,
 and are independent of what their commit changed (correlation −0.04), as the model says.
-The fit puts `FULL` at 47.7, and the planner takes 48.
+The fit puts `FULL` at 47.7, and `EACH_RCC_FULL_BUILD_MINUTES` takes 48.
 A separate cap for warm builds would sit at 46 minutes and lower the RMSE by 0.03,
 so the model keeps one.
 `SETUP` is what the jobs spent outside the build loop, 2.7 to 6.9 minutes, median 5.2,
@@ -72,7 +76,7 @@ counting the mean cold build or the refitted estimate for each commit no leg rea
 Only 3 legs built every commit they were given,
 and 210 of the 822 planned commits were left to the follow-up.
 Replanned with the refitted constants and replayed against the measured times
-through [`each-shard.sh`](/scripts/each-shard.sh)'s deadline logic,
+through [`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh)'s deadline logic,
 the same 822 commits take 61 legs, 56 of which build every commit, and 816 commits are built,
 for 1.34 times the runner minutes.
 The replay is in sample, so it is the best case;
@@ -121,10 +125,10 @@ and every plan it can pick is contiguous, balanced and inside the real deadline
 by construction.
 Two limits bound the search:
 
-* **`SPLIT_FACTOR`** (default 1.5, `scripts/each-plan.sh`).
+* **`SPLIT_FACTOR`** (default 1.5, `each.yaml`).
   The plan may cost at most this multiple of the pass-1 plan's runner-minutes.
   `1.0` disables the pass entirely.
-* **`MAX_SHARDS`** (default 250, `scripts/each-plan.sh`),
+* **`MAX_SHARDS`** (default 250, [`each-plan.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-plan.sh)),
   and the commit count: one commit cannot be cut in half.
 
 Ranking is by `makespan()`, which models `MAX_PARALLEL` throttling,
@@ -321,11 +325,13 @@ a large batch gains legs without gaining slots —
 but it is the whole account's Actions concurrency,
 so other workflows queue behind it where they used not to.
 
-The scripts run from *the branch being checked*,
-so a `*-dev` branch picks up a change to this workflow only once it is
+The workflow and the package's scripts run from *the branch being checked*,
+so a `*-dev` branch picks up a change to them only once it is
 forward-ported there — the same constraint every CI change in this repository
 has, and the series loop's stage 4
 ([`series-port.sh`](/scripts/series-port.sh)) is what does it.
+The planner, the leg and the follow-up themselves come from the template actions at the ref `each.yaml` names,
+so a change to them reaches every branch at once.
 `R-CMD-check.yaml` and `R-CMD-check-status.yaml` come from
 [`cynkra/cynkratemplate`](https://github.com/cynkra/cynkratemplate)
 rather than from here, so they are not edited:
