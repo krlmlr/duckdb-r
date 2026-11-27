@@ -234,7 +234,7 @@ scripts/r-universe-check.sh --log <id>   # the log behind one of them
 
 * Fast-forward `<S>-green` to the newest `<S>-dev` commit with every commit behind it `success`;
   **if it cannot fast-forward, something rewrote verified history: stop and say so.**
-* Mirror every series' green into the canonical repository, the forward's too, with a plain push;
+* Copy every series' green into `duckdb/duckdb-r`, the forward's too, with a plain push;
   **scream on a refusal, never force it**.
 * Set `<S>-build-base` to the `<S>-build` commit with the same vendored SHA, force-pushing where that is not a fast-forward;
   it is a marker, recomputed every stage 3, and a ref found off the buffer's line is set and moved on from.

@@ -43,7 +43,7 @@ Run from current `main`, with refs fetched from both repositories, as stage 6's 
 and `<clone>` a `duckdb/duckdb` checkout; the scripts read its commits alone, so a `--filter=blob:none` clone serves.
 `<dir>` is a scratch directory for the stacks' summaries.
 `scripts/setup-git.sh` registers the `DESCRIPTION` merge driver and rerere, which the stack script also runs.
-The cutover pull request and the stacks live in the fork, beside the series refs, and keep the canonical repository's list clean.
+The cutover pull request and the stacks live in the fork, beside the series refs, and keep `duckdb/duckdb-r`'s list clean.
 
 Pull requests are opened, edited and closed with the session's own GitHub tools:
 the GitHub MCP server's pull request tools, or `gh` where it works.
@@ -174,7 +174,7 @@ A pull request body takes reflowed paragraphs, not semantic line breaks.
    Then re-cut the derived strands where the series has them, as the run's last lines say,
    and check that `duckdb/duckdb-r` carries every branch the badges now measure against
    ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-   Last, start the verdict mirror in the canonical repository
+   Last, start the verdict mirror in `duckdb/duckdb-r`
    ([`per-commit/upstream/`](/handbook/operations/ci/per-commit/upstream/README.md)).
    The new `<S>-green`'s commits were covered as `<S>-fwd-green` already,
    so it posts only what landed since the last hourly run, and the rest stays as it is shown:

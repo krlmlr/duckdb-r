@@ -65,7 +65,7 @@ flowchart LR
   It is pushed at the frozen `<B>` and advanced over the commits that passed;
   the landing is ready when it equals `<L>-land-dev`, the bump included.
 
-* **`<L>-land-review`**, in the canonical repository: the same landing without its engine,
+* **`<L>-land-review`**, in `duckdb/duckdb-r` until the blocks are retargeted, in the fork after: the same landing without its engine,
   for a draft pull request that is read and never merged (step 4).
 
 There is no `<L>-land-build`, so the loop never mistakes the pair for a series.
@@ -459,7 +459,7 @@ Then the series:
 
 * **Delete the landing**: `<L>-land-dev` and `<L>-land-green` on the fork, once the landing's pull request shows as merged,
   and any other `<L>-land-*` ref the landing made there,
-  `<L>-land-review` in the canonical repository with its draft pull request closed,
+  `<L>-land-review` where it was pushed, with its draft pull request closed,
   and the kept worktree with `scripts/series-land.sh <S> --abort`.
 * **Forward the series onto the new `<B>` when its drift is worth it**
   ([`series-forward`](/.claude/skills/series-forward/SKILL.md)).
