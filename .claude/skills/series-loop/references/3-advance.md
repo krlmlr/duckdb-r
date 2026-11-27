@@ -13,7 +13,7 @@ and is never re-examined.
 if it cannot fast-forward, something rewrote verified history;
 stop and say so.
 
-**Then mirror it into the canonical repository, every series' green, the forward's too.**
+**Then copy it into `duckdb/duckdb-r`, every series' green, the forward's too.**
 r-universe publishes the base flavors from `duckdb/duckdb-r` and reads ownership
 from the URL of the branch it builds, so `<S>-green` is the one branch that
 travels out of the fork — no buffer and no `-dev`.

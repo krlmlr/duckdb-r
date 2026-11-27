@@ -107,7 +107,7 @@ a wrong extension is replayed,
 and `-green` only ever moves forward over commits CI called green.
 The swap moves a serving green *sideways*,
 the single sanctioned non-fast-forward of one (`series-forward/SKILL.md`),
-and the one place the canonical repository's copy of green is forced rather than
+and the one place the copy of green in `duckdb/duckdb-r` is forced rather than
 fast-forwarded, which is why `--canonical` belongs on that run and nowhere else
 the routine types by hand;
 and it deletes the counterpart that would let it be undone.

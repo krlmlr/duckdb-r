@@ -148,7 +148,7 @@ The first, `cutover/<S>/<X>/1-main`, stands on the old tip `<S>-<X>`, and its he
 GitHub keeps it reachable as `refs/pull/<n>/head` for as long as the pull request exists, closed or not,
 and the swap refuses to move a ref no pin holds,
 of `<S>-dev`, `<S>-build`, `<S>-vendor`, `<S>-green` and `<S>-build-base`,
-and the canonical repository's copy of `<S>-green` unless it is the fork's green.
+and the copy of `<S>-green` in `duckdb/duckdb-r` unless it is the fork's green.
 The **cutover pull request**, an empty draft from `cutover/<S>/pr` into the fork's `main`,
 carries the report, the stacks' review and the sign-off, and is closed, never merged.
 The `-fwd` refs go afterwards, their tips being the series' refs by then,
