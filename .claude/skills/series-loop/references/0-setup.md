@@ -18,12 +18,12 @@ git fetch -q upstream main
 
 **Both repositories, because `main` is one of them.**
 The series refs live in the fork and `main` belongs to the canonical
-repository, which the fork mirrors on the Pull app's six-hour cycle
+repository, and nothing keeps the fork's copies of the canonical branches level any more
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 Every read of `main` a firing makes takes the canonical ref:
 stage 4's port and its tooling sync,
 and the flavor declaration stage 7 reports on.
-A checkout that cannot reach it falls back to whatever the mirror last copied,
+A checkout that cannot reach it falls back to the fork's copy,
 and the scripts say so when they do.
 `upstream` is the remote name, the same one `--canonical` takes everywhere;
 add it where a checkout has none.

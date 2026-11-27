@@ -217,7 +217,7 @@ Everything else is an option, spelled identically in all of them:
   Only `series-advance.sh`, `series-cutover.sh` and `series-land.sh` (its
   `--review --push`, and the fast-forward of `main` it prints) write one;
   `series-port.sh`, `series-check.sh` and `series-land.sh` read `main` from it,
-  and fall back to the fork's mirror with a word on stderr when they cannot,
+  and fall back to the fork's copy with a word on stderr when they cannot,
   and `series-prune.sh` reads the forward green's copy from it
   ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 * `-h`, `--help` — the usage, on stdout, exit 0, before the script

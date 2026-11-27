@@ -57,9 +57,13 @@ extract_purpose <- function(path) {
     if (length(open)) {
       text <- sub("^\\s*[rb]*\"\"\"", "", lines[open[[1]]])
       i <- open[[1]] + 1
-      while (!grepl("\"\"\"", text) && !grepl("^\\s*$", text) && i <= length(lines)) {
+      while (
+        !grepl("\"\"\"", text) && !grepl("^\\s*$", text) && i <= length(lines)
+      ) {
         nxt <- lines[[i]]
-        if (grepl("^\\s*$", nxt) || grepl("\"\"\"", nxt)) break
+        if (grepl("^\\s*$", nxt) || grepl("\"\"\"", nxt)) {
+          break
+        }
         text <- paste(text, trimws(nxt))
         i <- i + 1
       }
@@ -70,11 +74,19 @@ extract_purpose <- function(path) {
 
   collected <- character()
   for (line in lines) {
-    if (grepl("^#!", line)) next
-    if (grepl("^#+\\s*(shellcheck|-\\*-)", line)) next
-    if (!length(collected) && grepl("^\\s*$", line)) next
+    if (grepl("^#!", line)) {
+      next
+    }
+    if (grepl("^#+\\s*(shellcheck|-\\*-)", line)) {
+      next
+    }
+    if (!length(collected) && grepl("^\\s*$", line)) {
+      next
+    }
     if (grepl("^#\\s*$", line)) {
-      if (length(collected)) break
+      if (length(collected)) {
+        break
+      }
       next
     }
     if (grepl("^#", line)) {
@@ -114,8 +126,17 @@ groups <- list(
   list(
     owner = "handbook/operations/vendoring/pipeline",
     globs = c(
-      "VENDORING.md", "vendor.sh", "vendor-one.sh", "vendor-one-test.sh", "vendor-lib.sh", "rconfigure.py",
-      "merge-version.sh", "merge-version-test.sh", "merge-news.sh", "merge-news-test.sh", "setup-git.sh"
+      "VENDORING.md",
+      "vendor.sh",
+      "vendor-one.sh",
+      "vendor-one-test.sh",
+      "vendor-lib.sh",
+      "rconfigure.py",
+      "merge-version.sh",
+      "merge-version-test.sh",
+      "merge-news.sh",
+      "merge-news-test.sh",
+      "setup-git.sh"
     )
   ),
   list(
@@ -144,11 +165,11 @@ groups <- list(
   ),
   list(
     owner = "handbook/operations/ci/per-commit/planning",
-    globs = c("each-plan.sh", "each-cost.py", "each-partition.py")
+    globs = c("each-cost.py")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/legs",
-    globs = c("each-shard.sh", "each-follow-up.sh", "each-follow-up-test.sh", "rcc-one.sh")
+    globs = c("rcc-one.sh")
   ),
   list(
     owner = "handbook/operations/ci/per-commit/upstream",
@@ -157,9 +178,15 @@ groups <- list(
   list(
     owner = "handbook/operations/ci/per-commit/store",
     globs = c(
-      "each-harvest.sh", "rcc-consolidate.sh", "rcc-cutover.sh",
-      "rcc-drop.sh", "rcc-lib.sh", "rcc-logs.sh", "rcc-publish.sh",
-      "rcc-run-fields.jq", "rcc-store-test.sh"
+      "each-harvest.sh",
+      "rcc-consolidate.sh",
+      "rcc-cutover.sh",
+      "rcc-drop.sh",
+      "rcc-lib.sh",
+      "rcc-logs.sh",
+      "rcc-publish.sh",
+      "rcc-run-fields.jq",
+      "rcc-store-test.sh"
     )
   ),
   list(
@@ -177,10 +204,6 @@ groups <- list(
   list(
     owner = "handbook/branches/model",
     globs = c("delete-branch.sh", "delete-branch-test.sh")
-  ),
-  list(
-    owner = "handbook/branches/mirrors",
-    globs = c("pull-config.sh")
   ),
   list(
     owner = "handbook/build/fast-paths",
@@ -216,16 +239,23 @@ groups <- groups[order(vapply(groups, function(g) g$owner, character(1)))]
 find_group <- function(file) {
   hits <- which(vapply(
     groups,
-    function(g) any(vapply(
-      g$globs,
-      function(glob) grepl(utils::glob2rx(glob), file),
-      logical(1)
-    )),
+    function(g) {
+      any(vapply(
+        g$globs,
+        function(glob) grepl(utils::glob2rx(glob), file),
+        logical(1)
+      ))
+    },
     logical(1)
   ))
   if (length(hits) > 1) {
-    warning("double-owned: ", file, " matches groups ",
-      paste(hits, collapse = ", "), call. = FALSE)
+    warning(
+      "double-owned: ",
+      file,
+      " matches groups ",
+      paste(hits, collapse = ", "),
+      call. = FALSE
+    )
   }
   if (length(hits)) hits[[1]] else NA_integer_
 }
@@ -263,8 +293,16 @@ out <- c(
 
 for (gi in seq_along(groups)) {
   members <- files[!is.na(idx) & idx == gi]
-  if (!length(members)) next
-  out <- c(out, owner_heading(groups[[gi]]), "", "| File | Purpose |", "|---|---|")
+  if (!length(members)) {
+    next
+  }
+  out <- c(
+    out,
+    owner_heading(groups[[gi]]),
+    "",
+    "| File | Purpose |",
+    "|---|---|"
+  )
   for (file in members) {
     purpose <- if (file == "README.md") {
       "(this index)"
@@ -279,9 +317,13 @@ for (gi in seq_along(groups)) {
 
 if (length(unowned)) {
   out <- c(
-    out, "## Unowned", "",
-    "These files match no ownership glob — fix the mapping:", "",
-    paste0("* `", unowned, "`"), ""
+    out,
+    "## Unowned",
+    "",
+    "These files match no ownership glob — fix the mapping:",
+    "",
+    paste0("* `", unowned, "`"),
+    ""
   )
 }
 
@@ -291,18 +333,32 @@ target <- "scripts/README.md"
 check <- any(commandArgs(trailingOnly = TRUE) == "--check")
 
 if (check) {
-  current <- if (file.exists(target)) readLines(target, warn = FALSE) else character()
+  current <- if (file.exists(target)) {
+    readLines(target, warn = FALSE)
+  } else {
+    character()
+  }
   if (!identical(current, out) || length(unowned)) {
     if (length(unowned)) {
       message("unowned files: ", paste(unowned, collapse = ", "))
     }
-    message(target, " is stale; regenerate with:",
-      " Rscript .claude/skills/docs-consistency/docs-readme.R")
+    message(
+      target,
+      " is stale; regenerate with:",
+      " Rscript .claude/skills/docs-consistency/docs-readme.R"
+    )
     quit(status = 1)
   }
   message(target, " is current")
 } else {
   writeLines(out, target)
-  message("wrote ", target, " (", length(files), " files",
-    if (length(unowned)) paste0(", ", length(unowned), " UNOWNED"), ")")
+  message(
+    "wrote ",
+    target,
+    " (",
+    length(files),
+    " files",
+    if (length(unowned)) paste0(", ", length(unowned), " UNOWNED"),
+    ")"
+  )
 }

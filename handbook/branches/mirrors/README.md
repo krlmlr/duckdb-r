@@ -1,67 +1,34 @@
 # Mirrors
 
-The branches the fork carries that are not its own —
-copies of `duckdb/duckdb-r`'s branches, what they are for,
-and what keeps each level with the branch it copies.
+The branches the fork carries under a canonical branch's name,
+copies of `duckdb/duckdb-r`'s `main` and release branches,
+what still reads them, and the one copy that travels the other way.
 The series refs beside them are
 [`model/`](/handbook/branches/model/README.md)'s.
 
-A mirror exists because a comparison needs a base in the same repository.
-The badges in the root [`README.md`](/README.md) count a series
-*ahead* of the branch it releases from,
-and shields.io compares two refs of one repository,
-so the branch compared against has to be in the fork
-and not only in the canonical repo.
-`main` is carried for a second reason as well:
-it is what every series seeds from, except a line releasing from a branch of its own, which seeds from that branch,
-and that branch is mirrored for both reasons.
-Forward-porting reads the canonical `main` instead
-([`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md)),
-because a mirror is behind for most of the cycle below
-and the tooling sync takes whatever tree it is given.
+**Nothing keeps them level any more.**
+The Pull app hard-reset each copy onto its canonical tip on a schedule of its own;
+it is gone and will not be reactivated
+([krlmlr/duckdb-r#262](https://github.com/krlmlr/duckdb-r/pull/262#issuecomment-7082948221)),
+and its configuration went with it.
+A release branch the fork carries under its canonical name stays where the last sync left it
+and moves only when someone pushes it.
 
-**A mirror has one motion — it takes the canonical tip.**
-It is advanced by hard reset rather than by merge,
-so a commit pushed onto one in the fork is discarded on the next sync,
-and a mirror is never a branch to work on.
-That is the property the badges rest on,
-and nothing announces its loss:
-a mirror left behind still renders, counting commits that have already
-shipped.
+**The fork's `main` is a branch of its own now, not a copy.**
+It has moved ahead of the canonical `main`, and nothing brings either one level with the other.
+No badge reads it, or any other copy:
+*ahead* is counted in the canonical repository and the other two in the fork's series refs
+([`scripts/series-table.R`](/scripts/series-table.R)).
 
-**The mechanism is the fork's own, not a job of ours.**
-Keeping a fork level with what it forked from is what the Pull app does,
-and it reaches this fork at all because `krlmlr/duckdb-r` is a fork object
-of the canonical repository rather than a copy of it:
-Pull requires the upstream to be in the same fork network.
-[`.github/pull.yml`](/.github/pull.yml) is where it is configured:
-that file's rules are the list of mirrors,
-and the fork's series refs match none of them.
-That list is derived rather than remembered —
-a mirror is carried because a badge measures against it,
-so the badge table in the root [`README.md`](/README.md) says what the rules
-must be, and [`scripts/pull-config.sh`](/scripts/pull-config.sh) holds the two
-against each other.
-It is authored here, in the canonical repository, on `main`:
-the app reads it from the fork's default branch, which is a mirror of that `main`,
-so it takes effect from `main`'s copy alone.
-
-**A mirror moves on the app's schedule, not on ours.**
-Pull syncs a repository every six hours,
-at a fixed offset it picks itself,
-so a mirror is at most that far behind what it copies;
-a sync can be asked for at any moment from the URL that config names —
-which is what someone who needs a mirror at the canonical tip asks for,
-rather than pushing the branch.
-Pull moves a mirror through a pull request in the fork,
-and one into a release branch's mirror starts no `rcc` run ([`operations/ci/workflows/`](/handbook/operations/ci/workflows/README.md)).
-
-**A mirror is created by pushing it, not by configuring it.**
-Pull skips a rule whose base branch the fork does not have,
-and says so only in its own logs,
-so a branch that is about to be measured against is pushed once by hand
-([`.claude/skills/series-open/SKILL.md`](/.claude/skills/series-open/SKILL.md));
-the config keeps it fresh afterwards and never creates it.
+**The scripts read the canonical branch first and the fork's copy second.**
+`main` and the branch a series releases from are fetched from the remote `--canonical` names,
+and the fork's copy is the fallback, taken with a word on stderr
+([`operations/vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md)).
+A fallback onto a release branch's copy reads a tip that only ages from here.
+A read of the canonical `main` now misses what the fork's `main` carries beyond it,
+and the tooling sync takes the tree it reads verbatim,
+so which `main` the scripts should read is open
+([krlmlr/duckdb-r#264](https://github.com/krlmlr/duckdb-r/pull/264)).
 
 ## The copy that goes the other way
 
@@ -101,5 +68,5 @@ under a lease and after the swap, rather than leaving the next firing to trip on
 and only where the copy it replaces is the fork's green or under a pin in the fork
 ([`model/`](/handbook/branches/model/README.md)), so the move loses no history.
 
-Unlike the mirrors above, this one is ours to push:
-Pull carries branches from the canonical repository into the fork and never back.
+Unlike the copies above, this one is ours to push,
+and it is the only copy between the two repositories that anything still keeps level.
