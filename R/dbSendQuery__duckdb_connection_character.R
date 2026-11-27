@@ -3,7 +3,11 @@
 #' @rdname duckdb_connection-class
 #' @inheritParams DBI::dbSendQuery
 #' @inheritParams DBI::dbBind
-#' @param arrow Whether the query should be returned as an Arrow Table
+#' @param arrow `r lifecycle::badge("deprecated")`
+#'   Whether the query should be returned as an Arrow Table.
+#'   Use [DBI::dbSendQueryArrow()] or [DBI::dbGetQueryArrow()] instead,
+#'   which return a nanoarrow stream;
+#'   `arrow::as_arrow_table()` converts it to an Arrow Table.
 #' @section Multiple statements:
 #' A `statement` can hold several SQL statements separated by semicolons,
 #' in [dbSendQuery()], [dbSendQueryArrow()],
@@ -39,6 +43,18 @@ dbSendQuery__duckdb_connection_character <- function(
 
   env <- find_caller()
 
+  if (isTRUE(arrow)) {
+    deprecate_soft(
+      paste(
+        "`dbSendQuery(arrow = TRUE)` and `dbGetQuery(arrow = TRUE)` are deprecated",
+        "and will be removed in a future release.",
+        "Use `dbSendQueryArrow()` or `dbGetQueryArrow()` instead,",
+        "and `arrow::as_arrow_table()` on the stream they return for an Arrow Table."
+      ),
+      env
+    )
+  }
+
   statement <- enc2utf8(statement)
   stmt_lst <- rethrow_rapi_prepare(conn@conn_ref, statement, env)
 
@@ -60,6 +76,31 @@ setMethod(
   c("duckdb_connection", "character"),
   dbSendQuery__duckdb_connection_character
 )
+
+# Warns on every call from user code or a test,
+# not for one from another package's code, whose users could not act on the warning.
+# Unlike lifecycle::deprecate_soft(), it does not throttle the warning.
+# The condition carries the fields of .Deprecated()'s, without a call.
+# arrow::to_arrow() still sends its query with `arrow = TRUE`
+# (handbook/usage/memory/reading/README.md).
+deprecate_soft <- function(msg, caller_env) {
+  caller <- environmentName(topenv(caller_env))
+  tested <- Sys.getenv("TESTTHAT_PKG")
+  if (
+    caller %in%
+      c("R_GlobalEnv", "testthat") ||
+      (nzchar(tested) && caller == tested)
+  ) {
+    warning(warningCondition(
+      msg,
+      old = "dbSendQuery",
+      new = NULL,
+      package = get_package_name(),
+      class = "deprecatedWarning",
+      call = NULL
+    ))
+  }
+}
 
 find_caller <- function() {
   i <- 3L

@@ -50,7 +50,9 @@ test_that("disconnect releases a result parked during an R callback (#2934)", {
   # An Arrow-mode result holds its client context, and with it the database;
   # holding it needs no arrow package, only fetching from it would.
   holder <- new.env()
-  holder$res <- dbSendQuery(con, "SELECT * FROM t", arrow = TRUE)
+  holder$res <- expect_deprecated_arrow(
+    dbSendQuery(con, "SELECT * FROM t", arrow = TRUE)
+  )
 
   # Forced by the environment scan while the binder runs R code:
   # the result's finalizer runs inside that callback, which parks the result.
