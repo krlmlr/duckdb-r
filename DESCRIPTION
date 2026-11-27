@@ -1,6 +1,7 @@
 Package: duckdb
 Title: DBI Package for the DuckDB Database Management System
 Version: 2.0.1
+Config/duckdb/upstream: 8d78114e90a53823803660bf821f6073ac87da8c
 Authors@R: c(
     person("Hannes", "Mühleisen", , "hannes@cwi.nl", role = "aut",
            comment = c(ORCID = "0000-0001-8552-0029")),
@@ -79,7 +80,6 @@ Config/comment/gha/extra-packages: arrow does not compile against
     ignore-build-errors stays for the day it returns to CRAN and Rtools45
     has to build it again. Explained in
     handbook/operations/ci/matrix/README.md.
-Config/duckdb/upstream: 8d78114e90a53823803660bf821f6073ac87da8c
 Config/gha/extra-packages: 
     adbcdrivermanager=?ignore-unavailable&ignore-build-errors,
     arrow=?ignore-build-errors
