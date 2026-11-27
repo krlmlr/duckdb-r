@@ -3,10 +3,7 @@
 #
 # Two tables said the same thing by hand and drifted: the root README's
 # `Flavors` table and handbook/branches/flavors/'s. A new series had to be
-# announced in both, in two pull requests more than once, and
-# scripts/pull-config.sh derived the fork's mirror rules by regular expression
-# over the *rendered* README -- which is how a badge moving to another
-# repository silently changed what the fork was told to mirror.
+# announced in both, in two pull requests more than once.
 #
 # So the flavors are declared once and the tables are generated.
 # `README.Rmd` calls flavor_table() from a chunk, so the root README and

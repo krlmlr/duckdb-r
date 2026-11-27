@@ -66,5 +66,4 @@ The generated documents are held to their sources by the generators that write t
 each invoked with `--check` and each named by the leaf that owns what it generates:
 [`docs-readme.R`](/.claude/skills/docs-consistency/docs-readme.R) for the `scripts/` index,
 [`scripts/series-table.R`](/scripts/series-table.R) for the flavor table,
-[`scripts/types-rd.R`](/scripts/types-rd.R) for the type reference pages,
-and [`scripts/pull-config.sh`](/scripts/pull-config.sh) for the fork's mirror rules.
+and [`scripts/types-rd.R`](/scripts/types-rd.R) for the type reference pages.

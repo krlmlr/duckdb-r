@@ -196,7 +196,7 @@ until now.
    One entry, and both tables are written from it — the `Flavors` table in
    [`README.Rmd`](/README.Rmd) and the one in
    [`branches/flavors/`](/handbook/branches/flavors/README.md) — along with the
-   mirror rules step 7 checks. The entry is the only place a new series is named
+   branch step 7 copies. The entry is the only place a new series is named
    by hand; everything else is discovered from refs or derived from it.
    See below for what the fields mean and what a badge row gets wrong.
 
@@ -206,25 +206,14 @@ until now.
    ([`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md), "What a firing reports").
    The loop never cuts the refs — only steps 1–5 above do.
 
-7. **Update the fork's mirror configuration — derived, not remembered.**
-   A series' *ahead* badge measures against a branch the fork mirrors, which stays
-   current only while [`.github/pull.yml`](/.github/pull.yml) carries a rule for
-   it. Which rules the file owes is a function of the table step 6 just moved, so
-   [`scripts/pull-config.sh`](/scripts/pull-config.sh) evaluates that function and
-   prints what is missing (`--check` exits non-zero). A line still releasing from
-   `main` is measured against `main`, which is ruled already, so most openings add
-   no rule.
-
-   Two halves the script cannot do. **Push the branch into the fork first** — a
-   rule whose base the fork lacks is skipped silently and forever. **Then carry
-   the merged file to the fork's default branch**, where Pull reads it; `pull.yml`
-   names the URL that triggers a sync, so it takes effect today rather than within
-   six hours ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
-
-   Nothing else lives outside the refs: the loop discovers every series from them,
-   and reports the rule the mirror configuration is missing on the firing that sees a series change,
-   as a change to `main` like any other, since the script is read-only
-   ([`series-loop/SKILL.md`](/.claude/skills/series-loop/SKILL.md)).
+7. **Copy a newly cut branch to `duckdb/duckdb-r`.**
+   A series' *ahead* badge measures against the branch it releases from,
+   counted in `duckdb/duckdb-r`, which carries every branch of the fork that a badge or an install names.
+   A line still releasing from `main` is measured against `main`, which the copy carries already,
+   so most openings copy nothing.
+   A release branch cut in the fork is pushed there once, and after every move,
+   as [`branches/mirrors/`](/handbook/branches/mirrors/README.md) shows;
+   until then its badge renders an error rather than a count.
 
 8. **Register the new flavor with r-universe.**
    `<F>` is a package nothing in this repository creates: a universe is configured
@@ -267,8 +256,7 @@ entry is eight fields:
 `series` is the prefix of the four refs; `publishes_from` is what r-universe
 builds. `releases_from` is the one to get right, and it does two jobs: it is the
 base the *ahead* badge measures from, and it is the branch the series seeds and
-forward-ports from, which is why the fork mirrors it and why
-`pull-config.sh` reads it rather than the badge
+forward-ports from, which is why `duckdb/duckdb-r` has to carry a copy of it
 ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 
 Two things the generator settles that a hand-copied row used to get wrong.
@@ -281,14 +269,14 @@ this repository once CRAN moves to it.
 row. shields.io compares two refs of a single repository, and the row's three
 comparisons do not all live in the same one:
 
-* ***ahead*** is counted in `duckdb/duckdb-r`. Both its refs are there — the
-  release branch natively, and `<S>-green` because the loop mirrors it
-  ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+* ***ahead*** is counted in `duckdb/duckdb-r`, the downstream copy. Both its refs
+  are copied there from the fork: the release branch after every move, and
+  `<S>-green` by the loop ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 * ***in flight*** and ***buffered*** are counted in `krlmlr/duckdb-r`, the only
   repository carrying `<S>-dev` and `<S>-build`.
 
 A badge whose base the named repository lacks renders as an error rather than a
-count, and one reading a stale mirror is worse because it renders: it counts
+count, and one reading a stale copy is worse because it renders: it counts
 commits that have already shipped. Step 7 settles both.
 
 **The table must stay clear of `scripts/flavor.patch`.**
@@ -305,15 +293,13 @@ of its own.
 
 ## Later, when CRAN moves to the line
 
-A line gets its own `vX-codename` branch in this repository when CRAN moves to it,
+A line gets its own `vX-codename` branch in the fork when CRAN moves to it,
 cut from `main` ([`series-land`](/.claude/skills/series-land/SKILL.md), "Changing the line CRAN ships"),
 and keeps that branch when a newer line takes CRAN over and it parks.
 Its `.dev` badge follows it there — the *ahead* base is the branch the series
 releases from, which is no longer `main`.
-That move is what earns the line a mirror and a rule, on the day its branch is cut
-rather than on the day it was opened, and `pull-config.sh` reports it as
-soon as the badge base moves: step 7 arriving by itself rather than being
-remembered.
+That move is what earns the line a copy in `duckdb/duckdb-r`, on the day its branch is cut
+rather than on the day it was opened: step 7, pushed with the cut.
 The same `releases_from` freezes the line's R side against `main`'s: `scripts/series-port.sh`
 takes only the tooling sync for a line declared on a branch of its own,
 which matters because that branch was cut from `main` and no lineage test can tell it from a live line's.

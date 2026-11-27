@@ -41,7 +41,7 @@ and are not repeated here; this page holds this repository's own.
 * **leg** — the one CI job that builds and judges a shard, commit by commit, in a single workspace ([`operations/ci/per-commit/legs/`](/handbook/operations/ci/per-commit/legs/README.md)).
 * **libduckdb** — a prebuilt engine library, linked by the fast path instead of compiling ([`build/fast-paths/`](/handbook/build/fast-paths/README.md)).
 * **line** — one upstream release branch of `duckdb/duckdb` together with the series that serves it and, while one is in flight, that series' forward ([`branches/model/`](/handbook/branches/model/README.md)).
-* **mirror** — a fork branch whose only motion is to take a canonical branch's tip, by hard reset ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+* **mirror** — a branch of `duckdb/duckdb-r`, the downstream copy, whose only motion is to take the fork's tip by a plain push ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
 * **nanoarrow array stream** — the zero-copy, batch-by-batch result format of the Arrow API ([`usage/integrations/`](/handbook/usage/integrations/README.md)).
 * **patch stack** — the patches under `patch/` re-applied to each freshly vendored tree ([`operations/vendoring/pipeline/`](/handbook/operations/vendoring/pipeline/README.md)).
 * **pin** — the head of a review stack's first pull request, `refs/pull/<n>/head`, which keeps an old tip reachable; the swap refuses to move a ref no pin holds ([`branches/model/`](/handbook/branches/model/README.md)).

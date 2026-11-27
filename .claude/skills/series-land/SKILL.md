@@ -40,6 +40,13 @@ Every command block below pastes as it stands, from the repository's root,
 with `upstream` naming `duckdb/duckdb-r` and `origin` the fork:
 it reads `<B>` with `series-land.sh --target`, and what a human chooses, the series first, is one variable at its top.
 
+**The blocks still address `duckdb/duckdb-r` as the canonical repository, and the fork is canonical now.**
+They freeze, review, fast-forward, tag and merge forward there, as they did while the fork's branches were mirrors of it,
+so run none of them until they are retargeted to the fork,
+which then lands, tags and merges forward itself and pushes the result to its copy
+([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+The steps and their order stand; only the repository each block writes to changes.
+
 ## The refs
 
 ```mermaid
@@ -584,8 +591,8 @@ and `main` moves on to preview the next line; CRAN moves to the new line with it
    the CRAN flavor's `upstream` becomes `<N>` with `<N>`'s first release,
    and its `publishes_from` stays `main`, since plain `duckdb` on r-universe shows the next line while CRAN's releases are cut from `<N>`,
    and a line that retires then is declared `stale: true`;
-   then `.github/pull.yml` from `scripts/pull-config.sh` and the tables from `scripts/series-table.R`,
-   checked with `--check` ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+   then the tables from `scripts/series-table.R`, checked with `--check`,
+   and `<N>` copied to `duckdb/duckdb-r` ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
    A retiring line moves the oldest active release branch,
    so the base [`operations/review/`](/handbook/operations/review/README.md) names as today's moves with it,
    and so do its copies in `AGENTS.md` and `.claude/rules/pull-request-base.md`.

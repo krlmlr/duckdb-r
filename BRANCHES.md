@@ -76,7 +76,6 @@ duckdb-r/
 ├── patch/                          # R-specific patches applied to src/duckdb/     [1]
 ├── scripts/                        # Build and maintenance; index in its README   [5]
 ├── .github/
-│   ├── pull.yml                    # Pull app config — the fork's mirrors          [5]
 │   └── workflows/
 │       ├── each.yaml               # Per-commit rcc, as a sharded matrix           [5]
 │       └── R-CMD-check*.yaml       # Package check workflows                       [5]

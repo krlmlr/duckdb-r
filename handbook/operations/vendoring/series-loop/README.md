@@ -209,17 +209,17 @@ Everything else is an option, spelled identically in all of them:
 * `--upstream <path>` — a `duckdb/duckdb` checkout on disk, read with
   `git -C`. Default `$UPSTREAM_CLONE`, and for `series-cut.sh` then `../../../duckdb`.
   Only `series-check.sh`, `series-cut.sh`, `series-cutover.sh` and `series-cutover-stack.sh` read one.
-* `--canonical <name>` — the remote of the canonical repository: where
-  r-universe publishes the base flavors from, and where `main` itself lives.
+* `--canonical <name>` — the remote of `duckdb/duckdb-r`, the downstream copy of the fork:
+  where r-universe publishes the base flavors from, and where the scripts still read `main`,
+  which is right only while the copy is level with the fork ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
   Default `$SERIES_CANONICAL`, then `upstream`, which is what a `gh` clone of a
   fork calls the repository it was forked from.
   An empty `SERIES_CANONICAL` turns the mirroring off; an unset one does not.
   Only `series-advance.sh`, `series-cutover.sh` and `series-land.sh` (its
   `--review --push`, and the fast-forward of `main` it prints) write one;
   `series-port.sh`, `series-check.sh` and `series-land.sh` read `main` from it,
-  and fall back to the fork's mirror with a word on stderr when they cannot,
-  and `series-prune.sh` reads the forward green's copy from it
-  ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
+  and fall back to the fork's own `main` with a word on stderr when they cannot,
+  and `series-prune.sh` reads the forward green's copy from it.
 * `-h`, `--help` — the usage, on stdout, exit 0, before the script
   touches git.
 * Anything else beginning with `-`, an option missing its value, or a

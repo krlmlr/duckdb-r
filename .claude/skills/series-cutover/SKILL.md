@@ -172,7 +172,8 @@ A pull request body takes reflowed paragraphs, not semantic line breaks.
    Each `<S>-*` ref sits at the tip its `-fwd` twin had, the canonical `<S>-green` equals the fork's,
    and no `-fwd` ref is left but those the run lists as left behind.
    Then re-cut the derived strands where the series has them, as the run's last lines say,
-   and check the mirror rules with `scripts/pull-config.sh --check`, the last line of the block the loop's stage 6 reports.
+   and check that `duckdb/duckdb-r` carries every branch the badges now measure against
+   ([`branches/mirrors/`](/handbook/branches/mirrors/README.md)).
    Last, start the verdict mirror in the canonical repository
    ([`per-commit/upstream/`](/handbook/operations/ci/per-commit/upstream/README.md)).
    The new `<S>-green`'s commits were covered as `<S>-fwd-green` already,
