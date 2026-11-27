@@ -6,7 +6,7 @@
 # This is the gate set that the `rcc-smoke` job of `.github/workflows/
 # R-CMD-check.yaml` applies on its per-commit `workflow_dispatch` path -- the
 # path the retired per-commit dispatcher drove -- expressed as a script so that
-# `scripts/each-shard.sh` can run it many times in one job. A workflow cannot
+# the each-shard action can run it many times in one job. A workflow cannot
 # loop over composite actions, so the gates have to be callable from a shell
 # loop; this file is that seam.
 #
@@ -53,7 +53,7 @@
 #                           (default: true under GITHUB_ACTIONS, false locally)
 #   EACH_STAGE_DIR        - when set, each stage's combined output is also kept
 #                           in <dir>/<stage>.log and its verdict appended to
-#                           <dir>/outcomes.tsv, so scripts/each-shard.sh can
+#                           <dir>/outcomes.tsv, so the each-shard action can
 #                           quote the failing stage into the run summary
 #   CLANG_FORMAT          - the C++ formatter the style gate runs
 #                           (default: clang-format-21, what CI installs)
@@ -103,7 +103,7 @@ names=()
 outcomes=()
 status=0
 
-# The leg has a timeout of its own (scripts/each-shard.sh), and it kills the
+# The leg has a timeout of its own (the each-shard action), and it kills the
 # process group this script runs in. A bounded stage is not in that group: the
 # nested `timeout` moved it into one of its own, which is what lets it take a
 # stuck `Rscript` down with it. So a leg that runs out of budget kills this
@@ -221,7 +221,7 @@ record() {
 }
 
 # Run one stage, keeping a copy of its combined output when EACH_STAGE_DIR is
-# set. Nothing is lost by buffering it: the caller (scripts/each-shard.sh)
+# set. Nothing is lost by buffering it: the caller (the each-shard action)
 # already redirects the whole commit to a file and prints it once the commit is
 # over, so there is no live stream here to interleave with. What is gained is a
 # log that begins and ends at the stage boundary, which is what makes a useful
