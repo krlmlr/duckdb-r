@@ -108,7 +108,7 @@ test_that("duckdb_fetch_arrow() record_batch_reader ", {
   expect_equal(NULL, cur_batch)
 })
 
-test_that("duckdb_fetch_record_batch() can be read after its connection is gone", {
+test_that("duckdb_fetch_record_batch() closes with its connection", {
   con <- dbConnect(duckdb())
   res <- suppressWarnings(
     dbSendQuery(con, "SELECT i FROM range(3) t(i)", arrow = TRUE),
@@ -116,20 +116,24 @@ test_that("duckdb_fetch_record_batch() can be read after its connection is gone"
   )
   reader <- duckdb_fetch_record_batch(res)
   dbClearResult(res)
-  dbDisconnect(con, shutdown = TRUE)
+  # The reader counts on its own: clearing the result does not release it.
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
-  expect_equal(reader$read_table()$num_rows, 3L)
+  expect_error(
+    reader$read_table(),
+    "connection this result was sent on has been closed"
+  )
 })
 
-test_that("a result of dbSendQuery() can be fetched after its connection is gone", {
+test_that("a result of dbSendQuery() closes with its connection", {
   skip_if_not_installed("callr")
 
   # The Arrow conversion reads the client context, and reading one that is gone
   # crashed or wedged the session; the subprocess and its timeout turn that into
   # a failure here.
   pkg <- get_package_name()
-  rows <- callr::r(
+  message <- callr::r(
     function(pkg) {
       ns <- asNamespace(pkg)
       con <- DBI::dbConnect(ns$duckdb())
@@ -137,26 +141,29 @@ test_that("a result of dbSendQuery() can be fetched after its connection is gone
         DBI::dbSendQuery(con, "SELECT i FROM range(3) t(i)", arrow = TRUE),
         classes = "deprecatedWarning"
       )
-      DBI::dbDisconnect(con)
+      suppressWarnings(DBI::dbDisconnect(con))
       invisible(gc())
 
-      table <- ns$duckdb_fetch_arrow(res)
+      out <- tryCatch(ns$duckdb_fetch_arrow(res), error = conditionMessage)
       DBI::dbClearResult(res)
-      table$num_rows
+      out
     },
     list(pkg = pkg),
     timeout = 30
   )
-  expect_equal(rows, 3L)
+  expect_match(message, "connection this result was sent on has been closed")
 
-  # A plain result holds its rows from dbSendQuery() on.
+  # A plain result holds its rows from dbSendQuery() on, and is closed all the same.
   con <- dbConnect(duckdb())
   res <- dbSendQuery(con, "SELECT i FROM range(3) t(i)")
-  dbDisconnect(con)
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
-  expect_equal(dbFetch(res), data.frame(i = c(0, 1, 2)))
-  dbClearResult(res)
+  expect_error(
+    dbFetch(res),
+    "connection this result was sent on has been closed"
+  )
+  expect_silent(dbClearResult(res))
 })
 
 test_that("duckdb_fetch_arrow() record_batch_reader multiple vectors per chunk", {

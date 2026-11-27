@@ -13,6 +13,7 @@
 #include "duckdb.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/unordered_map.hpp"
+#include "duckdb/common/unordered_set.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/error_data.hpp"
@@ -23,6 +24,8 @@
 #include "convert.hpp"
 
 #include <atomic>
+#include <mutex>
+#include <thread>
 
 // Avoid clash with TRUE and FALSE macros in older rtools
 #undef TRUE
@@ -190,15 +193,35 @@ typedef DualWrapper<DBWrapper> DBWrapperDual;
 
 typedef cpp11::external_pointer<DBWrapperDual> db_eptr_t;
 
+struct RStatement;
+struct RQueryResult;
+struct RArrowArrayStreamWrapper;
+
+// A connection: one engine Connection, which is one ClientContext, the engine's session,
+// beside the conversion options it was opened with and the results open on it
+// (handbook/architecture/glue/objects/README.md).
 struct ConnWrapper {
 	ConnWrapper() = delete;
 	ConnWrapper(std::shared_ptr<DBWrapper> db_p, ConvertOpts convert_opts_p)
 	    : db(std::move(db_p)), convert_opts(std::move(convert_opts_p)) {
 		conn = make_uniq<Connection>(*db->db);
 	}
+	// Closes the results still open on the connection (connection.cpp)
+	~ConnWrapper();
 	std::shared_ptr<DBWrapper> db;
 	duckdb::unique_ptr<Connection> conn;
 	const ConvertOpts convert_opts;
+
+	// The results open on this connection: the prepared statement behind each DBI result, the query result of the
+	// Arrow route, and the streams over it, handed over to nanoarrow or arrow or not. The latter two hold the
+	// connection's context, and through it the database instance. Closing the connection closes every one of them,
+	// so that nothing of the connection outlives it, and every result reports its connection closed.
+	// Each registers itself when it is made and leaves when it is destroyed; closing one clears its pointer back here.
+	// Only R's thread touches `statements` and `query_results`; a handed-over stream may be released on another
+	// thread, so `streams`, and each stream's pointer back here, are guarded by StreamsLock().
+	unordered_set<RStatement *> statements;
+	unordered_set<RQueryResult *> query_results;
+	unordered_set<RArrowArrayStreamWrapper *> streams;
 };
 
 void ConnDeleter(ConnWrapper *);
@@ -251,13 +274,31 @@ bool OnRThread();
 //! Records the calling thread as R's; called once, when R loads the package.
 void RecordRThread();
 
+//! Guards ConnWrapper::streams, and each stream's pointer back to its connection (connection.cpp)
+mutex &StreamsLock();
+
+//! Releases an object kept with R_PreserveObject(): at once on R's thread, otherwise at the next entry point
+//! on R's thread, where ReleaseOrphanedObjects() runs (connection.cpp)
+void ReleaseOnRThread(SEXP object);
+//! Releases what ReleaseOnRThread() was handed off R's thread; does nothing off R's thread
+void ReleaseOrphanedObjects();
+
+// A prepared statement and its bound parameters, behind a duckdb_result or a duckdb_result_arrow.
+// The prepared statement holds the client context it was prepared on only weakly; the result stays open
+// until dbClearResult() releases it, or until the connection closes and closes the result with it.
 struct RStatement {
 	RStatement() = delete;
-	explicit RStatement(duckdb::unique_ptr<PreparedStatement> stmt_p) : stmt(std::move(stmt_p)) {
+	RStatement(duckdb::unique_ptr<PreparedStatement> stmt_p, ConnWrapper &conn_p)
+	    : stmt(std::move(stmt_p)), conn(&conn_p) {
+		conn->statements.insert(this);
 	}
+	// The connection is closing: let go of the prepared statement (statement.cpp)
+	void Close();
 	~RStatement();
 	duckdb::unique_ptr<PreparedStatement> stmt;
 	vector<Value> parameters;
+	// The connection the statement is open on, null once that connection has closed
+	ConnWrapper *conn;
 };
 
 typedef cpp11::external_pointer<RStatement> stmt_eptr_t;
@@ -316,6 +357,8 @@ public:
 	~RArrowChunkSource() override;
 
 	void EndForAnotherStatement() override;
+	//! Its connection is closing: lets go of the query result, which reads as ended from then on
+	void Close();
 
 public:
 	// The number of rows written to out, 0 at the end. Throws on an execution error
@@ -363,10 +406,19 @@ private:
 
 // The engine's Arrow stream over a query result, behind one that reports a streaming result
 // invalidated by another statement on its connection as an error, where the engine reports the end of the stream
-// (handbook/usage/integrations/README.md).
+// (handbook/usage/integrations/README.md), and a result whose connection has closed as an error too,
+// where the engine would read on (handbook/architecture/glue/objects/README.md).
 struct RArrowArrayStreamWrapper {
 	RArrowArrayStreamWrapper(duckdb::shared_ptr<ClientContext> context, duckdb::unique_ptr<QueryResult> result,
-	                         idx_t batch_size, bool invalidated = false);
+	                         idx_t batch_size, bool invalidated, ConnWrapper *conn_p);
+	~RArrowArrayStreamWrapper();
+	// The connection is closing: let go of the query result, and of the context (arrow_export.cpp).
+	// Called on R's thread with StreamsLock() held; never waits for a read in flight, which finishes the close itself.
+	void Close();
+	// Handed over to nanoarrow or arrow: keeps `conn_ref`, the R connection's external pointer, reachable for as long
+	// as the stream lives, so that collecting the connection does not close a stream still being read.
+	// Called on R's thread.
+	void HandOver(SEXP conn_ref);
 
 	ArrowArrayStream stream;
 	// The engine's callbacks read the result's client context through a raw pointer,
@@ -375,29 +427,65 @@ struct RArrowArrayStreamWrapper {
 	duckdb::shared_ptr<ClientContext> context;
 	RResultArrowStream engine;
 	ErrorData last_error;
+	// The connection the stream reads on, null once that connection has closed it
+	ConnWrapper *conn;
+	// Set by Close(), which may run while another thread reads (handbook/architecture/glue/threading/)
+	std::atomic<bool> closed {false};
+	// Whether a consumer holds the stream rather than the query result, so that it counts on its own
+	// when its connection closes with it
+	bool handed_over = false;
+	// Read to its end, or to an error: such a stream no longer counts as open when its connection closes
+	std::atomic<bool> ended {false};
 
 private:
+	// Taken by every read, so that Close() never tears the query result down under one.
+	// Lock order: StreamsLock(), then read_lock, then the client context lock;
+	// Close() only ever tries read_lock, so R's thread never waits for a read.
+	std::mutex read_lock;
+	// The thread inside a read, so that Close() reached from underneath that read (a progress callback on R's
+	// thread) does not try a lock its own thread holds
+	std::atomic<std::thread::id> reader {};
+	// A close that found a read in flight, finished by that read as it ends
+	std::atomic<bool> close_pending {false};
+	// The R connection kept reachable, R_NilValue unless handed over
+	SEXP keep_alive = R_NilValue;
+	struct ReadGuard {
+		explicit ReadGuard(RArrowArrayStreamWrapper &wrapper);
+		~ReadGuard();
+		RArrowArrayStreamWrapper &wrapper;
+	};
+	void TearDown();
+	void FinishPendingClose();
+	int ReadSchema(ArrowSchema *out);
+	int ReadNext(ArrowArray *out);
 	static int GetSchema(ArrowArrayStream *stream, ArrowSchema *out);
 	static int GetNext(ArrowArrayStream *stream, ArrowArray *out);
 	static const char *GetLastError(ArrowArrayStream *stream);
 	static void Release(ArrowArrayStream *stream);
 	bool Invalidated();
 	int ReportInvalidated();
+	int ReportClosed();
 };
 
 // A query result for the Arrow route.
 // Its columns stay after the result has been read to the end or handed over,
 // for the Arrow schema and the empty batch that answer from then on (handbook/usage/integrations/README.md).
 // The client properties point to the client context, which the result keeps alive itself,
-// taken when the statement ran: a disconnect frees the connection's context,
-// and the prepared statement only holds a weak reference to it.
+// taken when the statement ran: the prepared statement only holds a weak reference to it.
+// It does so until dbClearResult(), or until the connection closes: that closes this result too,
+// and every entry point refuses it from then on (arrow_export.cpp).
 struct RQueryResult : public ROpenResult {
 	// A streamed result holds its connection's query open from here on, so it is tracked until it is handed on
-	RQueryResult(duckdb::shared_ptr<ClientContext> context_p, duckdb::unique_ptr<QueryResult> result_p, bool streamed)
+	RQueryResult(duckdb::shared_ptr<ClientContext> context_p, duckdb::unique_ptr<QueryResult> result_p, bool streamed,
+	             ConnWrapper *conn_p)
 	    : context(std::move(context_p)), result(std::move(result_p)), types(result->GetTypes()),
-	      names(IdentifiersToStrings(result->GetNames())), client_properties(result->client_properties) {
+	      names(IdentifiersToStrings(result->GetNames())), client_properties(result->client_properties),
+	      conn(conn_p) {
 		if (streamed && context) {
 			Track(context.get());
+		}
+		if (conn) {
+			conn->query_results.insert(this);
 		}
 	}
 
@@ -417,6 +505,11 @@ struct RQueryResult : public ROpenResult {
 	vector<LogicalType> types;
 	vector<string> names;
 	ClientProperties client_properties;
+	// The connection the result is open on, null once that connection has closed
+	ConnWrapper *conn;
+
+	// The connection is closing: let go of the stream, the query result and the context (statement.cpp)
+	void Close();
 };
 
 typedef cpp11::external_pointer<RQueryResult> rqry_eptr_t;
@@ -508,7 +601,7 @@ void rapi_shutdown(duckdb::db_eptr_t);
 
 duckdb::conn_eptr_t rapi_connect(duckdb::db_eptr_t);
 
-void rapi_disconnect(duckdb::conn_eptr_t);
+int rapi_disconnect(duckdb::conn_eptr_t);
 
 bool rapi_connection_valid(duckdb::conn_eptr_t);
 
@@ -530,7 +623,7 @@ void rapi_unregister_arrow(duckdb::conn_eptr_t, SEXP namesexp);
 
 SEXP rapi_execute_arrow(duckdb::rqry_eptr_t, int);
 
-SEXP rapi_record_batch(duckdb::rqry_eptr_t, int);
+SEXP rapi_record_batch(duckdb::rqry_eptr_t, int, cpp11::sexp);
 
 cpp11::r_string rapi_ptr_to_str(SEXP extptr);
 

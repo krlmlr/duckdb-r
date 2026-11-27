@@ -148,8 +148,10 @@ The glue drains the result itself and checks before each read whether another st
 (`RArrowArrayStreamWrapper`, [`src/arrow_export.cpp`](/src/arrow_export.cpp)).
 The engine refuses any statement on a connection while a result is open there,
 so the glue ends the connection's open results first (`EndOpenResults()`).
-The wrapper also keeps the connection's client context alive until the stream is released.
-The engine's callbacks read it, so a stream can still be read after `dbDisconnect()`.
+The wrapper also keeps the connection's client context alive, which the engine's callbacks read,
+until the stream is released or its connection closes.
+`dbDisconnect()` closes the stream with the connection, and a read after it is an error that names the closed connection
+([`architecture/glue/objects/`](/handbook/architecture/glue/objects/README.md)).
 Statements that must run between reads need a connection of their own.
 That includes a query that scans the stream itself.
 Registering `arrow::as_record_batch_reader(stream)` with `duckdb_register_arrow()` and querying it is one.

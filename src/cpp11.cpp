@@ -13,10 +13,10 @@ extern "C" SEXP _duckdb_rapi_execute_arrow(SEXP qry_res, SEXP chunk_size) {
   END_CPP11
 }
 // arrow_export.cpp
-void rapi_fetch_arrow_stream_into(duckdb::rqry_eptr_t qry_res, cpp11::sexp stream_xptr, int chunk_size);
-extern "C" SEXP _duckdb_rapi_fetch_arrow_stream_into(SEXP qry_res, SEXP stream_xptr, SEXP chunk_size) {
+void rapi_fetch_arrow_stream_into(duckdb::rqry_eptr_t qry_res, cpp11::sexp stream_xptr, int chunk_size, cpp11::sexp conn_ref);
+extern "C" SEXP _duckdb_rapi_fetch_arrow_stream_into(SEXP qry_res, SEXP stream_xptr, SEXP chunk_size, SEXP conn_ref) {
   BEGIN_CPP11
-    rapi_fetch_arrow_stream_into(cpp11::as_cpp<cpp11::decay_t<duckdb::rqry_eptr_t>>(qry_res), cpp11::as_cpp<cpp11::decay_t<cpp11::sexp>>(stream_xptr), cpp11::as_cpp<cpp11::decay_t<int>>(chunk_size));
+    rapi_fetch_arrow_stream_into(cpp11::as_cpp<cpp11::decay_t<duckdb::rqry_eptr_t>>(qry_res), cpp11::as_cpp<cpp11::decay_t<cpp11::sexp>>(stream_xptr), cpp11::as_cpp<cpp11::decay_t<int>>(chunk_size), cpp11::as_cpp<cpp11::decay_t<cpp11::sexp>>(conn_ref));
     return R_NilValue;
   END_CPP11
 }
@@ -52,10 +52,10 @@ extern "C" SEXP _duckdb_rapi_release_arrow_result(SEXP qry_res) {
   END_CPP11
 }
 // arrow_export.cpp
-SEXP rapi_record_batch(duckdb::rqry_eptr_t qry_res, int chunk_size);
-extern "C" SEXP _duckdb_rapi_record_batch(SEXP qry_res, SEXP chunk_size) {
+SEXP rapi_record_batch(duckdb::rqry_eptr_t qry_res, int chunk_size, cpp11::sexp conn_ref);
+extern "C" SEXP _duckdb_rapi_record_batch(SEXP qry_res, SEXP chunk_size, SEXP conn_ref) {
   BEGIN_CPP11
-    return cpp11::as_sexp(rapi_record_batch(cpp11::as_cpp<cpp11::decay_t<duckdb::rqry_eptr_t>>(qry_res), cpp11::as_cpp<cpp11::decay_t<int>>(chunk_size)));
+    return cpp11::as_sexp(rapi_record_batch(cpp11::as_cpp<cpp11::decay_t<duckdb::rqry_eptr_t>>(qry_res), cpp11::as_cpp<cpp11::decay_t<int>>(chunk_size), cpp11::as_cpp<cpp11::decay_t<cpp11::sexp>>(conn_ref)));
   END_CPP11
 }
 // connection.cpp
@@ -66,11 +66,10 @@ extern "C" SEXP _duckdb_rapi_connect(SEXP dual, SEXP convert_opts) {
   END_CPP11
 }
 // connection.cpp
-void rapi_disconnect(duckdb::conn_eptr_t conn);
+int rapi_disconnect(duckdb::conn_eptr_t conn);
 extern "C" SEXP _duckdb_rapi_disconnect(SEXP conn) {
   BEGIN_CPP11
-    rapi_disconnect(cpp11::as_cpp<cpp11::decay_t<duckdb::conn_eptr_t>>(conn));
-    return R_NilValue;
+    return cpp11::as_sexp(rapi_disconnect(cpp11::as_cpp<cpp11::decay_t<duckdb::conn_eptr_t>>(conn)));
   END_CPP11
 }
 // connection.cpp
@@ -562,7 +561,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_duckdb_rapi_expr_tostring",                      (DL_FUNC) &_duckdb_rapi_expr_tostring,                       1},
     {"_duckdb_rapi_expr_window",                        (DL_FUNC) &_duckdb_rapi_expr_window,                        12},
     {"_duckdb_rapi_fetch_arrow_array",                  (DL_FUNC) &_duckdb_rapi_fetch_arrow_array,                   3},
-    {"_duckdb_rapi_fetch_arrow_stream_into",            (DL_FUNC) &_duckdb_rapi_fetch_arrow_stream_into,             3},
+    {"_duckdb_rapi_fetch_arrow_stream_into",            (DL_FUNC) &_duckdb_rapi_fetch_arrow_stream_into,             4},
     {"_duckdb_rapi_get_null_SEXP_ptr",                  (DL_FUNC) &_duckdb_rapi_get_null_SEXP_ptr,                   0},
     {"_duckdb_rapi_is_locked",                          (DL_FUNC) &_duckdb_rapi_is_locked,                           1},
     {"_duckdb_rapi_list_arrow",                         (DL_FUNC) &_duckdb_rapi_list_arrow,                          1},
@@ -571,7 +570,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_duckdb_rapi_prepare",                            (DL_FUNC) &_duckdb_rapi_prepare,                             3},
     {"_duckdb_rapi_ptr_to_str",                         (DL_FUNC) &_duckdb_rapi_ptr_to_str,                          1},
     {"_duckdb_rapi_query_off_r_thread",                 (DL_FUNC) &_duckdb_rapi_query_off_r_thread,                  2},
-    {"_duckdb_rapi_record_batch",                       (DL_FUNC) &_duckdb_rapi_record_batch,                        2},
+    {"_duckdb_rapi_record_batch",                       (DL_FUNC) &_duckdb_rapi_record_batch,                        3},
     {"_duckdb_rapi_register_arrow",                     (DL_FUNC) &_duckdb_rapi_register_arrow,                      4},
     {"_duckdb_rapi_register_df",                        (DL_FUNC) &_duckdb_rapi_register_df,                         5},
     {"_duckdb_rapi_rel_aggregate",                      (DL_FUNC) &_duckdb_rapi_rel_aggregate,                       3},

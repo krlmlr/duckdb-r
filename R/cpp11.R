@@ -4,8 +4,8 @@ rapi_execute_arrow <- function(qry_res, chunk_size) {
   .Call(`_duckdb_rapi_execute_arrow`, qry_res, chunk_size)
 }
 
-rapi_fetch_arrow_stream_into <- function(qry_res, stream_xptr, chunk_size) {
-  invisible(.Call(`_duckdb_rapi_fetch_arrow_stream_into`, qry_res, stream_xptr, chunk_size))
+rapi_fetch_arrow_stream_into <- function(qry_res, stream_xptr, chunk_size, conn_ref) {
+  invisible(.Call(`_duckdb_rapi_fetch_arrow_stream_into`, qry_res, stream_xptr, chunk_size, conn_ref))
 }
 
 rapi_arrow_schema <- function(qry_res, schema_xptr) {
@@ -24,8 +24,8 @@ rapi_release_arrow_result <- function(qry_res) {
   invisible(.Call(`_duckdb_rapi_release_arrow_result`, qry_res))
 }
 
-rapi_record_batch <- function(qry_res, chunk_size) {
-  .Call(`_duckdb_rapi_record_batch`, qry_res, chunk_size)
+rapi_record_batch <- function(qry_res, chunk_size, conn_ref) {
+  .Call(`_duckdb_rapi_record_batch`, qry_res, chunk_size, conn_ref)
 }
 
 rapi_connect <- function(dual, convert_opts) {
@@ -33,7 +33,7 @@ rapi_connect <- function(dual, convert_opts) {
 }
 
 rapi_disconnect <- function(conn) {
-  invisible(.Call(`_duckdb_rapi_disconnect`, conn))
+  .Call(`_duckdb_rapi_disconnect`, conn)
 }
 
 rapi_connection_in_transaction <- function(conn) {

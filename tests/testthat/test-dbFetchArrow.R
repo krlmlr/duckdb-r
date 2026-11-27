@@ -56,6 +56,7 @@ test_that("each dbFetchArrowChunk() and dbFetchArrow() call uses its own chunk_s
   stream <- dbFetchArrow(res, chunk_size = 30)
   expect_equal(stream$get_next()$length, 30L)
   expect_equal(stream$get_next()$length, 10L)
+  expect_null(stream$get_next())
 })
 
 test_that("the final empty chunk has the result's schema for every type (#2773)", {
@@ -185,6 +186,7 @@ test_that("a result handed over by dbFetchArrow() keeps its columns (#2773)", {
 
   stream <- dbFetchArrow(res)
   expect_equal(stream$get_next()$length, 3L)
+  expect_null(stream$get_next())
   expect_true(dbHasCompleted(res))
 
   chunk <- dbFetchArrowChunk(res)
@@ -241,7 +243,8 @@ test_that("dbFetchArrow() returns an empty stream after the result is consumed",
   res <- dbSendQueryArrow(con, "SELECT 1 AS a")
   withr::defer(dbClearResult(res))
 
-  dbFetchArrow(res)
+  stream <- dbFetchArrow(res)
+  nanoarrow::nanoarrow_pointer_release(stream)
   again <- dbFetchArrow(res)
   expect_s3_class(again, "nanoarrow_array_stream")
   expect_equal(length(nanoarrow::collect_array_stream(again)), 0L)
@@ -363,16 +366,19 @@ test_that("a stream read to the end still ends after another statement (#2772)",
   expect_equal(dbFetchArrowChunk(res)$length, 0L)
 })
 
-test_that("a stream can be read after its connection is gone", {
+test_that("a stream closes with its connection", {
   con <- dbConnect(duckdb())
   # Under lossless conversion, BOOLEAN is an extension type, and its schema reads the client context.
   dbExecute(con, "SET arrow_lossless_conversion = true")
   stream <- dbGetQueryArrow(con, "SELECT true AS b")
-  dbDisconnect(con, shutdown = TRUE)
+  # dbGetQueryArrow() has cleared its result, and the stream counts on its own.
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
-  expect_equal(stream$get_next()$length, 1L)
-  expect_null(stream$get_next())
+  expect_error(
+    stream$get_next(),
+    "connection this result was sent on has been closed"
+  )
 
   # A materialized result, from a multi-row bind, handed over after one chunk.
   con <- dbConnect(duckdb())
@@ -382,56 +388,71 @@ test_that("a stream can be read after its connection is gone", {
   expect_equal(dbFetchArrowChunk(res, chunk_size = 1)$length, 1L)
   stream <- dbFetchArrow(res)
   dbClearResult(res)
-  dbDisconnect(con, shutdown = TRUE)
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
-  expect_equal(nrow(as.data.frame(stream)), 2L)
+  expect_error(
+    as.data.frame(stream),
+    "connection this result was sent on has been closed"
+  )
 })
 
-test_that("a result can be fetched after its connection is gone", {
+test_that("a result closes with its connection", {
   con <- dbConnect(duckdb())
   res <- dbSendQueryArrow(con, "SELECT i FROM range(3) t(i)")
-  dbDisconnect(con)
+  expect_warning(dbDisconnect(con), "1 result was still open")
   invisible(gc())
 
-  expect_equal(dbFetchArrowChunk(res)$length, 3L)
-  expect_equal(dbFetchArrowChunk(res)$length, 0L)
-  dbClearResult(res)
+  expect_false(dbIsValid(res))
+  expect_error(
+    dbFetchArrowChunk(res),
+    "connection this result was sent on has been closed"
+  )
+  expect_error(
+    dbFetchArrow(res),
+    "connection this result was sent on has been closed"
+  )
+  expect_silent(dbClearResult(res))
 
+  # A stream handed over before the disconnect is closed with it.
   con <- dbConnect(duckdb())
   res <- dbSendQueryArrow(con, "SELECT i FROM range(3) t(i)")
-  dbDisconnect(con)
-  invisible(gc())
-
   stream <- dbFetchArrow(res)
-  dbClearResult(res)
-  expect_equal(nrow(as.data.frame(stream)), 3L)
+  # The stream counts on its own, beside its result.
+  expect_warning(dbDisconnect(con), "2 results were still open")
+  invisible(gc())
+
+  expect_error(
+    as.data.frame(stream),
+    "connection this result was sent on has been closed"
+  )
+  expect_silent(dbClearResult(res))
 })
 
-test_that("a result reads its schema after its connection is gone, under lossless conversion", {
+test_that("a result closed with its connection refuses its schema, under lossless conversion", {
   skip_if_not_installed("callr")
 
   # Under lossless conversion, BOOLEAN is an extension type, and the schema
   # reads the client context. Reading one that is gone crashed or wedged the
   # session; the subprocess and its timeout turn that into a failure here.
   pkg <- get_package_name()
-  rows <- callr::r(
+  message <- callr::r(
     function(pkg) {
       con <- DBI::dbConnect(asNamespace(pkg)$duckdb())
       DBI::dbExecute(con, "SET arrow_lossless_conversion = true")
       res <- DBI::dbSendQueryArrow(con, "SELECT true AS b")
-      DBI::dbDisconnect(con)
+      suppressWarnings(DBI::dbDisconnect(con))
       invisible(gc())
 
-      chunk <- DBI::dbFetchArrowChunk(res)
+      out <- tryCatch(DBI::dbFetchArrowChunk(res), error = conditionMessage)
       DBI::dbClearResult(res)
-      chunk$length
+      out
     },
     list(pkg = pkg),
     timeout = 30
   )
 
-  expect_equal(rows, 1L)
+  expect_match(message, "connection this result was sent on has been closed")
 })
 
 test_that("an Arrow result carries types R cannot hold", {
@@ -443,6 +464,7 @@ test_that("an Arrow result carries types R cannot hold", {
        union_value(num := 2)::UNION(num INTEGER, str VARCHAR) AS u"
   )
   schema <- nanoarrow::infer_nanoarrow_schema(res)
+  nanoarrow::nanoarrow_pointer_release(res)
 
   expect_equal(schema$children$t$format, "ttn")
   expect_equal(substr(schema$children$u$format, 1, 2), "+u")

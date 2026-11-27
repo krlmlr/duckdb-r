@@ -9,9 +9,9 @@ rethrow_rapi_execute_arrow <- function(qry_res, chunk_size, call = parent.frame(
   )
 }
 
-rethrow_rapi_fetch_arrow_stream_into <- function(qry_res, stream_xptr, chunk_size, call = parent.frame(2)) {
+rethrow_rapi_fetch_arrow_stream_into <- function(qry_res, stream_xptr, chunk_size, conn_ref, call = parent.frame(2)) {
   rlang::try_fetch(
-    rapi_fetch_arrow_stream_into(qry_res, stream_xptr, chunk_size),
+    rapi_fetch_arrow_stream_into(qry_res, stream_xptr, chunk_size, conn_ref),
     error = function(e) {
       rethrow_error_from_rapi(e, call)
     }
@@ -54,9 +54,9 @@ rethrow_rapi_release_arrow_result <- function(qry_res, call = parent.frame(2)) {
   )
 }
 
-rethrow_rapi_record_batch <- function(qry_res, chunk_size, call = parent.frame(2)) {
+rethrow_rapi_record_batch <- function(qry_res, chunk_size, conn_ref, call = parent.frame(2)) {
   rlang::try_fetch(
-    rapi_record_batch(qry_res, chunk_size),
+    rapi_record_batch(qry_res, chunk_size, conn_ref),
     error = function(e) {
       rethrow_error_from_rapi(e, call)
     }

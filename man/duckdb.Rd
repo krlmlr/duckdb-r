@@ -184,6 +184,8 @@ Return an \code{\link[adbcdrivermanager:adbc_driver]{adbcdrivermanager::adbc_dri
 \code{dbDisconnect()} closes a DuckDB database connection.
 The associated DuckDB database instance is shut down automatically,
 it is no longer necessary to set \code{shutdown = TRUE} or to call \code{duckdb_shutdown()}.
+Results still open on the connection are closed with it, with a warning:
+clear them with \code{\link[DBI:dbClearResult]{dbClearResult()}} first.
 }
 \details{
 The behavior of \code{with = "force"} at DST transitions depends on
@@ -226,12 +228,12 @@ To apply different values to a file-based database --
 for example to reopen it read-only, or to send extensions and secrets elsewhere --
 first release the instance with \code{\link[=duckdb_shutdown]{duckdb_shutdown()}}, which also drops it from the cache,
 then create it again.
-\code{\link[DBI:dbDisconnect]{dbDisconnect()}} closes one connection, and its \code{shutdown} argument is unused.
+\code{\link[DBI:dbDisconnect]{dbDisconnect()}} closes one connection, and its \code{shutdown} argument is unused;
+it also closes the results still open on that connection, with a warning,
+so clear them with \code{\link[DBI:dbClearResult]{dbClearResult()}} first.
 Connections keep the instance alive,
 so it is released once the last connection to it closes,
-unless a result not yet cleared with \code{\link[DBI:dbClearResult]{dbClearResult()}} or an Arrow stream not yet released still uses it.
-The cache does not find an instance that only such a result or stream keeps open,
-so \code{duckdb()} with the same \code{dbdir} then opens a second instance of the file in the same session.
+together with the results and Arrow streams that connection closes.
 A driver that was never connected to releases its instance
 when the driver is garbage-collected or the session ends.
 \code{\link[DBI:dbIsValid]{dbIsValid()}} reports whether a driver still holds an instance.
