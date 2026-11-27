@@ -87,6 +87,7 @@ Every commit of the landing stands on one `<B>` commit, so `<B>` must not move u
 The freeze lasts as long as CI takes over the batch, which is what keeps the batches small.
 A ruleset with no bypass list stops every update, pull requests and admins included.
 A human runs these, and reads each output before the next.
+These freeze `<B>` in `duckdb/duckdb-r` only; `scripts/series-freeze.sh <B>` freezes it there and in the fork alike, provisionally ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 Inspect: the rulesets on `<B>`, and the commit it freezes at.
 
@@ -322,6 +323,10 @@ A red is repaired as stage 2 repairs one ([`series-loop`](/.claude/skills/series
 
 ## 6. Fast-forward `<B>`
 
+Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges,
+`scripts/series-unfreeze.sh <B>` and `scripts/series-land-push.sh <S>` supersede this step's lift, push, restore and tag commands
+and the note on an existing tag, which stay until then ([`operations/fork/`](/handbook/operations/fork/README.md)).
+
 When `--status` prints `READY`, every commit has passed and `<B>` is still the commit the landing stands on.
 Push the SHA that line names, not whatever the branch holds by then,
 so a repair pushed in between cannot reach `<B>` unjudged.
@@ -378,6 +383,10 @@ A `v<version>.9900` already on the remote stops the chain at the push and leaves
 delete the local tag with `git tag -d`, and read the remote one before rerunning.
 
 ## 7. After the landing
+
+Once [krlmlr/duckdb-r#263](https://github.com/krlmlr/duckdb-r/pull/263) merges,
+the freeze is not restored after the push and there is nothing to delete,
+which supersedes this step's command that deletes the freeze ([`operations/fork/`](/handbook/operations/fork/README.md)).
 
 Delete the freeze, so that `<B>` takes pull requests again:
 

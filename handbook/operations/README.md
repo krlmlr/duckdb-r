@@ -10,6 +10,7 @@ are a human's call, recorded where they were taken.
 
 * [`vendoring/`](vendoring/) — how upstream becomes `src/duckdb/`, one commit at a time
 * [`triage/`](triage/) — issue intake: verdicts, and where the knowledge routes
+* [`fork/`](fork/): working from the fork, what lives where, refs written there first, its tags and its freeze
 * [`review/`](review/): which branch a pull request targets, pull-request flow and stewardship
 * [`ci/`](ci/) — what runs on every push: workflows, per-commit builds, the matrix
 * [`releases/`](releases/) — from a green branch to CRAN: process, policy, versioning
