@@ -318,7 +318,7 @@ release.
 - **V1 — Prefix lock.** `major.minor` equals `L` on every branch of the series.
   *Exception:* the preview line carries the prefix of the line it previews,
   `main` and `main-dev` both `2.0.99.…` while upstream `main` heads for 2.1
-  (from the first landing of `main`'s own series, whose bump is `2.0.99.9000`; `main` is `2.0.0.9000` until then),
+  (`main` is `2.0.0.9000` until a bump staged in the fork gives it that prefix),
   until that line's release branch is cut and takes `2.1.0`.
 - **V2 — Patch ordering.** `stable` and `lts` share the released patch `Z`;
   `dev` is at or ahead of `Z`.

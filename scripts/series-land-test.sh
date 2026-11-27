@@ -1,6 +1,7 @@
 #!/bin/bash
-# Check the landing of a series on `main`, offline, against a synthetic fork,
-# canonical repository and clone built here: no network, no fixtures on disk.
+# Check the landing of a series on its branch, offline, against a synthetic
+# fork, canonical repository and clone built here: no network, no fixtures on
+# disk.
 #
 # The claim scripts/series-land.sh makes is that `<L>-land-dev` is `main` plus
 # the series' vendor commits and a version bump, and nothing else, and that its tip is the package

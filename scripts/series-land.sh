@@ -6,11 +6,11 @@
 # **The branch landed on is the one the series releases from**, a release
 # branch such as `v2.0-cyanoptera` taking its own line's series. `main` takes
 # its changes through the maintainer's fork-update routine instead, so the
-# skill lands nothing there. Which branch is read from `releases_from` in `main`'s
-# scripts/series.yaml, `main` where the series has no row, so nothing typed can
-# disagree with what the loop ports from. Wherever `main` appears below, it is
-# that branch, read from --canonical. Only a serving series lands: a `-fwd`
-# series is cut over first and lands under its serving name.
+# skill lands nothing there. Which branch is read from `releases_from` in
+# `main`'s scripts/series.yaml, `main` where the series has no row, so nothing
+# typed can disagree with what the loop ports from. Wherever `main` appears
+# below, it is that branch, read from --canonical. Only a serving series
+# lands: a `-fwd` series is cut over first and lands under its serving name.
 #
 # A batch of a series moves onto its branch once CI has judged it. The series already
 # holds the history `main` needs (one commit per upstream commit, each judged

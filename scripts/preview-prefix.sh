@@ -33,7 +33,7 @@
 #
 # **A fourth component above `.9000` is stamped already.** Once `main` itself
 # carries the prefix of the line it previews, `2.0.99` while upstream `main`
-# heads for 2.1, its fourth component counts landings and the bumps between them
+# heads for 2.1, its fourth component rises only by a bump staged in the fork
 # (handbook/operations/releases/versioning/README.md), and a seed regenerated on
 # it takes whatever that counter has reached, `2.0.99.9004.0`. That is the
 # previewed line's prefix, and lowering it to `.9000` is what the gate below

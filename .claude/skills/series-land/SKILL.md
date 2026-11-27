@@ -25,7 +25,10 @@ no flavor, no seed, and no port, because everything a port carries is the branch
 
 `main` takes no landing from this skill.
 Its changes, the engine included, reach `duckdb/duckdb-r` through the fork like any other package the maintainer develops in a fork:
-staged in the fork's `main` and landed by the maintainer's fork-update routine.
+staged in the fork's `main`, where the maintainer's fork-update routine prepares the landing and the maintainer pushes it.
+How the series' vendor commits reach the fork's `main` is not settled yet
+([`process/`](/handbook/operations/releases/process/README.md)),
+and neither is whether `series-land.sh` keeps accepting `main` as `<B>`, which its guards below still do.
 
 The landings come often and stay small, so a rewind is rare:
 the series is forwarded onto a branch that already vendors what the previous landing brought
@@ -167,7 +170,8 @@ scripts/series-land.sh "$S" --remote origin --canonical upstream --push   # and 
 ```
 
 It prints `<B>`'s tip as the commit it builds on.
-The script reads `main` for a series `scripts/series.yaml` does not declare, which this skill does not land on, so land only a declared one.
+The script reads `main` for a series `scripts/series.yaml` does not declare,
+and whether a landing on `main` stays possible is open, so land only a declared one.
 
 **Tests that pin what the line must keep go underneath, not into the series afterwards.**
 A pull request of tests written on `<B>`'s engine, one commit on the frozen `<B>`,
@@ -591,7 +595,7 @@ and `main` moves on to preview the next line; CRAN moves to the new line with it
    so the base [`operations/review/`](/handbook/operations/review/README.md) names as today's moves with it,
    and so do its copies in `AGENTS.md` and `.claude/rules/pull-request-base.md`.
 3. **Land `<N>`'s series onto `<N>`**, steps 1 to 7 with `<B>` = `<N>`, ending on the bump to its first release, or short of it to `<N>`'s fourth component one up.
-   Where `main` had landed past the fork point, the first pick vendors an older engine than the branch, and the build takes its strand whole.
+   Where `main` vendored past the fork point, the first pick vendors an older engine than the branch, and the build takes its strand whole.
 4. **`main` previews the next line from here**:
    its next version bump takes the new prefix, `2.1.99.9000` once 2.1 is out
    ([`operations/releases/versioning/`](/handbook/operations/releases/versioning/README.md)).

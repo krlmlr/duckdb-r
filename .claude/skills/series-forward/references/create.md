@@ -176,7 +176,9 @@ and until one lands the whole buffer replays
 
 **A preview line's buffer opens on a rewind where its base vendors a released engine, and the script rebuilds it.**
 `main`'s own series no longer meets one in the ordinary course:
-`main` takes upstream `main`'s engine from its series, through the fork and the maintainer's fork-update routine,
+`main` takes upstream `main`'s engine from its series, through the fork and the maintainer's fork-update routine
+(how the series' vendor commits reach the fork's `main` is not settled yet,
+[`process/`](/handbook/operations/releases/process/README.md)),
 so a seed on it vendors an engine the buffer has, and the replay starts above it, as for a release line.
 A series seeded on a released engine still does,
 so its first vendor commit walks back to where the lines fork:

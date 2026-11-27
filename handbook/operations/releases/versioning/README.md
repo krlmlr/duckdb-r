@@ -106,7 +106,7 @@ The release takes `v<version>` itself when it is published, in the same shape,
 by the CRAN submission ([`cran/`](/handbook/operations/releases/cran/README.md))
 or by hand on a line that does not ship to CRAN ([`process/`](/handbook/operations/releases/process/README.md), step 5),
 so the landing's tag and the release's never clash.
-A development version never takes `.9900` as its fourth component, which counts landings up from `.9000`,
+A development version never takes `.9900` as its fourth component, which rises from `.9000` only by bumps staged in the fork,
 so its `v<version>` tag never clashes with a landing's `v<version>.9900` either.
 
 **A landing's bump writes the section of `NEWS.md` for its version**, as the maintainer's release process does

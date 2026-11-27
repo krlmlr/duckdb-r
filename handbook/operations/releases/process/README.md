@@ -63,7 +63,9 @@ Between releases the release branch may take its line's batches by landings too,
 CUT's is the landing that ends on the released version.
 `main` stands outside this machine and waits for no release:
 its changes, upstream `main`'s engine among them, are staged in the fork's `main`,
-and the maintainer's fork-update routine lands them on `duckdb/duckdb-r`'s `main`.
+where the maintainer's fork-update routine prepares their landing on `duckdb/duckdb-r`'s `main` and the maintainer pushes it.
+The step that brings the series' vendor commits onto the fork's `main` is not settled yet:
+it waits on the maintainer's decision.
 
 ## State diagram
 
