@@ -215,7 +215,7 @@ pull_heads=$(git ls-remote "$remote" 'refs/pull/*/head') || {
   pulls_why="the pull request heads of $remote could not be listed (above), so no stack reads as a pin"
 }
 
-# `main` for the review is the canonical repository's; the fork's mirror may lag by a cycle
+# `main` for the review is the canonical repository's; nothing keeps the fork's copy level with it
 # (handbook/branches/mirrors/README.md). The two greens there are what the pins, the move and the cleanup read.
 # The repository is read once, and only what that read listed is fetched:
 # a tracking ref an earlier fetch left is dropped where the read did not list it,

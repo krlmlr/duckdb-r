@@ -321,6 +321,8 @@ else
     local seed c
     seed=$(series_seed_of "$1")
     if [ -z "$seed" ]; then
+      # The fork's `main`, which nothing keeps level with the canonical one: it may be stale or ahead
+      # (handbook/branches/mirrors/README.md).
       git fetch -q "$remote" "+refs/heads/main:refs/remotes/$remote/main" || return 0
       git merge-base "$1" "refs/remotes/$remote/main" || true
       return 0

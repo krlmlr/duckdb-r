@@ -84,6 +84,8 @@ case "$what" in
     # for a branch that carries no seed.
     from=$(git rev-list -n 1 --grep="$seed_tip_re" "$build")
     if [ -z "$from" ]; then
+      # The fork's `main`, which nothing keeps level with the canonical one: it
+      # may be stale or ahead (handbook/branches/mirrors/README.md).
       from=$(git merge-base "$remote/main" "$build" 2>/dev/null || true)
       [ -n "$from" ] || {
         echo "Error: $build carries no seed commit and shares no history with $remote/main" >&2

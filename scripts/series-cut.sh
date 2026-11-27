@@ -246,8 +246,7 @@ Next, in order -- the cut is not complete until the rename is in:
   #        Each strand grafts its own cut; everything below is $S's now.
 
   # 4. Declare the flavor $F -- one entry in scripts/series.yaml -- then
-  #    scripts/series-table.R and a README render write both tables from it,
-  #    and scripts/pull-config.sh --check holds the mirror rules against it.
+  #    scripts/series-table.R and a README render write both tables from it.
 NEXT
 fi
 

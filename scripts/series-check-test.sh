@@ -29,6 +29,16 @@
 #      lines chain oldest to newest, and a branch it cannot read, without a
 #      canonical remote or with no merge base, is reported as missing data.
 #
+# And one about a forward:
+#
+#  10. A forward reads ready to cut over only on its own vendor commits,
+#      counted above the canonical `main`: a landing the fork's copy of `main`
+#      lacks is no coverage, and the forward's own vendor commit is.
+#  11. A forward of a series releasing from a release branch is counted above
+#      that branch's canonical copy, so a landing there is no coverage either;
+#      the fork's copy as the bound is warned about, and no bound at all is
+#      reported as missing data.
+#
 # Usage:
 #   scripts/series-check-test.sh
 #
@@ -341,6 +351,81 @@ git checkout -q -f main
 out=$(fwd)
 has "a branch with no merge base is missing data" "$out" "could not read rel2 beside main, or their merge base"
 hasnt "rather than owing all of it" "$out" "On a history of its own"
+
+echo "=== 10. a forward is ready only on its own vendor commits"
+# The canonical `main` takes a landing that vendors bbbb222, and the fork's copy
+# of `main` stays behind it. The series' green vendors bbbb222 on its own line;
+# the forward is seeded on the landing and vendors nothing of its own yet.
+git fetch -q canon main
+Z=$SCRATCH/z
+git worktree add -q --detach "$Z" canon/main
+identity "$Z"
+echo 'engine bbbb222' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+LAND=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" commit -q --allow-empty -m 'chore: Add fifth version component'
+FSEED=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" checkout -q --detach "$SEED"
+echo 'engine bbbb222' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+ZG=$(git -C "$Z" rev-parse HEAD)
+git push -q canon "$LAND:refs/heads/main"
+git push -q origin "$ZG:refs/heads/v9.9-z-green" "$ZG:refs/heads/v9.9-z-dev" \
+  "$ZG:refs/heads/v9.9-z-build" "$ZG:refs/heads/v9.9-z-build-base" \
+  "$FSEED:refs/heads/v9.9-z-fwd-green" "$FSEED:refs/heads/v9.9-z-fwd-dev" \
+  "$FSEED:refs/heads/v9.9-z-fwd-build" "$FSEED:refs/heads/v9.9-z-fwd-build-base"
+ready() { UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z-fwd --canonical canon 2>&1; }
+out=$(ready)
+hasnt "a landing the fork's copy of main lacks is no coverage" "$out" "CUTOVER  v9.9-z-fwd"
+git -C "$Z" checkout -q --detach "$FSEED"
+echo 'engine bbbb222, forwarded' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@bbbb222'
+git -C "$Z" push -q -f origin "HEAD:refs/heads/v9.9-z-fwd-green" "HEAD:refs/heads/v9.9-z-fwd-dev"
+out=$(ready)
+has "the forward's own vendor commit is" "$out" "CUTOVER  v9.9-z-fwd covers v9.9-z's green"
+
+echo "=== 11. a release-branch forward is counted above that branch"
+# The declaration names `v9.9-r` releasing from `rbr`. The canonical `rbr` takes
+# a landing that vendors cccc333, which `main` never sees; the fork's copy of
+# `rbr` stays behind it. The series' green vendors cccc333 on its own line, and
+# the forward is seeded on the landing.
+git -C "$Z" checkout -q --detach canon/main
+printf '  - flavor: duckdb.r.dev\n    kind: dev\n    series: v9.9-r\n    releases_from: rbr\n' >> "$Z/scripts/series.yaml"
+git -C "$Z" commit -qam 'chore: Declare v9.9-r'
+git -C "$Z" push -q canon HEAD:refs/heads/main
+RB0=$(git -C "$Z" rev-parse HEAD)
+echo 'engine cccc333' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@cccc333'
+git -C "$Z" push -q canon HEAD:refs/heads/rbr
+git -C "$Z" commit -q --allow-empty -m 'chore: Add fifth version component'
+RSEED=$(git -C "$Z" rev-parse HEAD)
+git -C "$Z" checkout -q --detach "$SEED"
+echo 'engine cccc333' > "$Z/src/duckdb/engine.cpp"
+git -C "$Z" commit -qam 'vendor: Update vendored sources to duckdb/duckdb@cccc333'
+RG=$(git -C "$Z" rev-parse HEAD)
+git push -q origin "$RB0:refs/heads/rbr" "$RG:refs/heads/v9.9-r-green" "$RG:refs/heads/v9.9-r-dev" \
+  "$RG:refs/heads/v9.9-r-build" "$RG:refs/heads/v9.9-r-build-base" \
+  "$RSEED:refs/heads/v9.9-r-fwd-green" "$RSEED:refs/heads/v9.9-r-fwd-dev" \
+  "$RSEED:refs/heads/v9.9-r-fwd-build" "$RSEED:refs/heads/v9.9-r-fwd-build-base"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical canon 2>&1)
+hasnt "a landing on the release branch is no coverage" "$out" "CUTOVER  v9.9-r-fwd"
+hasnt "and the canonical bound draws no warning" "$out" "readiness may over-count"
+
+# Without the canonical repository the fork's copies answer, the declaration
+# included, and each is said to be one.
+git push -q -f origin "$RB0:refs/heads/main"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)
+has "the fork's copy of the release branch as the bound is warned about" "$out" "v9.9-r-fwd: warning: origin/rbr is the fork's copy"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z-fwd --canonical '' 2>&1)
+has "and so is the fork's main" "$out" "v9.9-z-fwd: warning: origin/main is the fork's copy"
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-z --canonical '' 2>&1)
+hasnt "and a series that is no forward draws no warning" "$out" "is the fork's copy"
+git push -q origin :refs/heads/rbr
+git update-ref -d refs/remotes/origin/rbr
+out=$(UPSTREAM_URL=$UP scripts/series-check.sh v9.9-r-fwd --canonical '' 2>&1)
+has "no bound at all is missing data" "$out" "v9.9-r-fwd: could not read rbr, the branch v9.9-r releases from"
+hasnt "and claims no cutover" "$out" "CUTOVER  v9.9-r-fwd"
+git worktree remove -f "$Z"
 
 echo
 echo "$pass passed, $fail failed"
