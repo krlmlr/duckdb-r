@@ -11,16 +11,16 @@ how they were packed into shards is
 One run is three jobs:
 
 ```
-plan  (1 job, ~30 s)
+plan  (1 job, ~30 s; the each-plan action)
   ├─ git log --first-parent --after=$SINCE          → candidate commits
   ├─ scripts/rcc-decided.sh (one tree-only fetch)   → verdicts already on `rcc2`
   ├─ scripts/each-cost.py                           → objects each commit invalidates
-  ├─ scripts/each-partition.py
+  ├─ each-partition.py
   │    ├─ greedy contiguous fill under the leg deadline → fewest shards
   │    └─ replan at shorter deadlines while affordable  → shortest wall clock
   └─ plan.json (artifact) + matrix (job output)
 
-build (one job per shard, throttled by max-parallel)
+build (one job per shard, throttled by max-parallel; the each-shard action)
   ├─ R + dependencies + ccache + formatters          ← paid once per shard
   └─ for sha in shard (oldest → newest):
        skip if already decided (a re-run resumes, it does not restart)
@@ -33,7 +33,7 @@ build (one job per shard, throttled by max-parallel)
          a commit cut short after others among them
 
 follow-up  (1 job, after the legs, unless the run was cancelled)
-  └─ scripts/each-follow-up.sh
+  └─ the each-follow-up action
        planned commits still without a record on `rcc2`, some decided, branch unmoved?
        → dispatch `each-rcc` on the branch once more    ← waits for this run to end
 ```
@@ -41,16 +41,19 @@ follow-up  (1 job, after the legs, unless the run was cancelled)
 The files:
 
 * [`.github/workflows/each.yaml`](/.github/workflows/each.yaml) —
-  plan → build → follow-up.
-* [`scripts/each-plan.sh`](/scripts/each-plan.sh) —
+  plan → build → follow-up,
+  through the `each-plan`, `each-shard` and `each-follow-up` actions of
+  [`cynkra/cynkratemplate`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/README.md),
+  which hold the four scripts below and call this package's own from `scripts/`.
+* [`each-plan.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-plan.sh) —
   enumerate, read verdicts, weigh, partition.
 * [`scripts/each-cost.py`](/scripts/each-cost.py) —
   unity-object reach; the cost model's only input.
-* [`scripts/each-partition.py`](/scripts/each-partition.py) —
+* [`each-partition.py`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-partition.py) —
   the cost model, the greedy fill, and the rebalance pass.
-* [`scripts/each-shard.sh`](/scripts/each-shard.sh) —
+* [`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh) —
   one leg: many commits, one workspace.
-* [`scripts/each-follow-up.sh`](/scripts/each-follow-up.sh):
+* [`each-follow-up.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-follow-up/each-follow-up.sh):
   whether the run dispatches a follow-up, and the dispatch.
 * [`scripts/rcc-one.sh`](/scripts/rcc-one.sh) —
   the per-commit gate, extracted from `rcc-smoke`.
@@ -169,7 +172,7 @@ So the run's last job dispatches `each-rcc` once more on the same branch,
 with the run's inputs except `force`,
 and the follow-up plans whatever the store still lacks when it starts.
 It waits as pending in the branch's concurrency group until the run that dispatched it has completed.
-The job runs, and [`each-follow-up.sh`](/scripts/each-follow-up.sh) dispatches, only when all of these hold:
+The job runs, and [`each-follow-up.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-follow-up/each-follow-up.sh) dispatches, only when all of these hold:
 
 * **The run was not cancelled**, which the job's `if:`, `!cancelled()`, checks.
   Nothing in the series tooling cancels a run, a landing included,
