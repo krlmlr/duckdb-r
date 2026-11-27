@@ -32,7 +32,7 @@ Both runs planned with `FULL` 40, `FLOOR` 6, `OBJECT_SECONDS` 9.7 and `SETUP` 5.
 * [`jobs.tsv`](jobs.tsv) is the start and end of every leg of run 44932694459, from the Actions API.
 * [`fit.R`](fit.R) fits the model, compares it with the constants before,
   and replays run 44932694459's commits through the planner and the deadline logic of
-  [`each-shard.sh`](/scripts/each-shard.sh) with each set of constants;
+  [`each-shard.sh`](https://github.com/krlmlr/duckdb-r/blob/3f2cf348ffcc3ad18d3e177393a07a8d910cb384/scripts/each-shard.sh) with each set of constants;
   [`fit.md`](fit.md) is its reprex.
 
 ## Findings
@@ -67,6 +67,8 @@ That replay reuses the data the constants were fitted to, so it is the best case
 
 ## Replicating
 
+The planner scripts now live in cynkra/cynkratemplate's `each-*` actions,
+so `collect.sh` and `fit.R` run against a checkout of 3f2cf348ff, the last commit that has `scripts/each-partition.py` and `scripts/each-shard.sh`.
 From a clone whose `origin` is krlmlr/duckdb-r,
 `experiments/2026-11-22-each-timing-refit/collect.sh` rewrites `data.tsv` in a few seconds;
 a later run of it picks up the records the follow-up has published since.
