@@ -53,7 +53,7 @@ flowchart LR
 ```
 
 * **`<L>-land-dev`**, in the fork: `<B>` plus the vendor commits and, last, the version bump, and nothing else.
-  CI judges it like any `-dev` ([`scripts/each-plan.sh`](/scripts/each-plan.sh)).
+  CI judges it like any `-dev` ([`each-plan.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-plan.sh)).
 * **`<L>-land-green`**, in the fork: where CI's judgement starts.
   It is pushed at the frozen `<B>` and advanced over the commits that passed;
   the landing is ready when it equals `<L>-land-dev`, the bump included.

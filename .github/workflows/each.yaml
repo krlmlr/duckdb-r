@@ -26,6 +26,10 @@
 # of every stage that failed into its job summary, so the run summary says what
 # broke without opening the log.
 #
+# The planner, the leg and the follow-up are cynkra/cynkratemplate's each-plan, each-shard and each-follow-up
+# actions; this package provides the gates and the store scripts under scripts/, and its cost model as
+# repository variables (the plan job's first step names any that is missing).
+#
 # See handbook/operations/ci/per-commit/README.md for the design, the GitHub Actions limits it works within,
 # and why `workflow_call` is not the mechanism that gets us there.
 
@@ -61,7 +65,7 @@ on:
         type: boolean
         default: false
       follow-up-of:
-        description: "The run this one follows up, set by that run (scripts/each-follow-up.sh)"
+        description: "The run this one follows up, set by that run (the each-follow-up action)"
         type: string
         default: ""
       follow-up-head:
@@ -115,7 +119,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EACH_SINCE: ${{ inputs.since || vars.EACH_RCC_SINCE || '2026-01-01' }}
+  EACH_SINCE: ${{ inputs.since || vars.EACH_RCC_SINCE }}
   EACH_SHARD_BUDGET_MINUTES: ${{ inputs.shard-budget-minutes || '300' }}
   EACH_MAX_PARALLEL: ${{ inputs.max-parallel || vars.EACH_RCC_MAX_PARALLEL || '20' }}
   EACH_MAX_COMMITS: ${{ inputs.max-commits || '0' }}
@@ -125,6 +129,9 @@ jobs:
   plan:
     if: github.repository == 'krlmlr/duckdb-r'
     runs-on: ubuntu-26.04
+
+    # A full clone, the cost map and the partition.
+    timeout-minutes: 15
 
     name: "Plan per-commit rcc builds"
 
@@ -143,37 +150,56 @@ jobs:
     # End custom: services
 
     steps:
+      # The cost model and the scan start are this package's own, kept as repository variables;
+      # without them the planner would fail later, or plan with another package's numbers.
+      - name: Check the repository variables
+        env:
+          EACH_RCC_SINCE: ${{ vars.EACH_RCC_SINCE }}
+          EACH_RCC_SETUP_MINUTES: ${{ vars.EACH_RCC_SETUP_MINUTES }}
+          EACH_RCC_FULL_BUILD_MINUTES: ${{ vars.EACH_RCC_FULL_BUILD_MINUTES }}
+          EACH_RCC_FLOOR_MINUTES: ${{ vars.EACH_RCC_FLOOR_MINUTES }}
+          EACH_RCC_OBJECT_SECONDS: ${{ vars.EACH_RCC_OBJECT_SECONDS }}
+          # A dispatch or call that passes `since` needs no EACH_RCC_SINCE.
+          SINCE_INPUT: ${{ inputs.since }}
+        run: |
+          missing=()
+          required=(EACH_RCC_SETUP_MINUTES EACH_RCC_FULL_BUILD_MINUTES EACH_RCC_FLOOR_MINUTES EACH_RCC_OBJECT_SECONDS)
+          if [ -z "${SINCE_INPUT}" ]; then
+            required=(EACH_RCC_SINCE "${required[@]}")
+          fi
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Repository variables not set: ${missing[*]}. Set them under Settings > Secrets and variables > Actions > Variables (see handbook/operations/ci/per-commit/planning/README.md)."
+            exit 1
+          fi
+        shell: bash
+
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || github.ref }}
           fetch-depth: 0
 
+      # Uploads the plan as the `each-plan` artifact the legs and the follow-up download.
       - id: plan
-        name: Plan shards
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SINCE: ${{ env.EACH_SINCE }}
-          SHARD_BUDGET_MINUTES: ${{ env.EACH_SHARD_BUDGET_MINUTES }}
-          MAX_PARALLEL: ${{ env.EACH_MAX_PARALLEL }}
-          MAX_COMMITS: ${{ env.EACH_MAX_COMMITS }}
-          SPLIT_FACTOR: ${{ env.EACH_SPLIT_FACTOR }}
-          FORCE: ${{ inputs.force && '1' || '' }}
-          FOLLOW_UP_OF: ${{ inputs.follow-up-of }}
-          FOLLOW_UP_HEAD: ${{ inputs.follow-up-head }}
-          OUT: ${{ runner.temp }}/plan.json
-        run: scripts/each-plan.sh
-        shell: bash
-
-      # `overwrite` because an artifact name has to be unique within a *run*, not
-      # within an attempt: without it, "Re-run all jobs" fails right here, on the
-      # `each-plan` this run's first attempt already uploaded.
-      - uses: actions/upload-artifact@v7
-        if: steps.plan.outputs.shards != '0'
+        uses: cynkra/cynkratemplate/.github/actions/each-plan@main
         with:
-          name: each-plan
-          path: ${{ runner.temp }}/plan.json
-          retention-days: 7
-          overwrite: true
+          since: ${{ env.EACH_SINCE }}
+          shard-budget-minutes: ${{ env.EACH_SHARD_BUDGET_MINUTES }}
+          max-parallel: ${{ env.EACH_MAX_PARALLEL }}
+          max-commits: ${{ env.EACH_MAX_COMMITS }}
+          split-factor: ${{ env.EACH_SPLIT_FACTOR }}
+          force: ${{ inputs.force || false }}
+          follow-up-of: ${{ inputs.follow-up-of }}
+          follow-up-head: ${{ inputs.follow-up-head }}
+          # The cost model, fitted to this package's own legs (handbook/operations/ci/per-commit/planning/README.md).
+          setup-minutes: ${{ vars.EACH_RCC_SETUP_MINUTES }}
+          full-build-minutes: ${{ vars.EACH_RCC_FULL_BUILD_MINUTES }}
+          floor-minutes: ${{ vars.EACH_RCC_FLOOR_MINUTES }}
+          object-seconds: ${{ vars.EACH_RCC_OBJECT_SECONDS }}
 
   build:
     needs:
@@ -213,11 +239,6 @@ jobs:
           ref: ${{ inputs.branch || github.ref }}
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: each-plan
-          path: ${{ runner.temp }}/plan
-
       - uses: cynkra/cynkratemplate/.github/actions/git-identity@main
 
       - uses: ./.github/workflows/custom/before-install
@@ -232,69 +253,32 @@ jobs:
 
       # Deliberately not custom/after-install: its ccache-action caps the cache
       # at 200 MB and its duckdb.tar archive is keyed on the whole vendored tree,
-      # so both are per-commit constructs a multi-commit job cannot use. This job
-      # keeps one large local cache instead.
-      - name: Point ccache outside the workspace and size it for a whole shard
-        run: |
-          ## -- Point ccache outside the workspace and size it for a whole shard --
-          # scripts/each-shard.sh wipes the workspace between commits, and
-          # hendrikmuhs/ccache-action has historically kept the cache inside it.
-          # This is the cache that carries reuse from one commit to the next, so
-          # losing it would turn every commit into a cold build.
-          export CCACHE_DIR="${RUNNER_TEMP}/ccache"
-          mkdir -p "${CCACHE_DIR}"
-          echo "CCACHE_DIR=${CCACHE_DIR}" | tee -a "${GITHUB_ENV}"
-          ccache --set-config=max_size=8G
-          ccache --zero-stats
-          ccache --show-config | grep -E 'cache_dir|max_size'
-        shell: bash
+      # so both are per-commit constructs a multi-commit job cannot use. The
+      # each-shard action keeps one large local cache outside the workspace
+      # instead, with ccache's default hash_dir.
 
       # Run for its tool installation only (air, clang-format). The formatting it
-      # performs on the tip checkout is discarded: scripts/each-shard.sh resets
+      # performs on the tip checkout is discarded: the each-shard action resets
       # the workspace before every commit.
       - uses: cynkra/cynkratemplate/.github/actions/style@main
 
-      - name: Build the shard
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHARD: ${{ matrix.shard }}
-          PLAN: ${{ runner.temp }}/plan/plan.json
-          LOG_DIR: ${{ runner.temp }}/each-logs
-          DEADLINE_MINUTES: ${{ env.EACH_SHARD_BUDGET_MINUTES }}
+      # Downloads the plan, points ccache outside the workspace, walks the shard,
+      # and uploads `each-logs-<shard>-<attempt>`, also when the walk fails.
+      # That artifact is what a firing reads. The per-commit publish to `rcc2` is
+      # the copy, and the artifact is the source: one record and one log per
+      # commit the leg decided, in the same bytes (.claude/skills/series-loop/SKILL.md
+      # stage 2). It is named per *attempt*: a re-run of a leg resumes, so read
+      # every `each-logs-*` for a run, not just the newest. Past its 14 days the
+      # same content is inline in the leg's job log, one `::group::<sha>` section
+      # per commit.
+      - uses: cynkra/cynkratemplate/.github/actions/each-shard@main
+        with:
+          shard: ${{ matrix.shard }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          deadline-minutes: ${{ env.EACH_SHARD_BUDGET_MINUTES }}
           # Empty falls through to the script's own default; 0 turns the
           # per-failure log excerpts in the job summary off.
-          SUMMARY_TAIL: ${{ vars.EACH_RCC_SUMMARY_TAIL || '' }}
-          # Outside the workspace: scripts/each-shard.sh wipes that per commit,
-          # and these hold the cached blobless clones of the `rcc2` branch that
-          # the per-commit publish and the resume check go through.
-          RCC_DIR: ${{ runner.temp }}/rcc-publish
-          RCC_READ_DIR: ${{ runner.temp }}/rcc-read
-        run: scripts/each-shard.sh
-        shell: bash
-
-      # What a firing reads. The per-commit publish to `rcc2` is the copy, and
-      # this is the source: one record and one log per commit the leg decided,
-      # in the same bytes (.claude/skills/series-loop/SKILL.md stage 2). It used to
-      # feed a fan-in job as well, which reconciled onto the branch whatever a
-      # leg could not publish; that job is gone, because a reader that opens
-      # this artifact has already got what the fan-in would have copied.
-      #
-      # Named per *attempt*, and therefore not overwritten. A re-run of a leg
-      # resumes, so its index covers only the commits it rebuilt -- overwriting
-      # would delete the previous attempt's artifact, which is the one copy of
-      # anything that attempt decided but could not publish. Read every
-      # `each-logs-*` for a run, not just the newest.
-      #
-      # 14 days, against job logs GitHub keeps far longer: past that, the same
-      # content is inline in the leg's job log, one `::group::<sha>` section
-      # per commit.
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: each-logs-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/each-logs
-          if-no-files-found: ignore
-          retention-days: 14
+          summary-tail: ${{ vars.EACH_RCC_SUMMARY_TAIL || '' }}
 
   # A leg that reaches its deadline defers the commits it did not get to, and
   # nothing else would plan them before the next push. So the run dispatches
@@ -302,7 +286,7 @@ jobs:
   # concurrency group, `each-rcc-<ref>`, until this run completes, then plans
   # whatever is still undecided. When it dispatches, and why a chain of
   # follow-ups ends, is stated once, in "The follow-up run" of
-  # handbook/operations/ci/per-commit/legs/README.md; scripts/each-follow-up.sh
+  # handbook/operations/ci/per-commit/legs/README.md; the each-follow-up action
   # holds the mechanism.
   #
   # `!cancelled()` rather than the implicit `success()`, so that a leg that
@@ -336,19 +320,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
+          # The each-follow-up action runs the store scripts from here (`scripts-dir`).
           sparse-checkout: scripts
           filter: blob:none
 
-      - uses: actions/download-artifact@v8
+      - uses: cynkra/cynkratemplate/.github/actions/each-follow-up@main
         with:
-          name: each-plan
-          path: ${{ runner.temp }}/plan
-
-      - name: Dispatch a follow-up run if commits remain undecided
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PLAN: ${{ runner.temp }}/plan/plan.json
-          INPUTS: ${{ toJSON(inputs) }}
-          RCC_READ_DIR: ${{ runner.temp }}/rcc-read
-        run: scripts/each-follow-up.sh
-        shell: bash
+          token: ${{ github.token }}
+          inputs: ${{ toJSON(inputs) }}
+          # The file of this workflow: the dispatch target, also when it is reached through `workflow_call`.
+          workflow: each.yaml

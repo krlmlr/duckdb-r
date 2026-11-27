@@ -38,7 +38,7 @@
 #
 # The store is the *copy* of what an `each-rcc` leg wrote, not the source: the
 # leg writes the same record and log into its artifact and publishes them here
-# (scripts/each-shard.sh). A firing reads the run first and this branch only
+# (the each-shard action). A firing reads the run first and this branch only
 # when it cannot (.claude/skills/series-loop/SKILL.md stage 2), so where a verdict
 # here and one read from a run disagree, the run is right. The ref geometry
 # below -- in flight, buffered, the retry ledger, a ready cutover -- does not
@@ -212,7 +212,7 @@ run_branch_of() { # <sha> -> head_branch of the harvested run, empty if none
 }
 
 # The shard's own verdict on how the commit ended. `timeout` in
-# scripts/each-shard.sh reports 124 when it kills rcc-one.sh at the budget, and
+# the each-shard action reports 124 when it kills rcc-one.sh at the budget, and
 # the shard records it for the first commit of its leg, which had the whole
 # budget (a later one is deferred). That is the one thing the log cannot say:
 # the killed stage buffers its output through run_stage and loses it, so the
@@ -278,7 +278,7 @@ warnings_found() { # <log> -> "<kind>|<one line>", empty if the gate found nothi
 # The harness rows of stage 2's table: gate `warnings` failed without judging
 # the tree. No gate runs unless the install reached DONE, so the tree built, and
 # the scripts that judged it are at fault. Those are the scripts the commit
-# carries (scripts/each-shard.sh), so a fix that only reaches `main` and the
+# carries (the each-shard action), so a fix that only reaches `main` and the
 # port above `-dev` never changes this commit's verdict: it is folded in as
 # well, and sent to `main` as a stage 7 PR.
 harness_found() { # <sha> <log> -> "harness|<one line>", empty if none

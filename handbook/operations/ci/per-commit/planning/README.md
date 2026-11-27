@@ -14,14 +14,18 @@ estimate_minutes = SETUP + FULL + Σ min(FLOOR + OBJECT_SECONDS × objects, FULL
 build_minutes    = estimate_minutes − SETUP
 ```
 
-Four constants, each measuring one thing:
+Four constants, each measuring one thing.
+They are this package's own fit, kept as the repository variables
+`EACH_RCC_SETUP_MINUTES`, `EACH_RCC_FULL_BUILD_MINUTES`, `EACH_RCC_FLOOR_MINUTES` and `EACH_RCC_OBJECT_SECONDS`,
+which `each.yaml` passes to the `each-plan` action;
+its plan job fails first, naming any of them that is empty, and `EACH_RCC_SINCE` with them where no `since` input is given:
 
-| Constant | Default | What it is |
+| Constant | Value | What it is |
 |---|---|---|
 | `SETUP_MINUTES` | 5 | checkout, `install/action.yml`, `style` — paid once per leg |
-| `FULL_BUILD_MINUTES` | 40 | a build on an empty ccache: every object of `src/include/sources.mk` |
-| `FLOOR_MINUTES` | 6 | one commit with nothing to recompile: link, install, `R CMD check`, the gates |
-| `OBJECT_SECONDS` | 9.7 | marginal cost of recompiling one unity object |
+| `FULL_BUILD_MINUTES` | 48 | a build on an empty ccache: every object of `src/include/sources.mk` |
+| `FLOOR_MINUTES` | 9.3 | one commit with nothing to recompile: link, install, `R CMD check`, the gates |
+| `OBJECT_SECONDS` | 10 | marginal cost of recompiling one unity object |
 
 The **first** commit of a leg pays `FULL` rather than its own weight,
 because it starts on an empty ccache and rebuilds everything
@@ -29,32 +33,56 @@ no matter how little it changed.
 Every later commit pays only for the objects it invalidates,
 capped at `FULL` — a commit that touches a wide header cannot cost more than
 building the world.
-`build_minutes` is what [`each-shard.sh`](/scripts/each-shard.sh) measures
+`build_minutes` is what [`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh) measures
 itself against, since its deadline starts after setup;
 `estimate_minutes` is what the job takes.
 
-The constants are fitted by least squares to the 29 commits of runs
+`FULL`, `FLOOR` and `OBJECT_SECONDS` are fitted by least squares, and rounded, to the 670 commits recorded by run
+[44932694459](https://github.com/krlmlr/duckdb-r/actions/runs/44932694459)
+(`main-land-dev`, 41 legs, 612 commits built)
+and its follow-up [44932760627](https://github.com/krlmlr/duckdb-r/actions/runs/44932760627)
+(58 commits recorded when the fit was made),
+**RMSE 4.5 min** across all of them,
+4.2 across the 609 warm builds, which span 5.8 to 55 minutes:
+
+| objects | commits | measured mean | 10th to 90th percentile | predicted |
+|---|---|---|---|---|
+| 0 to 2 | 104 | 9.2 | 7.8 to 10.8 | 9.6 |
+| 3 to 5 | 250 | 9.5 | 7.6 to 11.4 | 9.8 |
+| 6 to 20 | 83 | 11.3 | 8.6 to 14.8 | 11.3 |
+| 21 to 40 | 34 | 15.9 | 12.4 to 18.5 | 13.8 |
+| 41 to 80 | 31 | 21.3 | 17.0 to 25.9 | 17.5 |
+| 81 to 160 | 19 | 33.3 | 26.5 to 43.5 | 35.0 |
+| 161 to 230 | 54 | 40.7 | 30.3 to 52.4 | 46.0 |
+| over 230 | 34 | 46.0 | 39.7 to 54.3 | 48.0 (capped) |
+
+The 61 cold builds came in at 35 to 62 minutes, mean 48.7,
+and are independent of what their commit changed (correlation −0.04), as the model says.
+The fit puts `FULL` at 47.7, and `EACH_RCC_FULL_BUILD_MINUTES` takes 48.
+A separate cap for warm builds would sit at 46 minutes and lower the RMSE by 0.03,
+so the model keeps one.
+`SETUP` is what the jobs spent outside the build loop, 2.7 to 6.9 minutes, median 5.2,
+on the legs that killed no commit at their deadline.
+
+The constants before, `FULL` 40, `FLOOR` 6 and `OBJECT_SECONDS` 9.7,
+were fitted to 29 commits of runs
 [30406932093](https://github.com/krlmlr/duckdb-r/actions/runs/30406932093)
-(`main-fwd-dev`, 24 commits over two legs)
 and [30422580063](https://github.com/krlmlr/duckdb-r/actions/runs/30422580063)
-(`v1.5-variegata-fwd-dev`, 5 commits, one leg),
-**RMSE 1.3 min** across the 26 warm builds, which span 4.9 to 38.0 minutes:
+and give an RMSE of 6.3 on the same 670 records,
+under-predicting by 4.1 minutes a commit.
+Run 44932694459 packed 40 of its 41 legs to the 300-minute deadline, at 256 to 296 planned build minutes,
+and their commits add up to 266.7 to 428.2 minutes, median 367.3,
+counting the mean cold build or the refitted estimate for each commit no leg reached in its place.
+Only 3 legs built every commit they were given,
+and 210 of the 822 planned commits were left to the follow-up.
+Replanned with the refitted constants and replayed against the measured times
+through [`each-shard.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-shard/each-shard.sh)'s deadline logic,
+the same 822 commits take 61 legs, 56 of which build every commit, and 816 commits are built,
+for 1.34 times the runner minutes.
+The replay is in sample, so it is the best case;
+the record, its data and the scripts that fit and replay it are
+[`experiments/2026-11-22-each-timing-refit/`](/experiments/2026-11-22-each-timing-refit/README.md).
 
-| objects | predicted | measured |
-|---|---|---|
-| 2 | 6.3 | 4.9, 5.2, 5.8, 5.9, 6.9 |
-| 3 | 6.5 | 6.0, 6.1, 6.4, 6.5 |
-| 23 | 9.7 | 10.3 |
-| 53 | 14.6 | 16.5, 16.6 |
-| 139 | 28.4 | 27.3 |
-| 177 | 34.5 | 36.5 |
-| 219 | 40.0 (capped) | 38.0 |
-
-The three cold builds came in at 40.4, 39.7 and 40.1 minutes —
-flat, and independent of what their commit changed, exactly as the model says.
-Whole legs land within a few percent:
-one leg's 12 commits were predicted at 243 min and took 252,
-and the other's first 12 at 304 against 302.
 Every leg records `duration_seconds` per commit,
 as `.timing` in the record it publishes
 and in its `each-logs-*` artifact,
@@ -79,9 +107,9 @@ runner-minutes to serve as the cost baseline.
 It is a poor answer for wall clock at every size, and for a small batch it is
 the *worst* answer.
 The default leg deadline is 300 minutes, a leg's first commit pays the
-cold build and every cheap commit after it ~6,
-so 45 commits take two legs — and the branch tip waits five hours for a
-verdict that 20 legs would have delivered in fifty minutes.
+cold build and every cheap commit after it ~10,
+so 45 commits take two legs, and the branch tip waits five hours for a
+verdict that 20 legs would deliver in about an hour.
 This is the common case, not the corner case:
 a series-loop batch is capped at the chunk the loop consumes per firing
 ([`vendoring/series-loop/`](/handbook/operations/vendoring/series-loop/README.md))
@@ -97,10 +125,10 @@ and every plan it can pick is contiguous, balanced and inside the real deadline
 by construction.
 Two limits bound the search:
 
-* **`SPLIT_FACTOR`** (default 1.5, `scripts/each-plan.sh`).
+* **`SPLIT_FACTOR`** (default 1.5, `each.yaml`).
   The plan may cost at most this multiple of the pass-1 plan's runner-minutes.
   `1.0` disables the pass entirely.
-* **`MAX_SHARDS`** (default 250, `scripts/each-plan.sh`),
+* **`MAX_SHARDS`** (default 250, [`each-plan.sh`](https://github.com/cynkra/cynkratemplate/blob/main/.github/actions/each-plan/each-plan.sh)),
   and the commit count: one commit cannot be cut in half.
 
 Ranking is by `makespan()`, which models `MAX_PARALLEL` throttling,
@@ -129,6 +157,8 @@ Measured on a 77-commit `main-fwd-dev` batch:
 | **1.5** | **20** | **79 min** | **1354 min** |
 | 2.0 | 20 (`max-parallel`) | 79 min | 1354 min |
 
+These plans, and the ones under Scale below, were made with the constants before the refit;
+the refitted ones put fewer commits in every leg.
 The default trades 1.38× the compute for **3.8× the wall clock**.
 Past 1.5 the curve is flat: `max-parallel` takes over as the binding limit.
 
@@ -216,7 +246,7 @@ reach drifts slowly, and a stale weight only mis-balances a shard.
 | Limit | Value | How the design stays inside it |
 |---|---|---|
 | Jobs per matrix | 256 per workflow run | `MAX_SHARDS` defaults to 250, and bounds the rebalance pass as well as the fill |
-| Job execution time | 6 h | shard budget 300 min, job `timeout-minutes: 350`, and the leg stops itself and defers the rest |
+| Job execution time | 6 h | shard budget 300 min, job `timeout-minutes: 350`, and the leg stops itself and defers the rest; the longest of run 44932694459's legs took 306 minutes |
 | Workflow run duration | 35 days | a thousand-commit backlog is under a day at `max-parallel: 20` |
 | Concurrent jobs | plan-dependent | `max-parallel` keeps the run a good neighbour, and is the wave width the rebalance pass plans against |
 | `GITHUB_TOKEN` REST requests | 1000 per hour per repository | see below |
@@ -268,20 +298,25 @@ to it that a bigger backlog would need a second run or a larger shard budget.
 
 ## Limits
 
-Two properties of the cost model are worth knowing before trusting a plan:
+Three properties of the cost model are worth knowing before trusting a plan:
 
 * **It counts objects, not object *sizes*.**
   A `ub_*.o` group compiles dozens of `.cpp` files and a leaf object compiles
   one, and the model charges the same `OBJECT_SECONDS` for both.
   The fit absorbs this on average — a wide-header commit reaches mostly `ub_*`
   objects and a narrow one mostly leaves — but it is why the residuals go one
-  way at 53 objects (16.5 measured against 14.6 predicted)
-  and the other at 219 (38.0 against a capped 40.0).
+  way at 41 to 80 objects (21.3 measured against 17.5 predicted)
+  and the other at 161 to 230 (40.7 against 46.0).
   Weighting each object by its translation unit's size would remove the bias;
   `each-cost.py` already has the graph it would need.
-* **The fit is 29 commits from two branches**, both heavy on vendor churn.
-  An R-only batch — 0 invalidated objects throughout — is not represented,
+* **The fit is one landing's vendor commits**, on one engine line.
+  An R-only batch, 0 invalidated objects throughout, is not represented,
   and `FLOOR_MINUTES` is the constant that would move.
+* **A commit's time scatters around its estimate**,
+  by about 2 minutes either way for a cheap commit, about 10 for a wide one
+  and about 8 for a cold build (10th to 90th percentile).
+  A leg packed to the deadline still overruns when its commits come in above the mean,
+  and then defers what it did not reach to the follow-up run.
 
 Rebalancing also raises the concurrency footprint:
 a 77-commit batch asks for 20 runners instead of 4, for an hour.
@@ -290,11 +325,13 @@ a large batch gains legs without gaining slots —
 but it is the whole account's Actions concurrency,
 so other workflows queue behind it where they used not to.
 
-The scripts run from *the branch being checked*,
-so a `*-dev` branch picks up a change to this workflow only once it is
+The workflow and the package's scripts run from *the branch being checked*,
+so a `*-dev` branch picks up a change to them only once it is
 forward-ported there — the same constraint every CI change in this repository
 has, and the series loop's stage 4
 ([`series-port.sh`](/scripts/series-port.sh)) is what does it.
+The planner, the leg and the follow-up themselves come from the template actions at the ref `each.yaml` names,
+so a change to them reaches every branch at once.
 `R-CMD-check.yaml` and `R-CMD-check-status.yaml` come from
 [`cynkra/cynkratemplate`](https://github.com/cynkra/cynkratemplate)
 rather than from here, so they are not edited:

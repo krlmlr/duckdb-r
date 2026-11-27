@@ -98,7 +98,7 @@ identity "$STORE"
 git -C "$STORE" remote add origin "$FORK"
 
 # store <failed stages, as JSON> <log>: publish the red commit's record and log,
-# in the shapes scripts/each-shard.sh writes them.
+# in the shapes the each-shard action writes them.
 store() {
   local at=${RED:0:2}
   mkdir -p "$STORE/runs2.d/$at" "$STORE/logs2.d/$at"

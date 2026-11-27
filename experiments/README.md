@@ -104,9 +104,10 @@ This file is what names the contents, so nothing here is an orphan.
 * [`2026-09-19-instance-cache-in-use/`](2026-09-19-instance-cache-in-use/) —
   which state the engine's instance cache is in when it finds an entry
   whose handle is gone, how each is reached from the C API, and what
-  reporting a live instance without a grace period costs; supports
-  [`patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch`](/patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch)
-  and [`usage/connections/`](/handbook/usage/connections/README.md).
+  reporting a live instance without a grace period costs; supported
+  `patch/0042-Tell-a-database-still-in-use-from-a-shutdown-in-flight.patch`,
+  retired with the vendoring of duckdb/duckdb@142a9e7dbc once [duckdb/duckdb#27765](https://github.com/duckdb/duckdb/pull/27765) carried its effect upstream,
+  and supports [`usage/connections/`](/handbook/usage/connections/README.md).
 * [`2026-09-26-connection-per-result/`](2026-09-26-connection-per-result/):
   what an engine context scopes and what a second one does not see,
   which calls end a streaming result on its connection and how that shows,
@@ -167,6 +168,11 @@ This file is what names the contents, so nothing here is an orphan.
   what `range()`, `mean()`, `anyNA()`, `unique()` and `c()` cost on a converted column of `rel_to_altrep()` against a plain vector,
   before and after #2890 gave the atomic classes per-element methods that skip the guard.
   Supports [`architecture/glue/altrep/`](/handbook/architecture/glue/altrep/README.md).
+
+* [`2026-11-22-each-timing-refit/`](2026-11-22-each-timing-refit/):
+  how long each of 670 commits of one landing took in `each-rcc`, against the planner's cost model,
+  and the constants that fit it.
+  Supports [`operations/ci/per-commit/planning/`](/handbook/operations/ci/per-commit/planning/README.md).
 
 Adding one: create the directory, name it for the date and the topic,
 open its `README.md` with what and when and on what,
