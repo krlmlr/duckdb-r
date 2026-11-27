@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-lib.sh against scripts/series-config.sh, offline: the
 # vendor predicate, the markers, the version ordering, the path filters, and
 # the walks, against a synthetic repository built here. A repository that

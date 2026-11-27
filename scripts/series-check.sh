@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Read-only diagnosis for the series loop: what should a firing do?
 #
 # For every series (or the ones named), walks `<S>-green..<S>-dev`, looks each

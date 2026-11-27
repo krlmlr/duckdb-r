@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/landing-version.sh, offline.
 #
 # The claim is that the bump goes one above the branch landed on, under the

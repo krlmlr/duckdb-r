@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check the argument contract every scripts/series-*.sh shares, offline.
 #
 # The contract is in handbook/operations/vendoring/series-loop/README.md, and

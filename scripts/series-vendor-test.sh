@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-vendor.sh offline, against a synthetic series built here:
 # no network, no fixtures on disk. The vendor strand is pure vendoring, vendored
 # once and carried by a rebase (handbook/branches/model/README.md), and the

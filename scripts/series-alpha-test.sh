@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-alpha.sh offline, against a synthetic remote and clone
 # built here, with `curl` stubbed: no network, no fixtures on disk.
 #

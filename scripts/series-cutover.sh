@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Replace a series with its forward counterpart in one atomic swap,
 # once every tip the swap moves a ref off is pinned by a pull request's head in the fork.
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Read-only: what a cutover left behind, and the commands that remove it, for a
 # human to run.
 #

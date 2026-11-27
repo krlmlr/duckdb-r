@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/merge-news.sh, the NEWS.md merge driver, offline, on files and
 # in a repository built here.
 #

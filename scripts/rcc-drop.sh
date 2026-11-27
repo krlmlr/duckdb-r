@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Drop named commits' verdicts from the store on the orphan `rcc2` branch.
 #
 # A verdict is normally overturned by a newer run judging the same commit

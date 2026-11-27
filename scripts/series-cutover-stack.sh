@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build the review stack of one strand of a cutover and push it to the fork:
 # the old tip with `main`'s changes replayed onto it, the forward's engine, the forward's tree, and the old tree again,
 # each layer a branch on the one before.

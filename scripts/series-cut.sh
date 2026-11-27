@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Open a new series by cutting its parent's strands at the fork point: compute
 # the fork point, find the commit on each strand that vendors it, and write the
 # four refs there (.claude/skills/series-open/SKILL.md).

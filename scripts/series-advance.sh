@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # The ref motion of the series loop, stages 3 and 5, for one series:
 # fast-forward `<S>-green` over the all-green prefix, set `<S>-build-base` to
 # the equivalent `-build` commit, and extend `<S>-dev` from the buffer.

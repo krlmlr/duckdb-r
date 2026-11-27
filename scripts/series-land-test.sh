@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check the landing of a series on `main`, offline, against a synthetic fork,
 # canonical repository and clone built here: no network, no fixtures on disk.
 #

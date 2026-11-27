@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/merge-version.sh, the DESCRIPTION merge driver, offline, on
 # files and in a repository built here.
 #

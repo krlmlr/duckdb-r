@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check stage 5's carry of the base series' test-side fixes, offline, against a
 # synthetic remote and clone built here -- no network, no fixtures on disk.
 #

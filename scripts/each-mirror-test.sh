@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/each-mirror.sh, offline, against a synthetic canonical
 # repository, a synthetic store and a stand-in for `gh api` built here: no
 # network, no fixtures on disk.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/cran-submit.sh offline, against a fake CRAN submission form on 127.0.0.1: nothing reaches CRAN.
 # Handbook: handbook/operations/releases/cran/README.md
 #

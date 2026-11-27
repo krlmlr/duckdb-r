@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/pull-request-base.sh, offline, against pull requests and file
 # lists written here in the shape GitHub's API gives them, and declarations
 # written beside them: no network, no fixtures on disk.

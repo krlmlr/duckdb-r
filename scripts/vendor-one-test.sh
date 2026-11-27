@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/vendor-one.sh --strand offline, against a synthetic upstream and
 # package built here: no network, no fixtures on disk, the generator stubbed in
 # the copied configuration. What a strand commit is (handbook/branches/model/README.md):

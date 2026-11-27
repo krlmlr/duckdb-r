@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Bring a series' -dev branch level with the branch it releases from, and its
 # tooling with `main`: stage 4 of the series loop
 # (.claude/skills/series-loop/SKILL.md).

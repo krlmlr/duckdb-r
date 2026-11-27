@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Read-only: what did r-universe make of the refs this repository publishes?
 #
 # `<S>-green` is what r-universe builds (.claude/skills/series-loop/SKILL.md), on

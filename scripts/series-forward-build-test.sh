@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check the forward replay, offline, against a synthetic base series and seed
 # built here: no network, no fixtures on disk.
 #

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copy the fork's per-commit verdicts onto the same commits in the canonical
 # repository, as commit statuses with context `each-rcc (fork)`, for the open
 # pull requests whose head is in the fork and whose author belongs to the

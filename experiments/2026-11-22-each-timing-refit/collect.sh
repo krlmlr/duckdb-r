@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Rebuilds data.tsv beside itself: one row per commit the two runs planned,
 # with the shard and position the plan gave it, the unity objects it
 # invalidates, and the minutes its record on the `rcc2` branch reports

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # shellcheck disable=SC2317  # gates are dispatched indirectly as gate_${gate}
 #
 # Run the per-commit `rcc` gate against the working tree, once.

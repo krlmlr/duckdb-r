@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Does a forward series still carry the same package as the series it replaces?
 #
 # A forward series is the same series rebuilt on a newer `main`

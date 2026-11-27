@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Consolidate the orphan `rcc2` branch: drop everything past the retention
 # window, and squash the whole history to two commits.
 #

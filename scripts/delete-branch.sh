@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Delete a branch only where something that stays proves the deletion loses
 # nothing: a closed pull request's head in the same repository at the branch's
 # tip, which GitHub keeps as `refs/pull/<n>/head` for as long as the pull

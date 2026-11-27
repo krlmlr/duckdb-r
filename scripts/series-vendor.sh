@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # The vendor strand of a series, `<S>-vendor`: pure vendoring, one commit per
 # upstream commit, vendored once and carried forward by a rebase
 # (handbook/branches/model/README.md). What vendor-one.sh --strand writes is

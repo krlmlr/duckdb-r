@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Check scripts/series-fold.sh offline, against a synthetic landing built here:
 # no network, no fixtures on disk.
 #
