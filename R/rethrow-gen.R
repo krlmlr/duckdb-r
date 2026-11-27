@@ -621,6 +621,24 @@ rethrow_rapi_execute <- function(stmt, convert_opts, call = parent.frame(2)) {
   )
 }
 
+rethrow_rapi_stream_fetch <- function(qry_res, n, convert_opts, call = parent.frame(2)) {
+  rlang::try_fetch(
+    rapi_stream_fetch(qry_res, n, convert_opts),
+    error = function(e) {
+      rethrow_error_from_rapi(e, call)
+    }
+  )
+}
+
+rethrow_rapi_stream_close <- function(qry_res, call = parent.frame(2)) {
+  rlang::try_fetch(
+    rapi_stream_close(qry_res),
+    error = function(e) {
+      rethrow_error_from_rapi(e, call)
+    }
+  )
+}
+
 rethrow_rapi_adbc_init_func <- function(call = parent.frame(2)) {
   rlang::try_fetch(
     rapi_adbc_init_func(),
@@ -736,6 +754,8 @@ rethrow_restore <- function() {
   rethrow_rapi_bind_check <<- rapi_bind_check
   rethrow_rapi_bind <<- rapi_bind
   rethrow_rapi_execute <<- rapi_execute
+  rethrow_rapi_stream_fetch <<- rapi_stream_fetch
+  rethrow_rapi_stream_close <<- rapi_stream_close
   rethrow_rapi_adbc_init_func <<- rapi_adbc_init_func
   rethrow_rapi_cxx_stdlib <<- rapi_cxx_stdlib
   rethrow_rapi_canonicalize_path <<- rapi_canonicalize_path

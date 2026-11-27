@@ -75,6 +75,7 @@ so the paths differ by which copies they hold and when each is freed.
   [#2584](https://github.com/duckdb/duckdb-r/pull/2584),
   [#2586](https://github.com/duckdb/duckdb-r/pull/2586) and
   [#2587](https://github.com/duckdb/duckdb-r/pull/2587),
+  designed in [`plan/PLAN-streaming-results.md`](/plan/PLAN-streaming-results.md),
   with [`plan/PLAN-streaming-thread.md`](/plan/PLAN-streaming-thread.md)
   carrying what comes after.
 * **`dbSendQuery(arrow = TRUE)` + `dbFetch()` or

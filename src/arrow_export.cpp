@@ -54,7 +54,7 @@ static bool CanDrain(QueryResult &result) {
 	return result.GetBufferedData().Lifetime() != ResultLifetime::RETAINED;
 }
 
-static constexpr const char *INVALIDATED_MESSAGE =
+const char *const INVALIDATED_MESSAGE =
     "The query result was invalidated by another statement on its connection "
     "before it was read to the end. "
     "Read it to the end first, or run the other statement on a separate connection.";
@@ -295,7 +295,7 @@ static bool FetchArrowChunk(RArrowChunkSource &source, AppendableRList &batches_
 }
 
 // Every entry point that takes a query result asks this first: the pointer may have been released.
-static void CheckQueryResult(const duckdb::rqry_eptr_t &qry_res, const char *context) {
+void CheckQueryResult(const duckdb::rqry_eptr_t &qry_res, const char *context) {
 	if (!qry_res || !qry_res.get()) {
 		rapi_error_with_context(context, "Invalid query result");
 	}
