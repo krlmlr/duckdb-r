@@ -301,10 +301,6 @@ test_that("a data frame with every column converted is materialized", {
 
 test_that("a relation from a fully converted data frame scans what R holds", {
   con <- local_con()
-  skip_if_prebuilt_engine(
-    con,
-    "one-byte arguments across GCC and clang (#2955)"
-  )
   dbWriteTable(con, "t", data.frame(a = 1:3, b = c("x", "y", "z")))
 
   df <- rel_to_altrep(rel_from_table(con, "t"))
