@@ -1,0 +1,296 @@
+# Plan: scanning a data frame with nanoarrow alone
+
+**Open.** The Arrow surface as it stands today is
+[`usage/integrations/`](/handbook/usage/integrations/README.md)'s,
+the C++ behind it is written to
+[`architecture/glue/conventions/`](/handbook/architecture/glue/conventions/README.md)'s rules,
+and which thread may reach R from inside it is
+[`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)'s;
+this file is a proposal, and where it and a leaf disagree,
+the leaf is right.
+
+A step towards
+[#98](https://github.com/duckdb/duckdb-r/issues/98):
+the issue asks for one generic registration function,
+and the answer in the thread was that a new `duckdb_register_*()`
+is fine if the C++ has to change anyway.
+What the C++ needs is the piece this plan adds:
+a scan that takes any Arrow C stream producer,
+rather than one that can only talk to the `arrow` package.
+
+Measured evidence:
+[`experiments/2026-08-08-nanoarrow-df-scan/`](/experiments/2026-08-08-nanoarrow-df-scan/README.md).
+
+## Why nanoarrow
+
+`duckdb_register_arrow()` is the only route in for a source that is not
+an R data frame, and it hard-codes the `arrow` package:
+the closures it hands to C++ call `arrow::Scanner$create()` and
+`arrow::Expression$…`.
+That makes a heavyweight dependency the price of admission for every
+Arrow-shaped source, including nanoarrow objects,
+which are already what this package *returns* from
+`dbGetQueryArrow()` and `dbFetchArrow()`.
+
+nanoarrow is the small end of the same interface,
+and it is already in `Suggests`.
+Registering *into* DuckDB through it closes the loop
+without adding a dependency.
+What a registered Arrow object holds in memory,
+and that arrow's `Scanner` buffers a lazy source whole ahead of a slow sink,
+is [`usage/memory/writing/`](/handbook/usage/memory/writing/README.md)'s.
+
+## What the measurement settled
+
+* A nanoarrow-only producer answers full scans, projections,
+  `count(*)`, repeated scans, and self-joins correctly today,
+  through nothing but the five R closures the existing seam takes.
+* It cannot answer a filtered query.
+  `arrow_scan` declares `filter_pushdown = true`, and
+  `PhysicalTableScan` does not re-apply what it pushes:
+  a producer that ignores the filter returns every row and the plan
+  still reads `Filters: a>3`.
+* The engine already carries the right function for a producer that
+  cannot filter: `arrow_scan_dumb`, registered alongside `arrow_scan`
+  with `projection_pushdown`, `filter_pushdown` and `filter_prune`
+  all false.
+  The v2.0 engine keeps both, flags included, and so does the v2.1 engine `main` carries since the v2.1 landing.
+  What v2.0 changed, and v2.1 keeps, is how the factory reaches them:
+  as the table reference's `bind_info` rather than as three `POINTER` arguments.
+* Type fidelity differs in both directions:
+  better for `hms` and `POSIXct`,
+  worse for `factor`,
+  and a bare list column is refused unless it is a `vctrs::list_of()`.
+  `integer64` differed too, until [#2819](https://github.com/duckdb/duckdb-r/pull/2819) made `r_dataframe_scan` write `BIGINT` as well.
+  What a value becomes through Arrow is [`usage/arrow-types/`](/handbook/usage/arrow-types/README.md)'s.
+* The Arrow export costs one and a half to two times the built-in
+  scan per query, and it is paid per scan rather than once at
+  registration.
+
+So nanoarrow is a *new source*, not a replacement for
+`r_dataframe_scan`, and the design must let a producer say what it
+can do rather than assume it can filter.
+
+## Decisions
+
+* **Capability, not package.**
+  The C++ side learns a producer capability,
+  whether the producer can apply projection and filters,
+  and binds to `arrow_scan` when it can and `arrow_scan_dumb` when it
+  cannot.
+  Nothing in the engine has to change;
+  both functions are already registered.
+* **One new registration entry point, shared unregistration.**
+  `rapi_register_arrow_stream()` joins `rapi_register_arrow()`,
+  storing into the same `DBWrapper::arrow_scans` map,
+  so `duckdb_unregister_arrow()` and `duckdb_list_arrow()` keep working
+  for both.
+  The existing `rapi_register_arrow()` stays byte-for-byte as it is:
+  the arrow path is the one with pushdown, and it should not change
+  shape while a second path is being introduced.
+* **R surface: `duckdb_register_nanoarrow()`.**
+  Takes anything `nanoarrow::as_nanoarrow_array_stream()` accepts:
+  a data frame, a nanoarrow array or stream-producing object,
+  an `arrow` table, a Polars frame.
+  A separate name rather than an argument to `duckdb_register()`,
+  because the semantics differ:
+  no pushdown, a per-scan export, and a different type mapping.
+* **`duckdb_register()` keeps `r_dataframe_scan`.**
+  The measurement says the nanoarrow route is up to twice as slow,
+  drops `ENUM` for factors, and refuses a bare list column.
+  Changing the default would be a regression for the common case;
+  the generic in #98 is about reaching more sources, not fewer.
+* **A source consumed on read is refused at registration.**
+  A bare `nanoarrow_array_stream` cannot back a view:
+  it has nothing to replay for the second scan.
+  Detect it and say so, rather than failing on the first query
+  with `Invalid Error: std::exception`, as the recorded `count(*)` does.
+  A query result's stream is the same case with a worse failure:
+  registered on its own connection, a query over it fails with the invalidation error,
+  because starting the query ends the stream,
+  and on the v1.5 engine it waited for good instead
+  ([`usage/integrations/`](/handbook/usage/integrations/README.md) owns the mechanism).
+  `duckdb_register_arrow()` carries the same limitation for a `RecordBatchReader`,
+  which the first query drains, as `usage/arrow-types/` lists.
+* **R errors keep their message.**
+  An R condition raised inside a producer currently reaches the caller
+  as `Invalid Error: std::exception`.
+  The producer calls get a wrapper that catches the R error and
+  re-raises it with its own message and the producer's name.
+  The loss is the one [`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md) names for the scan's own errors:
+  the engine's `catch (std::exception &)` keeps nothing of cpp11's unwind but its name.
+  [#2816](https://github.com/duckdb/duckdb-r/pull/2816) takes the glue's own report out of R;
+  this decision covers the producer's side of the same seam.
+* **The stream a producer exports is pulled by engine threads.**
+  The export call itself is moved onto the scheduling thread,
+  but the batches that follow are pulled by whichever worker thread scans them,
+  so a stream whose `get_next` calls R cannot back a scan:
+  nanoarrow's reader over an R connection is the case that refuses any thread but R's
+  ([`architecture/glue/threading/`](/handbook/architecture/glue/threading/README.md)).
+  What `as_nanoarrow_array_stream()` builds over R vectors is read without R,
+  and so is what arrow and polars export.
+  `duckdb_register_nanoarrow()` cannot tell the two apart from the outside,
+  so the reference page says which sources qualify,
+  and names `dbAppendTableArrow()` as the route for a stream that does not
+  ([`usage/memory/writing/`](/handbook/usage/memory/writing/README.md) has the measurement).
+* **Batches that borrow R vectors are released on R's thread.**
+  nanoarrow borrows a column's data only when the target type is int32 or double,
+  from an integer or double vector without a class;
+  a classed column goes through R's S3 dispatch,
+  and logical and character data are copied into new buffers.
+  A borrowing batch holds its R vector until it is released,
+  and the engine releases it on whichever thread is done with it.
+  nanoarrow 0.9.0 releases its hold on an R object only on R's thread.
+  A release from any other thread goes into a queue that only the unexported `nanoarrow:::preserved_empty()` empties,
+  and nothing calls that on its own, so the R vector stays alive for the rest of the session.
+  The plan keeps releases on R's thread instead.
+  The glue wraps the stream's `get_next` to swap its own `release` into each batch,
+  and wraps the stream's own `release` the same way:
+  after a `LIMIT`, a cancel or an error, nanoarrow's `ArrowBasicArrayStreamRelease()` releases the batches the engine never pulled,
+  inside the engine's `ArrowArrayStreamWrapper` destructor, which can run off R's thread.
+  Either wrapper releases at once when `OnRThread()` is true,
+  and when it is not, parks the release with `RCallbackScope::Park()`, which is already thread-safe.
+  The parked releases run where `RCallbackScope::Drain()` already runs:
+  at the next entry point, `rapi_execute()`, `rapi_bind()` or `rapi_prepare()`, and at disconnect.
+  Calling `nanoarrow:::preserved_empty()` after a scan is the rejected alternative, since it is not exported.
+
+## Commits
+
+Each commit is self-contained and keeps the suite green.
+
+### 1. fix(arrow): carry the R producer's error message across the seam
+
+`RArrowTabularStreamFactory::ProduceStream()` and `GetSchema()` call R
+closures directly, under an `RCallbackScope` since the v2.0 landing,
+so an R error still unwinds through C++ and arrives as
+`std::exception`.
+Route both through a helper that evaluates the call with
+`R_tryCatchError()` and converts a caught condition into a
+`duckdb::InvalidInputException` carrying the R message,
+the way the bind of a data frame scan already does for an ALTREP column
+([`src/scan.cpp`](/src/scan.cpp)):
+the threading leaf's rule is that no R error may long-jump past the engine's frames.
+The helper also checks `OnRThread()` before it calls R at all, and raises an engine error when it is off R's thread.
+`INITIALIZE_ON_SCHEDULE` runs the export when the query's pipelines are scheduled,
+which is when the query is issued on R's thread (`ResetSource(true)` in the engine's `executor.cpp`).
+That is not guaranteed for every query, though:
+a recursive CTE reschedules its pipelines from inside a task
+(`ExecuteRecursivePipelines()` in the engine's `physical_recursive_cte_runtime.cpp`),
+so a scan inside one exports on whichever thread runs that task,
+and catching the R error does not make calling R from another thread safe.
+
+Standalone: it improves the existing arrow path on its own,
+and every later commit depends on the diagnostics.
+It is the producer-side counterpart of [#2816](https://github.com/duckdb/duckdb-r/pull/2816),
+and the two should share one helper.
+Test: register an arrow source whose exporter stops with a known
+message, and assert the message survives.
+
+### 2. feat(arrow): bind pushdown-incapable producers to `arrow_scan_dumb`
+
+Give `RArrowTabularStreamFactory` a `bool supports_pushdown`.
+The factory is the table reference's `bind_info` since the v2.0 landing,
+a `shared_ptr<ArrowScanFactory>` that `arrow_scan` takes in place of arguments,
+so the flag travels with it:
+`ArrowScanReplacement()` reads it and names `arrow_scan_dumb` instead of `arrow_scan`
+when it is false.
+`arrow_scan_dumb` still hands `ProduceStream()` a projection, every column of the source,
+since `ArrowScanInitGlobal()` passes the scan's `column_ids` whatever the pushdown flags say;
+it only never hands it a filter, so the exporter would be called with every column and `filters = TRUE`.
+So `ProduceStream()` reads the flag too and calls the exporter with its two arguments alone when it is false,
+and a producer that cannot push down never sees a projection or a filter argument.
+`arrow_scan_dumb` takes the factory through the same bind, so it needs nothing else from the engine.
+`rapi_startup()` ([`src/database.cpp`](/src/database.cpp)) sets `INITIALIZE_ON_SCHEDULE` on `arrow_scan` alone,
+so this commit extends it to `arrow_scan_dumb`:
+without that, the export call could run in a scan task, off R's thread.
+
+No R-visible change yet, since `rapi_register_arrow()` sets the flag true,
+but the two-function split is in place and testable through the
+existing arrow path by flipping the flag in a test-only registration.
+
+### 3. feat(nanoarrow): `duckdb_register_nanoarrow()`
+
+The R surface and the C++ entry point behind it.
+
+* `src/register.cpp`: `rapi_register_arrow_stream(conn, name, funs, x)`,
+  storing `supports_pushdown = false`.
+  It takes two closures rather than five, an exporter and a schema
+  exporter, since the expression factories are unreachable without
+  pushdown.
+  It pads them into the five-element list the factory indexes,
+  with `NULL` in the three expression slots,
+  so the factory's reads stay as they are:
+  `ProduceStream()` reads slot 0 and `GetSchema()` slot 4.
+  Slots 1 to 3 are read only by `CallArrowFactory()`, which only `TransformFilter()` and its helpers reach,
+  and that is never reached without pushdown.
+* Regenerate `src/cpp11.cpp`, `R/cpp11.R`, `R/rethrow-gen.R`.
+* `R/register.R`: `duckdb_register_nanoarrow(conn, name, x)`,
+  building the two closures over
+  `nanoarrow::as_nanoarrow_array_stream()` and
+  `nanoarrow::infer_nanoarrow_schema()`,
+  and `nanoarrow::nanoarrow_pointer_export()` to fill the address the
+  C++ side passes in.
+  Guarded by the existing `require_nanoarrow()` helper.
+* Refuse a source that is itself a stream:
+  `inherits(x, "nanoarrow_array_stream")` is an error naming the
+  problem.
+* `_pkgdown.yml` and the `duckdb_register_arrow` reference page gain
+  the new function; `NEWS.md` gains a bullet.
+* Tests (`tests/testthat/test-register_nanoarrow.R`):
+  full scan, projection, `count(*)`, repeated scan, self-join,
+  a filtered query returning the right rows through `arrow_scan_dumb`,
+  registration of a nanoarrow array and of an `arrow` table,
+  the stream refusal, unregistration through
+  `duckdb_unregister_arrow()`, and the type grid from the experiment
+  pinned as expectations.
+
+### 4. docs: state the second Arrow route
+
+`handbook/usage/integrations/README.md` gains the nanoarrow-in
+direction beside the existing arrow-in and stream-out ones, with the
+pushdown difference stated as the reason there are two.
+`handbook/architecture/glue/threading/README.md` gains the nanoarrow route beside the arrow one:
+the export still moves onto the scheduling thread,
+and the stream it returns must not call R.
+The capability flag and the `arrow_scan` / `arrow_scan_dumb` split are stated where the route is,
+on `usage/integrations/`.
+
+## Out of scope
+
+* **Making `duckdb_register()` generic.**
+  That is #98's actual request and it should follow this,
+  once there is more than one non-data-frame source to dispatch to
+  (a Polars source, proposed alongside this plan under
+  [#98](https://github.com/duckdb/duckdb-r/issues/98), is the second).
+  Dispatching to a single method is not a generic, it is a rename.
+* **Filter pushdown for nanoarrow sources.**
+  nanoarrow has no compute layer, so there is nothing to push *to*.
+  A source that carries its own query engine is a different case
+  and belongs to the Polars plan proposed alongside this one under
+  [#98](https://github.com/duckdb/duckdb-r/issues/98).
+* **Replacing `r_dataframe_scan`.**
+  Measured as slower and lossier for the default path.
+  Worth revisiting only if the type mapping is fixed upstream and the
+  export cost falls.
+* **The relational constructor.**
+  `PLAN-rel-from-arrow.md`, proposed alongside this one under
+  [#98](https://github.com/duckdb/duckdb-r/issues/98).
+
+## Open questions
+
+* Whether `duckdb_register_nanoarrow()` should accept a
+  `nanoarrow_array_stream` after all,
+  by wrapping it in a one-shot producer that errors on the second scan
+  with a message that explains why.
+  A single-scan query would then work,
+  and the failure would be legible rather than incidental.
+* Whether the type differences that favor nanoarrow,
+  `TIME` for `hms` and `TIMESTAMP WITH TIME ZONE` for `POSIXct`,
+  are bugs in `r_dataframe_scan` worth filing separately.
+* Whether the nanoarrow route changes the memory peak of a lazy source.
+  arrow's `Scanner` reads ahead on Arrow's own pool and buffers a lazy source whole,
+  the cost [`usage/memory/writing/`](/handbook/usage/memory/writing/README.md) measured;
+  a nanoarrow producer puts no `Scanner` in front of the engine,
+  which holds one batch per thread,
+  so the read-ahead should not arise.
+  That is a mechanism, not a measurement, until the route exists to measure.
