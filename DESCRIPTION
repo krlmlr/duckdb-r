@@ -32,13 +32,16 @@ Authors@R: c(
     person("Oran Agra", role = "cph"),
     person("Redis Labs, Inc.", role = "cph"),
     person("Melissa O'Neill", role = "cph"),
-    person("PCG Project contributors", role = "cph")
+    person("PCG Project contributors", role = "cph"),
+    person("Jason Evans", role = "cph"),
+    person("Mozilla Foundation", role = "cph")
   )
 Description: The DuckDB project is an embedded analytical data management
     system with support for the Structured Query Language (SQL). This
     package includes all of DuckDB and an R Database Interface (DBI)
     connector.
 License: MIT + file LICENSE
+Copyright: See file COPYRIGHTS for the notice of the bundled jemalloc.
 URL: https://r.duckdb.org/, https://github.com/duckdb/duckdb-r
 BugReports: https://github.com/duckdb/duckdb-r/issues
 Depends:

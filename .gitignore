@@ -112,6 +112,8 @@ $RECYCLE.BIN/
 # while one is in flight.
 /src/.duckdb-previous
 /src/Makevars.duckdb
+/src/Makevars.jemalloc
+/src/Makevars.jemalloc.built
 /src/Makevars.rstrtmgr
 /src/Makevars.system-lib
 /.ccache

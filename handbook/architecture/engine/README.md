@@ -49,11 +49,55 @@ The load-bearing ones:
 * `-DDUCKDB_RSTRTMGR` — Windows restart-manager support,
   set by `configure.win` and off on R < 4.2, which ships no `librstrtmgr.a`.
 * `-DBROTLI_ENCODER_CLEANUP_ON_OOM` — an R package must not `exit()`.
+* `-DDUCKDB_ENABLE_JEMALLOC` — 64-bit glibc Linux only,
+  and the one flag `configure` decides rather than `rconfigure.py`.
 
-jemalloc is not vendored at all:
-[`scripts/rconfigure.py`](/scripts/rconfigure.py) drops its tree and says why,
-and enabling it is open
+**The allocator.**
+DuckDB allocates through `Allocator::DefaultAllocate`:
+`malloc` in `allocator_standard.cpp`, jemalloc in `allocator_jemalloc.cpp`,
+and a build compiles exactly one of the two.
+Upstream builds jemalloc on 64-bit glibc Linux and nowhere else —
+its `CMakeLists.txt` gates the target on exactly that,
+and the wrapper stops with an `#error` on Windows and on 32-bit —
+so macOS, Windows, 32-bit and musl keep the standard allocator
 ([#2365](https://github.com/duckdb/duckdb-r/issues/2365)).
+This package makes the same choice, and makes it in `configure`,
+because `src/Makevars` is generated once on the vendoring machine
+while the platform that decides is the one doing the compiling.
+`configure` probes with the compiler R will use and writes
+`src/Makevars.jemalloc`, which adds the define, the include path
+and `$(SOURCES_JEMALLOC)` —
+a source list of its own, because `src/include/sources.mk` is shared with Windows.
+`DUCKDB_R_DISABLE_JEMALLOC=1` keeps the standard allocator regardless
+([`build/configuration/`](/handbook/build/configuration/README.md)).
+An object compiled for one allocator links under the other and then fails to load,
+so `configure` compares its choice with the one the objects were built for
+— recorded in `Makevars.jemalloc.built`, which only a completed run updates,
+or the `Makevars.jemalloc` a `DUCKDB_R_PREBUILT_ARCHIVE` restored with its objects —
+and removes `$(SOURCES_ALLOCATOR)`, the objects `rconfigure.py` found reading the define,
+when the two differ.
+Upstream's packaging vendors `third_party/jemalloc/` along with the rest
+([duckdb/duckdb#22811](https://github.com/duckdb/duckdb/pull/22811)),
+and `rconfigure.py` moves its sources to `$(SOURCES_JEMALLOC)`
+and its include path to `Makevars.jemalloc`,
+checks them against the list jemalloc's `CMakeLists.txt` compiles,
+and drops `jemalloc_cpp.cpp`, which overrides global `new` and `delete`:
+that is DuckDB's `OVERRIDE_NEW_DELETE`,
+and not something an R package may do to the process it is loaded into.
+jemalloc's BSD-2-Clause notice travels with it:
+`rconfigure.py` vendors its `LICENSE` beside the sources
+and fails when [`inst/COPYRIGHTS`](/inst/COPYRIGHTS),
+which an installed package keeps, no longer quotes it verbatim.
+All of this happens only on a line whose own `src/Makevars.in`
+carries the `{{ JEMALLOC }}` placeholder and whose `configure` carries the probe:
+the series loop syncs `scripts/` from `main` into lines that predate it,
+and there `rconfigure.py` drops the tree as it did before.
+What the swap buys is thread-local caches and per-arena purging
+under parallel execution.
+With the standard allocator `Allocator::SupportsFlush()` is glibc-only,
+`ThreadIdle()` does nothing,
+and `allocator_background_threads` and the flush thresholds are inert settings.
+
 Compiler warnings from the vendored tree are noise the shipped
 build does not silence
 ([#1829](https://github.com/duckdb/duckdb-r/issues/1829));
