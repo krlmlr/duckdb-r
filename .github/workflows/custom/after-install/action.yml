@@ -28,10 +28,29 @@ runs:
     # the other, whose link then fails with "file in wrong format". ccache
     # checks the compiler itself and so never reuses a foreign object, but a
     # shared key still has the two entries overwrite each other's cache.
+    #
+    # The archive key also carries what changes the engine's objects without
+    # changing the compiler or the sources: the allocator, because
+    # allocator_jemalloc.cpp is in $(SOURCES) and so in the archive, compiled
+    # with or without -DDUCKDB_ENABLE_JEMALLOC; and the engine-poisoning
+    # tripwire, which before-install adds to CPPFLAGS. The allocator is the one
+    # configure picks on GitHub's runners: jemalloc on Linux unless an entry
+    # sets DUCKDB_R_DISABLE_JEMALLOC, the standard allocator elsewhere (the
+    # allocator check below says why the runner's OS is enough to tell).
     - name: Compute cache key
       if: env.DUCKDB_R_USE_SYSTEM_LIB != '1'
       run: |
-        echo "DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY=duckdb-tar-R$(Rscript --vanilla -e 'cat(format(getRversion()))')-${{ runner.os }}-${{ runner.arch }}-$($(R CMD config CXX) --version | head -n 1 | sed -r 's/[, ]/-/g')-${{ hashFiles('src/duckdb/**') }}" | tee -a $GITHUB_ENV
+        variant=standard
+        if [ "${RUNNER_OS}" = "Linux" ]; then
+          case "${DUCKDB_R_DISABLE_JEMALLOC:-}" in
+            1 | true | TRUE | yes | YES) ;;
+            *) variant=jemalloc ;;
+          esac
+        fi
+        if [ -n "${DUCKDB_R_POISON_ENGINE:-}" ]; then
+          variant="${variant}-poison"
+        fi
+        echo "DUCKDB_R_PREBUILT_ARCHIVE_GHA_CACHE_KEY=duckdb-tar-R$(Rscript --vanilla -e 'cat(format(getRversion()))')-${{ runner.os }}-${{ runner.arch }}-$($(R CMD config CXX) --version | head -n 1 | sed -r 's/[, ]/-/g')-${variant}-${{ hashFiles('src/duckdb/**') }}" | tee -a $GITHUB_ENV
         echo "DUCKDB_R_PREBUILT_ARCHIVE=${{ runner.temp }}/duckdb.tar" | tee -a $GITHUB_ENV
       shell: bash
 
@@ -106,6 +125,81 @@ runs:
           "${install[@]}"
         else
           scripts/warnings.sh ride vendored "${RUNNER_TEMP}/install.log" -- "${install[@]}"
+        fi
+      shell: bash
+
+    # Which allocator the source build actually linked, read out of the library
+    # it produced rather than assumed from the platform.
+    # handbook/architecture/engine/README.md owns the rule: ./configure probes
+    # for 64-bit glibc Linux and takes jemalloc there, the standard allocator
+    # everywhere else. Both halves of that are worth a check -- a probe that
+    # says no on a platform DuckDB builds jemalloc for is as wrong as one that
+    # says yes on Windows -- and neither shows up as a build failure, because
+    # both allocators compile and both produce a working package.
+    #
+    # jemalloc's symbols carry DuckDB's duckdb_je_ prefix, and
+    # allocator_jemalloc.cpp compiles to nothing at all without the define, so
+    # the name is in the library when jemalloc is in it and not otherwise.
+    # GitHub's Linux runners are 64-bit glibc, so RUNNER_OS decides what to
+    # expect, unless an entry sets DUCKDB_R_DISABLE_JEMALLOC, which configure
+    # honors with the same spellings. A system-libduckdb build compiled none of
+    # this and has nothing to read.
+    #
+    # The package name comes from DESCRIPTION and the library is whatever shared
+    # object sits under its libs/, because a flavored branch installs as
+    # duckdb.dev, duckdb.1.4 and so on (scripts/series.yaml), and R spells a
+    # dotted name's shared object its own way. The flavor guard below does not
+    # scan this file, so a hard-coded name here would fail every flavored source
+    # build with nothing pointing at why.
+    #
+    # DESCRIPTION can have CRLF line endings in a Windows checkout, hence the
+    # tr. The search skips a macOS .dSYM bundle, whose debug-info file is not
+    # the library, and sorts, so the pick does not depend on directory order.
+    # The step runs wherever configure compiled the engine: configure takes
+    # both 1 and true in DUCKDB_R_USE_SYSTEM_LIB as the fast path, so the
+    # guard skips both.
+    - name: Check which allocator the build linked
+      if: env.DUCKDB_R_USE_SYSTEM_LIB != '1' && env.DUCKDB_R_USE_SYSTEM_LIB != 'true'
+      run: |
+        pkg=$(tr -d '\r' < DESCRIPTION | sed -n 's/^Package:[[:space:]]*//p' | sed 's/[[:space:]]*$//')
+        if [ -z "${pkg}" ]; then
+          echo "No Package: field in DESCRIPTION." >&2
+          exit 1
+        fi
+        libdir="$(dirname "$(pwd)")/lib/${pkg}/libs"
+        if [ ! -d "${libdir}" ]; then
+          echo "No libs/ directory for ${pkg} at ${libdir}; did the install step install it there?" >&2
+          exit 1
+        fi
+        lib=$(find "${libdir}" -name '*.dSYM' -prune -o -type f \( -name '*.so' -o -name '*.dll' \) -print | LC_ALL=C sort | head -n 1)
+        if [ -z "${lib}" ]; then
+          echo "No shared object (*.so, *.dll) for ${pkg} under ${libdir}. Files there:" >&2
+          find "${libdir}" -type f >&2 || true
+          exit 1
+        fi
+
+        case "${DUCKDB_R_DISABLE_JEMALLOC:-}" in
+          1 | true | TRUE | yes | YES) expected=standard ;;
+          *)
+            if [ "${RUNNER_OS}" = "Linux" ]; then
+              expected=jemalloc
+            else
+              expected=standard
+            fi
+            ;;
+        esac
+
+        if grep -q -a duckdb_je_ "${lib}"; then
+          found=jemalloc
+        else
+          found=standard
+        fi
+
+        echo "Allocator in ${lib}: ${found} (expected ${expected} on ${RUNNER_OS}/${RUNNER_ARCH})"
+        if [ "${expected}" != "${found}" ]; then
+          echo "The allocator this build linked is not the one configure should have picked." >&2
+          echo "See handbook/architecture/engine/README.md for which platforms take which." >&2
+          exit 1
         fi
       shell: bash
 

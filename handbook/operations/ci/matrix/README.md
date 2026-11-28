@@ -15,6 +15,15 @@ Coverage is not a matrix entry; the smoke test computes it on every run of [`R-C
 Which versions land where is the action's,
 and the reasoning is in its comments.
 
+**The matrix does not run on every event.**
+The smoke test does, but the `versions-matrix` step in
+[`R-CMD-check.yaml`](/.github/workflows/R-CMD-check.yaml) is skipped for a
+pull request from a branch of this repository unless the branch is `cran-*`.
+A push to a branch the workflow triggers on (`main`, `master`, `release`, `next`, `cran-*`),
+the daily cron, the merge queue and a pull request from another repository all get it,
+and so does a `workflow_dispatch` that sets `versions-matrix`,
+which is how a same-repository pull request gets the entries below at all.
+
 [`.github/versions-matrix.R`](/.github/versions-matrix.R) is this
 repository's extension of that base — the named special entries:
 
@@ -27,12 +36,22 @@ repository's extension of that base — the named special entries:
   and forces `DUCKDB_R_RUN_TESTS=false`,
   verifying that the CRAN guards keep the engine untouched
   ([`testing/guards/`](/handbook/testing/guards/README.md)).
-* **vendored builds** — one Linux and one macOS entry pin
-  `DUCKDB_R_USE_SYSTEM_LIB=0`
+* **vendored builds** — one macOS entry and two Linux ones,
+  amd64 on `ubuntu-24.04` and arm64 on `ubuntu-26.04-arm`,
+  pin `DUCKDB_R_USE_SYSTEM_LIB=0`
   so the CRAN-shaped artifact still compiles,
   because regular Linux and macOS entries default to the fast path
   ([`build/fast-paths/`](/handbook/build/fast-paths/README.md));
   Windows always builds from source, having no fast path to default to.
+  Both architectures, and not one per OS, because `configure` probes the
+  machine it runs on for the allocator
+  ([`architecture/engine/`](/handbook/architecture/engine/README.md)),
+  and every source build then says which one it linked —
+  the `after-install` step that reads it is what makes these entries a
+  check rather than a compile.
+  The vendoring fork leaves the arm64 entry out:
+  every entry there builds from source already,
+  so the base matrix's own `ubuntu-26.04-arm` entry at the same R version is the same build.
 
 Entries carry extra environment through the generic `env` field —
 the mechanism by which one matrix row can flip any knob
